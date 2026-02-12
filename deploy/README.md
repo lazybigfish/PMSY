@@ -183,6 +183,6 @@ sudo ./deploy.sh
 
 ## 相关文档
 
-- [项目部署文档](../README-DEPLOY.md) - 详细部署指南
-- [环境配置说明](../.env.supabase) - 生产环境配置示例
-- [开发环境配置](../.env.example) - 开发环境配置示例
+- [项目部署文档](../docs/DEPLOY.md) - 详细部署指南
+- [环境配置说明](../config/env/.env.supabase) - 生产环境配置示例
+- [开发环境配置](../config/env/.env.example) - 开发环境配置示例

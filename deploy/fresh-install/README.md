@@ -25,15 +25,26 @@
 |------|------|
 | `deploy.sh` | 全新部署脚本（必须在开发机上执行） |
 | `README.md` | 本文档 |
-| `docker-compose.yml` | Docker 服务编排配置 |
+| `docker-compose.yml` | Docker 服务编排配置（引用 config/docker/docker-compose.yml） |
 
 ## 相关目录结构
 
 ```
+PMSY/
+├── config/                     # 配置文件目录
+│   ├── docker/
+│   │   ├── docker-compose.yml # Docker 编排配置
+│   │   └── Dockerfile.api     # API 服务 Dockerfile
+│   ├── nginx/
+│   │   └── nginx.conf         # Nginx 配置文件
+│   └── env/                   # 环境变量配置
+│       ├── .env.example       # 开发环境示例
+│       ├── .env.production    # 生产环境配置
+│       └── .env.supabase      # 服务器完整配置
+│
 deploy/
 ├── fresh-install/          # 全新部署脚本和配置
 │   ├── deploy.sh          # 主部署脚本
-│   ├── docker-compose.yml # Docker 编排配置
 │   └── README.md          # 本文档
 ├── scripts/               # 部署辅助脚本
 │   ├── init-supabase-roles.sql    # Supabase 角色初始化
@@ -41,38 +52,37 @@ deploy/
 │   ├── create-admin-user.sh       # 管理员用户创建
 │   └── ...
 ├── config/                # 部署配置文件
-│   └── nginx.conf         # Nginx 配置文件
+│   └── nginx.conf         # Nginx 配置文件（备用）
 └── update/                # 更新部署脚本
     └── deploy.sh
 ```
 
-**重要**: 所有部署相关文件都应放在 `deploy` 目录内，避免依赖项目根目录的文件。
+**重要**: 所有配置文件现在都集中在 `config/` 目录内。
 
 ## 项目环境文件说明
 
-项目根目录包含以下环境配置文件：
+项目配置文件位于 `config/env/` 目录：
 
 | 文件 | 用途 | 使用场景 |
 |------|------|----------|
-| `.env.supabase` | **服务器完整环境配置（主要参考）** | 包含所有 Supabase 服务配置、数据库密码、JWT 密钥、API 密钥等完整配置 |
-| `.env.production` | 前端生产环境配置 | 包含 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY，用于构建前端 |
-| `.env.example` | 开发环境示例 | 本地开发时复制为 `.env` 使用 |
-| `.env.local` | 本地开发配置 | 本地开发时的实际配置文件 |
-| `.env.server` | 服务器环境配置 | 服务器部署时的环境变量 |
-| `.env` | 运行时配置 | 由 `.env.supabase` 复制并修改后使用 |
+| `config/env/.env.supabase` | **服务器完整环境配置（主要参考）** | 包含所有 Supabase 服务配置、数据库密码、JWT 密钥、API 密钥等完整配置 |
+| `config/env/.env.production` | 前端生产环境配置 | 包含 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY，用于构建前端 |
+| `config/env/.env.example` | 开发环境示例 | 本地开发时复制为 `.env` 使用 |
+| `.env.local` | 本地开发配置 | 本地开发时的实际配置文件（在根目录） |
+| `.env` | 运行时配置 | 由 `config/env/.env.supabase` 复制并修改后使用（在根目录） |
 
 **部署时关键文件：**
-- **`.env.supabase`** ⭐ **主要配置参考**: 上传到服务器后复制为 `.env`，包含完整的 Supabase 服务配置
-- **`.env.production`**: 用于构建前端，必须包含正确的 `VITE_SUPABASE_URL`（指向服务器IP）
+- **`config/env/.env.supabase`** ⭐ **主要配置参考**: 上传到服务器后复制为 `.env`，包含完整的 Supabase 服务配置
+- **`config/env/.env.production`**: 用于构建前端，必须包含正确的 `VITE_SUPABASE_URL`（指向服务器IP）
 
 **配置关系：**
 ```
 开发机:
-  .env.supabase ──► 复制到服务器 ──► 服务器/.env
-  .env.production ──► 构建前端
+  config/env/.env.supabase ──► 复制到服务器 ──► 服务器/.env
+  config/env/.env.production ──► 构建前端
 
 服务器:
-  .env.supabase ──► 复制为 .env ──► 修改IP和密码后使用
+  config/env/.env.supabase ──► 复制为 .env ──► 修改IP和密码后使用
 ```
 
 ## 三种部署模式
@@ -137,16 +147,16 @@ deploy/
 cd /path/to/pmsy
 
 # 检查环境配置文件
-ls -la .env*
+ls -la config/env/
 ```
 
-#### 1.1 配置 .env.supabase（重要！）
+#### 1.1 配置 config/env/.env.supabase（重要！）
 
-`.env.supabase` 是服务器部署的**完整配置参考**，部署前**必须**更新以下配置：
+`config/env/.env.supabase` 是服务器部署的**完整配置参考**，部署前**必须**更新以下配置：
 
 ```bash
-# 编辑 .env.supabase
-vim .env.supabase
+# 编辑 config/env/.env.supabase
+vim config/env/.env.supabase
 ```
 
 **必须修改的配置项：**
@@ -166,19 +176,19 @@ vim .env.supabase
 - `JWT_SECRET` 必须使用至少32位的随机字符串
 - 建议使用密码生成器生成强密码
 
-#### 1.2 配置 .env.production（前端构建）
+#### 1.2 配置 config/env/.env.production（前端构建）
 
 ```bash
-# 确保 .env.production 配置正确（用于构建前端）
-cat .env.production | grep VITE_SUPABASE_URL
+# 确保 config/env/.env.production 配置正确（用于构建前端）
+cat config/env/.env.production | grep VITE_SUPABASE_URL
 # 应该显示: http://YOUR_SERVER_IP:8000
 ```
 
-如果不存在，脚本会自动从 `.env.supabase` 提取创建。
+如果不存在，脚本会自动从 `config/env/.env.supabase` 提取创建。
 
 **配置说明：**
-- `.env.production`: 前端构建配置，必须包含正确的 `VITE_SUPABASE_URL`
-- `.env.supabase`: 服务器完整配置，包含数据库密码、JWT密钥等敏感信息
+- `config/env/.env.production`: 前端构建配置，必须包含正确的 `VITE_SUPABASE_URL`
+- `config/env/.env.supabase`: 服务器完整配置，包含数据库密码、JWT密钥等敏感信息
 
 ### 2. 执行部署脚本
 
@@ -197,181 +207,23 @@ cat .env.production | grep VITE_SUPABASE_URL
 请选择部署模式:
 ========================================
 
-模式1: 在线部署
-  ✓ 开发机可 SSH 连接服务器
-  ✓ 服务器可在线拉取 Docker 镜像
-  → 自动上传代码，服务器在线拉取镜像
+1) 在线部署 (Online) - 服务器可联网
+2) 半离线部署 (Semi-Offline) - 服务器无法访问 Docker Hub
+3) 完全离线部署 (Offline) - 生成离线部署包
 
-模式2: 半离线部署
-  ✓ 开发机可 SSH 连接服务器
-  ✗ 服务器无法连接 Docker Hub
-  → 自动导出镜像并上传，服务器导入镜像
-
-模式3: 完全离线部署
-  ✗ 开发机无法 SSH 连接服务器
-  ✗ 服务器无法连接 Docker Hub
-  → 生成离线部署包，用户手动上传部署
-
-请选择部署模式 (1/2/3):
+请输入选项 (1-3):
 ```
 
-### 4. 配置服务器信息
+根据你的网络环境选择合适的模式。
 
-脚本会提示输入服务器信息：
+### 4. 等待部署完成
 
-```
-[步骤 1/5] 配置服务器信息
+部署过程大约需要 5-15 分钟，取决于：
+- 网络速度
+- 服务器性能
+- 选择的部署模式
 
-服务器 IP: 43.136.69.250
-服务器用户名 [ubuntu]: 
-部署目录 [/opt/pmsy]: 
-```
-
-首次输入后会保存到 `.env.deploy` 文件，后续部署会自动加载。
-
-### 5. 根据模式完成部署
-
-#### 模式1 & 2: 自动部署
-
-脚本会自动完成：
-- 构建前端
-- 配置 SSH
-- 上传文件到服务器
-- 在服务器上执行部署
-- 初始化数据库
-- 验证部署
-
-#### 模式3: 离线部署
-
-**步骤 1**: 选择服务器架构
-
-```
-请选择目标服务器架构:
-
-  [1] AMD64 (x86_64) - 大多数服务器
-  [2] ARM64 (aarch64) - 树莓派/ARM服务器
-
-请选择架构 (1/2): 1
-```
-
-**步骤 2**: 等待生成离线包
-
-```
-导出 Docker 镜像（amd64 架构）...
-  导出 supabase/postgres:15.1.1.78...
-  导出 kong:2.8.1...
-  ...
-
-✅ 离线部署包已生成
-
-离线部署包: pmsy-offline-deploy-amd64-20240212-143022.tar.gz
-```
-
-**步骤 3**: 手动上传到服务器
-
-```bash
-# 将离线包上传到目标服务器
-scp pmsy-offline-deploy-amd64-20240212-143022.tar.gz user@your-server:/opt/
-```
-
-**步骤 4**: 在服务器上解压并部署
-
-```bash
-ssh user@your-server
-cd /opt
-
-# 解压
-tar -xzf pmsy-offline-deploy-amd64-20240212-143022.tar.gz
-cd pmsy-offline-deploy-amd64-20240212-143022
-
-# 配置环境变量（使用 .env.supabase 作为完整配置模板）
-cp .env.supabase .env
-vim .env  # 修改服务器IP、密码等配置（见下方配置清单）
-
-# 执行部署
-sudo ./deploy/scripts/offline-deploy.sh
-```
-
-**服务器端配置清单：**
-
-部署包中的 `.env.supabase` 是配置模板，复制为 `.env` 后必须修改：
-
-| 配置项 | 当前值（示例） | 需要修改为 |
-|--------|---------------|-----------|
-| `API_EXTERNAL_URL` | `http://43.136.69.250:8000` | 你的服务器IP |
-| `SITE_URL` | `http://43.136.69.250` | 你的服务器IP |
-| `SUPABASE_PUBLIC_URL` | `http://43.136.69.250:8000` | 你的服务器IP |
-| `POSTGRES_PASSWORD` | `Pmsy2024@ProdDb#Secure` | **强密码** |
-| `JWT_SECRET` | `Pmsy2024-JWT-Secret...` | **随机字符串** |
-| `DASHBOARD_PASSWORD` | `Pmsy2024@Studio#Admin` | **强密码** |
-| `ROOT_USER_PASSWORD` | `Pmsy2024@Root#User` | **强密码** |
-
-**⚠️ 安全提示：**
-- 生产环境**必须**修改所有默认密码
-- `JWT_SECRET` 建议使用 `openssl rand -base64 32` 生成
-- 密码建议使用12位以上，包含大小写字母、数字和特殊字符
-
-## 部署流程详解
-
-### 在线部署流程
-
-```
-[开发机]                              [服务器]
-   │                                      │
-   ├── 1. 构建前端                        │
-   │                                      │
-   ├── 2. 配置 SSH 免登录                 │
-   │                                      │
-   ├── 3. 上传代码/配置 ─────────────────>│
-   │                                      ├── 4. 在线拉取Docker镜像
-   │                                      ├── 5. 启动服务
-   │                                      ├── 6. 初始化数据库
-   │                                      └── 7. 创建管理员用户
-   │                                      │
-   └── 8. 验证部署 <──────────────────────┘
-```
-
-### 半离线部署流程
-
-```
-[开发机]                              [服务器]
-   │                                      │
-   ├── 1. 构建前端                        │
-   │                                      │
-   ├── 2. 配置 SSH 免登录                 │
-   │                                      │
-   ├── 3. 导出Docker镜像                  │
-   │                                      │
-   ├── 4. 上传代码/配置/镜像 ────────────>│
-   │                                      ├── 5. 导入Docker镜像
-   │                                      ├── 6. 启动服务
-   │                                      ├── 7. 初始化数据库
-   │                                      └── 8. 创建管理员用户
-   │                                      │
-   └── 9. 验证部署 <──────────────────────┘
-```
-
-### 完全离线部署流程
-
-```
-[开发机]                    [传输介质]              [服务器]
-   │                            │                      │
-   ├── 1. 构建前端              │                      │
-   │                            │                      │
-   ├── 2. 导出Docker镜像        │                      │
-   │                            │                      │
-   ├── 3. 生成离线部署包        │                      │
-   │         │                  │                      │
-   │         └─────────────────>│                      │
-   │                            │                      ▼
-   │                            │                   4. 解压部署包
-   │                            │                   5. 导入Docker镜像
-   │                            │                   6. 启动服务
-   │                            │                   7. 初始化数据库
-   │                            │                   8. 创建管理员用户
-   │                            │                      │
-   └── 9. 验证部署 <────────────┴──────────────────────┘
-```
+部署完成后，脚本会显示访问地址和默认账号信息。
 
 ## 部署后检查清单
 
@@ -391,15 +243,6 @@ sudo ./deploy/scripts/offline-deploy.sh
 | Studio | admin | Willyou@2026 |
 | Root 用户 | admin@yourcompany.com | Willyou@2026 |
 | PMSY 管理员 | admin@pmsy.com | admin123 |
-
-## 注意事项
-
-1. **执行环境**: 此脚本**必须在开发机上执行**，不要在服务器上直接执行
-2. **首次部署时间**: 需要 5-10 分钟初始化数据库
-3. **防火墙配置**: 确保开放 80, 443, 8000, 3000 端口
-4. **数据备份**: 建议部署前备份服务器（如有重要数据）
-5. **离线部署包大小**: 约 2-5GB（包含 Docker 镜像）
-6. **磁盘空间**: 确保服务器有足够的磁盘空间（建议至少 20GB）
 
 ## 故障排查
 
@@ -440,13 +283,13 @@ sudo docker-compose restart
 ssh user@server 'cd /opt/pmsy && sudo rm -rf nginx.conf'
 
 # 2. 重新上传正确的文件
-scp deploy/config/nginx.conf user@server:/opt/pmsy/
+scp config/nginx/nginx.conf user@server:/opt/pmsy/
 
 # 3. 重启 nginx
 ssh user@server 'cd /opt/pmsy && sudo docker-compose restart nginx'
 ```
 
-**预防**: 最新版本的部署脚本已从 `deploy/config/nginx.conf` 复制文件，确保文件存在。
+**预防**: 最新版本的部署脚本已从 `config/nginx/nginx.conf` 复制文件，确保文件存在。
 
 ### 3. 部署包过大
 
@@ -457,7 +300,7 @@ ssh user@server 'cd /opt/pmsy && sudo docker-compose restart nginx'
 **解决**:
 ```bash
 # 清理缓存目录
-rm -rf deploy/cache/*
+rm -rf .deploy-cache/*
 ```
 
 **预防**: 最新版本的部署脚本已排除 cache 目录，缓存文件已移动到 `.deploy-cache/` 目录。
@@ -516,3 +359,7 @@ A: 删除 `.env.deploy` 文件后重新运行脚本：
 rm .env.deploy
 ./deploy/fresh-install/deploy.sh
 ```
+
+## 技术支持
+
+如有问题，请参考项目文档或联系技术支持。

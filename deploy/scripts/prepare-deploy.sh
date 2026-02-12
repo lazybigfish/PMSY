@@ -210,10 +210,10 @@ echo "  - 复制应用文件..."
 cp -r dist $DEPLOY_DIR/
 cp -r api $DEPLOY_DIR/
 cp package*.json $DEPLOY_DIR/
-cp Dockerfile.api $DEPLOY_DIR/
-cp docker-compose.yml $DEPLOY_DIR/
-cp nginx.conf $DEPLOY_DIR/
-cp .env.example $DEPLOY_DIR/.env
+cp config/docker/Dockerfile.api $DEPLOY_DIR/
+cp config/docker/docker-compose.yml $DEPLOY_DIR/
+cp config/nginx/nginx.conf $DEPLOY_DIR/
+cp config/env/.env.example $DEPLOY_DIR/.env
 cp deploy.sh $DEPLOY_DIR/
 chmod +x $DEPLOY_DIR/deploy.sh
 

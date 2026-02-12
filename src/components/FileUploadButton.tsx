@@ -16,7 +16,12 @@ interface FileUploadButtonProps {
     taskId?: string;
     moduleType?: string;
   };
+  maxFileSize?: number; // 最大文件大小（字节）
+  allowedTypes?: string[]; // 允许的文件类型
 }
+
+const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const DEFAULT_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/plain'];
 
 export const FileUploadButton: React.FC<FileUploadButtonProps> = ({
   onUploadComplete,
@@ -27,31 +32,54 @@ export const FileUploadButton: React.FC<FileUploadButtonProps> = ({
   accept,
   disabled = false,
   context,
+  maxFileSize = DEFAULT_MAX_FILE_SIZE,
+  allowedTypes = DEFAULT_ALLOWED_TYPES,
 }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ fileName: string; progress: number; status: 'uploading' | 'completed' | 'error' }[]>([]);
   const [showProgress, setShowProgress] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const validateFile = (file: File): string | null => {
+    if (file.size > maxFileSize) {
+      return `文件大小不能超过 ${maxFileSize / 1024 / 1024}MB`;
+    }
+    
+    if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
+      return '不支持的文件类型';
+    }
+    
+    return null;
+  };
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    setIsUploading(true);
-    setShowProgress(true);
-    setUploadProgress(
-      Array.from(files).map((file) => ({
-        fileName: file.name,
-        progress: 0,
-        status: 'uploading' as const,
-      }))
-    );
-
     try {
+      // 验证所有文件
+      const fileArray = Array.from(files);
+      for (const file of fileArray) {
+        const error = validateFile(file);
+        if (error) {
+          throw new Error(`${file.name}: ${error}`);
+        }
+      }
+      
+      setIsUploading(true);
+      setShowProgress(true);
+      setUploadProgress(
+        fileArray.map((file) => ({
+          fileName: file.name,
+          progress: 0,
+          status: 'uploading' as const,
+        }))
+      );
+
       const uploadedFiles: FileRecord[] = [];
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
         
         // 更新进度状态
         setUploadProgress((prev) =>

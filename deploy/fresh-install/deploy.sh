@@ -37,7 +37,7 @@ echo ""
 # 检查执行环境
 cd "$PROJECT_DIR"
 
-if [ ! -f "docker-compose.yml" ] || [ ! -d "deploy" ]; then
+if [ ! -f "config/docker/docker-compose.yml" ] || [ ! -d "deploy" ]; then
     echo -e "${RED}❌ 错误: 请在项目根目录执行此脚本${NC}"
     echo "正确用法: ./deploy/fresh-install/deploy.sh"
     exit 1
@@ -302,79 +302,79 @@ echo ""
 echo -e "${BLUE}[步骤 3/5] 检查并更新配置...${NC}"
 echo ""
 
-# 检查 .env.supabase 是否存在
-if [ ! -f ".env.supabase" ]; then
-    echo -e "${RED}❌ 错误: .env.supabase 文件不存在${NC}"
+# 检查 config/env/.env.supabase 是否存在
+if [ ! -f "config/env/.env.supabase" ]; then
+    echo -e "${RED}❌ 错误: config/env/.env.supabase 文件不存在${NC}"
     echo "   此文件是服务器部署的完整配置参考，必须存在"
     exit 1
 fi
 
-echo -e "${YELLOW}⚠️  重要：部署前请确保已更新 .env.supabase 中的配置${NC}"
+echo -e "${YELLOW}⚠️  重要：部署前请确保已更新 config/env/.env.supabase 中的配置${NC}"
 echo ""
 echo "请检查以下配置项："
 echo ""
-echo "  1. API_EXTERNAL_URL - 当前: $(grep '^API_EXTERNAL_URL=' .env.supabase | cut -d'=' -f2)"
+echo "  1. API_EXTERNAL_URL - 当前: $(grep '^API_EXTERNAL_URL=' config/env/.env.supabase | cut -d'=' -f2)"
 echo "     建议修改为: http://$DEPLOY_SERVER_IP:8000"
 echo ""
-echo "  2. SITE_URL - 当前: $(grep '^SITE_URL=' .env.supabase | cut -d'=' -f2)"
+echo "  2. SITE_URL - 当前: $(grep '^SITE_URL=' config/env/.env.supabase | cut -d'=' -f2)"
 echo "     建议修改为: http://$DEPLOY_SERVER_IP"
 echo ""
 echo "  3. POSTGRES_PASSWORD - 数据库密码"
-echo "     当前: $(grep '^POSTGRES_PASSWORD=' .env.supabase | cut -d'=' -f2)"
+echo "     当前: $(grep '^POSTGRES_PASSWORD=' config/env/.env.supabase | cut -d'=' -f2)"
 echo "     ⚠️  生产环境必须修改为强密码"
 echo ""
 echo "  4. JWT_SECRET - JWT签名密钥"
 echo "     ⚠️  生产环境必须使用强随机字符串"
 echo ""
 echo "  5. DASHBOARD_PASSWORD - Studio管理密码"
-echo "     当前: $(grep '^DASHBOARD_PASSWORD=' .env.supabase | cut -d'=' -f2)"
+echo "     当前: $(grep '^DASHBOARD_PASSWORD=' config/env/.env.supabase | cut -d'=' -f2)"
 echo "     ⚠️  生产环境必须修改"
 echo ""
 echo "  6. ROOT_USER_PASSWORD - Root用户密码"
-echo "     当前: $(grep '^ROOT_USER_PASSWORD=' .env.supabase | cut -d'=' -f2)"
+echo "     当前: $(grep '^ROOT_USER_PASSWORD=' config/env/.env.supabase | cut -d'=' -f2)"
 echo "     ⚠️  生产环境必须修改"
 echo ""
 
-read -p "是否需要编辑 .env.supabase 文件? (yes/no) " -r
+read -p "是否需要编辑 config/env/.env.supabase 文件? (yes/no) " -r
 if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-    echo -e "${YELLOW}   请编辑 .env.supabase 文件，修改上述配置...${NC}"
-    
+    echo -e "${YELLOW}   请编辑 config/env/.env.supabase 文件，修改上述配置...${NC}"
+
     # 尝试使用常见编辑器
     if command -v vim &> /dev/null; then
-        vim .env.supabase
+        vim config/env/.env.supabase
     elif command -v nano &> /dev/null; then
-        nano .env.supabase
+        nano config/env/.env.supabase
     else
-        echo "   请手动编辑 .env.supabase 文件，然后按回车继续..."
+        echo "   请手动编辑 config/env/.env.supabase 文件，然后按回车继续..."
         read
     fi
-    
+
     echo -e "${GREEN}   ✅ 配置已更新${NC}"
 fi
 
 # 检查 .env.production
-if [ ! -f ".env.production" ]; then
-    echo -e "${YELLOW}⚠️ 警告: .env.production 文件不存在${NC}"
-    echo "   将从 .env.supabase 提取前端配置"
-    
+if [ ! -f "config/env/.env.production" ]; then
+    echo -e "${YELLOW}⚠️ 警告: config/env/.env.production 文件不存在${NC}"
+    echo "   将从 config/env/.env.supabase 提取前端配置"
+
     # 自动创建 .env.production
-    echo "   自动创建 .env.production..."
-    grep "^VITE_" .env.supabase > .env.production
-    echo -e "${GREEN}   ✅ 已创建 .env.production${NC}"
+    echo "   自动创建 config/env/.env.production..."
+    grep "^VITE_" config/env/.env.supabase > config/env/.env.production
+    echo -e "${GREEN}   ✅ 已创建 config/env/.env.production${NC}"
 fi
 
 # 验证前端配置
-if [ -f ".env.production" ]; then
-    SUPABASE_URL=$(grep VITE_SUPABASE_URL .env.production | cut -d'=' -f2)
+if [ -f "config/env/.env.production" ]; then
+    SUPABASE_URL=$(grep VITE_SUPABASE_URL config/env/.env.production | cut -d'=' -f2)
     if [[ "$SUPABASE_URL" != *"$DEPLOY_SERVER_IP"* ]]; then
-        echo -e "${YELLOW}⚠️ 警告: .env.production 中的 VITE_SUPABASE_URL 与服务器IP不匹配${NC}"
+        echo -e "${YELLOW}⚠️ 警告: config/env/.env.production 中的 VITE_SUPABASE_URL 与服务器IP不匹配${NC}"
         echo "   当前: $SUPABASE_URL"
         echo "   服务器IP: $DEPLOY_SERVER_IP"
         echo "   建议: http://$DEPLOY_SERVER_IP:8000"
-        
-        read -p "是否自动更新 .env.production? (yes/no) " -r
+
+        read -p "是否自动更新 config/env/.env.production? (yes/no) " -r
         if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-            sed -i "s|VITE_SUPABASE_URL=.*|VITE_SUPABASE_URL=http://$DEPLOY_SERVER_IP:8000|" .env.production
+            sed -i "s|VITE_SUPABASE_URL=.*|VITE_SUPABASE_URL=http://$DEPLOY_SERVER_IP:8000|" config/env/.env.production
             echo -e "${GREEN}   ✅ 已更新 VITE_SUPABASE_URL${NC}"
         fi
     fi
@@ -395,15 +395,15 @@ if [ -f ".env" ]; then
 fi
 
 # 使用生产环境配置构建
-if [ -f ".env.production" ]; then
-    cp .env.production .env
-    echo -e "${YELLOW}   使用 .env.production 构建前端${NC}"
-elif [ -f ".env.supabase" ]; then
+if [ -f "config/env/.env.production" ]; then
+    cp config/env/.env.production .env
+    echo -e "${YELLOW}   使用 config/env/.env.production 构建前端${NC}"
+elif [ -f "config/env/.env.supabase" ]; then
     # 从 .env.supabase 提取前端配置创建临时 .env
-    grep "^VITE_" .env.supabase > .env 2>/dev/null || true
-    echo -e "${YELLOW}   使用 .env.supabase 中的 VITE_ 配置构建前端${NC}"
+    grep "^VITE_" config/env/.env.supabase > .env 2>/dev/null || true
+    echo -e "${YELLOW}   使用 config/env/.env.supabase 中的 VITE_ 配置构建前端${NC}"
 else
-    echo -e "${RED}❌ 错误: 未找到 .env.production 或 .env.supabase 文件${NC}"
+    echo -e "${RED}❌ 错误: 未找到 config/env/.env.production 或 config/env/.env.supabase 文件${NC}"
     exit 1
 fi
 
@@ -459,20 +459,20 @@ case $DEPLOY_MODE in
         
         cp -r dist "$DEPLOY_TMP/pmsy/"
         cp -r api "$DEPLOY_TMP/pmsy/"
-        cp docker-compose.yml "$DEPLOY_TMP/pmsy/"
-        cp Dockerfile.api "$DEPLOY_TMP/pmsy/" 2>/dev/null || true
+        cp config/docker/docker-compose.yml "$DEPLOY_TMP/pmsy/"
+        cp config/docker/Dockerfile.api "$DEPLOY_TMP/pmsy/" 2>/dev/null || true
         cp package*.json "$DEPLOY_TMP/pmsy/" 2>/dev/null || true
-        # 复制 nginx.conf（优先使用 deploy/config 目录下的）
-        if [ -f "deploy/config/nginx.conf" ]; then
+        # 复制 nginx.conf（优先使用 config/nginx 目录下的）
+        if [ -f "config/nginx/nginx.conf" ]; then
+            cp config/nginx/nginx.conf "$DEPLOY_TMP/pmsy/nginx.conf"
+        elif [ -f "deploy/config/nginx.conf" ]; then
             cp deploy/config/nginx.conf "$DEPLOY_TMP/pmsy/nginx.conf"
-        elif [ -f "nginx.conf" ]; then
-            cp nginx.conf "$DEPLOY_TMP/pmsy/nginx.conf"
         fi
         # 复制 .env.supabase 作为服务器配置模板（完整配置）
-        cp .env.supabase "$DEPLOY_TMP/pmsy/.env.supabase"
-        
+        cp config/env/.env.supabase "$DEPLOY_TMP/pmsy/.env.supabase"
+
         # 复制 .env.production（如果存在，用于前端构建参考）
-        [ -f ".env.production" ] && cp .env.production "$DEPLOY_TMP/pmsy/"
+        [ -f "config/env/.env.production" ] && cp config/env/.env.production "$DEPLOY_TMP/pmsy/"
         # 复制 deploy 目录，但排除 cache 子目录
         mkdir -p "$DEPLOY_TMP/pmsy/deploy"
         for item in deploy/*; do
@@ -515,6 +515,9 @@ if [ ! -f ".env" ]; then
     if [ -f ".env.supabase" ]; then
         cp .env.supabase .env
         echo "     从 .env.supabase 创建 .env"
+    elif [ -f "config/env/.env.supabase" ]; then
+        cp config/env/.env.supabase .env
+        echo "     从 config/env/.env.supabase 创建 .env"
     fi
     
     # 更新服务器 IP 配置
@@ -618,15 +621,9 @@ REMOTE_SCRIPT
         cp -r dist "$DEPLOY_TMP/pmsy/"
         cp -r api "$DEPLOY_TMP/pmsy/"
         cp -r docker-images "$DEPLOY_TMP/pmsy/"
-        cp docker-compose.yml "$DEPLOY_TMP/pmsy/"
-        cp Dockerfile.api "$DEPLOY_TMP/pmsy/" 2>/dev/null || true
-        # 复制 nginx.conf（优先使用 deploy/config 目录下的）
-        if [ -f "deploy/config/nginx.conf" ]; then
-            cp deploy/config/nginx.conf "$DEPLOY_TMP/pmsy/nginx.conf"
-        elif [ -f "nginx.conf" ]; then
-            cp nginx.conf "$DEPLOY_TMP/pmsy/nginx.conf"
-        fi
-        cp .env.supabase "$DEPLOY_TMP/pmsy/.env.example"
+        cp config/docker/docker-compose.yml "$DEPLOY_TMP/pmsy/"
+        cp config/docker/Dockerfile.api "$DEPLOY_TMP/pmsy/" 2>/dev/null || true
+        cp config/env/.env.supabase "$DEPLOY_TMP/pmsy/.env.example"
         # 复制 deploy 目录，但排除 cache 子目录
         mkdir -p "$DEPLOY_TMP/pmsy/deploy"
         for item in deploy/*; do
@@ -679,8 +676,11 @@ if [ ! -f ".env" ]; then
     elif [ -f ".env.supabase" ]; then
         cp .env.supabase .env
         echo "     从 .env.supabase 创建 .env"
+    elif [ -f "config/env/.env.supabase" ]; then
+        cp config/env/.env.supabase .env
+        echo "     从 config/env/.env.supabase 创建 .env"
     fi
-    
+
     sed -i "s|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=http://$DEPLOY_SERVER_IP:8000|" .env
     sed -i "s|SITE_URL=.*|SITE_URL=http://$DEPLOY_SERVER_IP|" .env
     sed -i "s|SUPABASE_PUBLIC_URL=.*|SUPABASE_PUBLIC_URL=http://$DEPLOY_SERVER_IP:8000|" .env
@@ -786,15 +786,10 @@ REMOTE_SCRIPT
         cp -r dist "$OFFLINE_DIR/"
         cp -r api "$OFFLINE_DIR/"
         cp -r docker-images "$OFFLINE_DIR/"
-        cp docker-compose.yml "$OFFLINE_DIR/"
-        cp Dockerfile.api "$OFFLINE_DIR/" 2>/dev/null || true
-        # 复制 nginx.conf（优先使用 deploy/config 目录下的）
-        if [ -f "deploy/config/nginx.conf" ]; then
-            cp deploy/config/nginx.conf "$OFFLINE_DIR/nginx.conf"
-        elif [ -f "nginx.conf" ]; then
-            cp nginx.conf "$OFFLINE_DIR/nginx.conf"
-        fi
-        cp .env.supabase "$OFFLINE_DIR/.env.example"
+        cp config/docker/docker-compose.yml "$OFFLINE_DIR/"
+        cp config/docker/Dockerfile.api "$OFFLINE_DIR/" 2>/dev/null || true
+        cp config/nginx/nginx.conf "$OFFLINE_DIR/nginx.conf"
+        cp config/env/.env.supabase "$OFFLINE_DIR/.env.example"
         # 复制 deploy 目录，但排除 cache 子目录
         mkdir -p "$OFFLINE_DIR/deploy"
         for item in deploy/*; do
@@ -1022,7 +1017,11 @@ echo ""
 sleep 10
 
 # 获取 ANON_KEY
-if [ -f "$PROJECT_DIR/.env.production" ]; then
+if [ -f "$PROJECT_DIR/config/env/.env.production" ]; then
+    ANON_KEY=$(grep VITE_SUPABASE_ANON_KEY "$PROJECT_DIR/config/env/.env.production" | cut -d'=' -f2)
+elif [ -f "$PROJECT_DIR/config/env/.env.supabase" ]; then
+    ANON_KEY=$(grep VITE_SUPABASE_ANON_KEY "$PROJECT_DIR/config/env/.env.supabase" | cut -d'=' -f2)
+elif [ -f "$PROJECT_DIR/.env.production" ]; then
     ANON_KEY=$(grep VITE_SUPABASE_ANON_KEY "$PROJECT_DIR/.env.production" | cut -d'=' -f2)
 elif [ -f "$PROJECT_DIR/.env.supabase" ]; then
     ANON_KEY=$(grep VITE_SUPABASE_ANON_KEY "$PROJECT_DIR/.env.supabase" | cut -d'=' -f2)

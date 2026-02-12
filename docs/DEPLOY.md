@@ -14,7 +14,7 @@
 - **Supabase**: 使用本地 Docker 部署的 Supabase
 - **数据库**: 本地 PostgreSQL 容器
 - **用途**: 生产环境运行
-- **配置文件**: `.env.production`
+- **配置文件**: `config/env/.env.production`
 
 ---
 
@@ -25,9 +25,9 @@
 | 文件 | 用途 | 使用场景 |
 |------|------|----------|
 | `.env` | 开发环境配置 | 本地开发时使用 |
-| `.env.production` | 生产环境配置 | 服务器部署时使用 |
-| `.env.example` | 本地开发示例 | 复制为 `.env` 用于开发 |
-| `.env.supabase` | 服务器部署示例 | 复制为 `.env` 用于生产 |
+| `config/env/.env.production` | 生产环境配置 | 服务器部署时使用 |
+| `config/env/.env.example` | 本地开发示例 | 复制为 `.env` 用于开发 |
+| `config/env/.env.supabase` | 服务器部署示例 | 复制为 `.env` 用于生产 |
 
 ### 核心配置项对比
 
@@ -36,7 +36,7 @@
 VITE_SUPABASE_URL=https://pnvxlxvuqiikeuikowag.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-# 生产环境 (.env.production) - 本地 Supabase
+# 生产环境 (config/env/.env.production) - 本地 Supabase
 VITE_SUPABASE_URL=http://YOUR_SERVER_IP:8000
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
@@ -57,7 +57,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 cd /opt/pmsy
 
 # 复制生产环境配置
-cp .env.supabase .env
+cp config/env/.env.supabase .env
 
 # 编辑 .env，修改以下关键配置：
 # - API_EXTERNAL_URL: http://YOUR_SERVER_IP:8000
@@ -80,7 +80,7 @@ grep "43.136.69.250:8000" dist/assets/*.js
 ```bash
 # 复制文件到服务器
 scp -r dist ubuntu@43.136.69.250:/opt/pmsy/
-scp docker-compose.yml ubuntu@43.136.69.250:/opt/pmsy/
+scp config/docker/docker-compose.yml ubuntu@43.136.69.250:/opt/pmsy/
 scp -r api ubuntu@43.136.69.250:/opt/pmsy/
 
 # 在服务器上重启服务
@@ -112,8 +112,8 @@ curl -X POST 'http://YOUR_SERVER_IP:8000/auth/v1/token?grant_type=password' \
 **原因**: 前端构建时使用了错误的 Supabase URL
 
 **解决**:
-1. 确保 `.env.production` 中 `VITE_SUPABASE_URL` 指向服务器 IP
-2. 使用 `npm run build` 重新构建（自动读取 `.env.production`）
+1. 确保 `config/env/.env.production` 中 `VITE_SUPABASE_URL` 指向服务器 IP
+2. 使用 `npm run build` 重新构建（自动读取 `config/env/.env.production`）
 3. 重新部署 `dist` 目录到服务器
 
 ### 问题2: "Invalid API key" 或 JWT 验证失败
@@ -123,7 +123,7 @@ curl -X POST 'http://YOUR_SERVER_IP:8000/auth/v1/token?grant_type=password' \
 **解决**:
 1. 确保 `.env` 中的 `JWT_SECRET` 与生成 token 使用的密钥一致
 2. 确保 `VITE_SUPABASE_ANON_KEY` 和 `SUPABASE_SERVICE_ROLE_KEY` 是用正确的 `JWT_SECRET` 生成的
-3. 使用 `generate-jwt.js` 重新生成 token
+3. 使用 `scripts/dev/generate-jwt.js` 重新生成 token
 
 ### 问题3: 用户创建失败
 
@@ -142,27 +142,27 @@ curl -X POST 'http://YOUR_SERVER_IP:8000/auth/v1/token?grant_type=password' \
 
 1. **绝不混用配置**
    - 开发时只用 `.env`（云端 Supabase）
-   - 部署时只用 `.env.production`（本地 Supabase）
+   - 部署时只用 `config/env/.env.production`（本地 Supabase）
 
 2. **构建前检查**
    ```bash
    # 构建前确认当前环境
-cat .env.production | grep VITE_SUPABASE_URL
-   
+   cat config/env/.env.production | grep VITE_SUPABASE_URL
+
    # 确保显示的是服务器 IP，不是云端 URL
    ```
 
 3. **部署后验证**
    ```bash
    # 检查前端使用的 Supabase URL
-grep "supabase.co\|localhost:8000" dist/assets/*.js
+   grep "supabase.co\|localhost:8000" dist/assets/*.js
    # 应该没有匹配结果（生产环境不应该包含这些）
    ```
 
 ### 🔐 安全配置
 
 1. **修改默认密码**
-   - 所有 `.env*` 文件中的密码都是示例，部署前必须修改
+   - 所有 `config/env/.env*` 文件中的密码都是示例，部署前必须修改
    - 建议密码格式：`Pmsy2024@Custom#Password`
 
 2. **JWT 密钥安全**
@@ -182,8 +182,9 @@ grep "supabase.co\|localhost:8000" dist/assets/*.js
 |------|----------|------|
 | 2026-02-12 | 修复 JWT token 无效问题 | 用户创建/登录功能 |
 | 2026-02-12 | 统一环境变量命名 | docker-compose.yml |
-| 2026-02-12 | 添加 `.env.production` | 区分开发/生产环境 |
+| 2026-02-12 | 添加 `config/env/.env.production` | 区分开发/生产环境 |
 | 2026-02-12 | 更新默认密码 | 安全性提升 |
+| 2026-02-12 | 整理项目结构 | 配置文件集中到 config/ 目录 |
 
 ---
 
@@ -191,7 +192,7 @@ grep "supabase.co\|localhost:8000" dist/assets/*.js
 
 部署前必须检查：
 
-- [ ] `.env` 文件已复制并修改
+- [ ] `config/env/.env` 文件已复制并修改
 - [ ] `VITE_SUPABASE_URL` 指向正确的服务器 IP
 - [ ] `JWT_SECRET` 已修改为强密码
 - [ ] 前端使用 `npm run build` 构建

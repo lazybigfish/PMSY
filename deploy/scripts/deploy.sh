@@ -86,10 +86,12 @@ echo ""
 echo -e "${YELLOW}[4/5] 配置环境变量...${NC}"
 if [ ! -f ".env" ] || [ ! -s ".env" ]; then
     # 从示例创建
-    if [ -f ".env.example" ]; then
+    if [ -f "config/env/.env.example" ]; then
+        cp config/env/.env.example .env
+    elif [ -f ".env.example" ]; then
         cp .env.example .env
     fi
-    
+
     # 设置默认值
     sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=Willyou@2026/' .env 2>/dev/null || true
     sed -i 's/^JWT_SECRET=.*/JWT_SECRET=Willyou@2026SecretKeyForPMSY2026/' .env 2>/dev/null || true
@@ -110,7 +112,7 @@ echo ""
 echo -e "${YELLOW}[5/5] 构建 PMSY API 镜像...${NC}"
 
 # 使用本地 node 镜像构建
-docker build -f Dockerfile.api -t pmsy-api:latest . || {
+docker build -f config/docker/Dockerfile.api -t pmsy-api:latest . || {
     echo -e "${YELLOW}尝试使用本地缓存构建...${NC}"
     # 如果构建失败，使用 node 镜像直接运行
     docker run --name pmsy-build -v $(pwd):/app -w /app node:20-alpine sh -c "npm ci && npm run build" || true

@@ -7,7 +7,7 @@
 # 适用场景：代码更新、配置更新、前端更新
 #
 # 使用方法:
-# 1. 确保已配置 .env.production
+# 1. 确保已配置 config/env/.env.production
 # 2. 执行: ./deploy/update/deploy.sh
 #
 # ==========================================
@@ -41,15 +41,20 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 echo -e "${GREEN}[1/7] 检查环境...${NC}"
 cd "$PROJECT_ROOT"
 
-# 检查 .env.production 是否存在
-if [ ! -f ".env.production" ]; then
-    echo -e "${YELLOW}❌ 错误: .env.production 文件不存在${NC}"
-    echo "请创建 .env.production 文件，参考 .env.supabase"
+# 检查 config/env/.env.production 是否存在
+ENV_FILE=""
+if [ -f "config/env/.env.production" ]; then
+    ENV_FILE="config/env/.env.production"
+elif [ -f ".env.production" ]; then
+    ENV_FILE=".env.production"
+else
+    echo -e "${YELLOW}❌ 错误: 未找到 .env.production 文件${NC}"
+    echo "请创建 config/env/.env.production 文件，参考 config/env/.env.supabase"
     exit 1
 fi
 
 # 检查关键配置
-SUPABASE_URL=$(grep VITE_SUPABASE_URL .env.production | cut -d'=' -f2)
+SUPABASE_URL=$(grep VITE_SUPABASE_URL "$ENV_FILE" | cut -d'=' -f2)
 if [[ "$SUPABASE_URL" == *"localhost"* ]] || [[ "$SUPABASE_URL" == *"supabase.co"* ]]; then
     echo -e "${YELLOW}⚠️ 警告: VITE_SUPABASE_URL 配置可能错误: $SUPABASE_URL${NC}"
     echo "生产环境应该使用服务器 IP: http://$SERVER_IP:8000"
@@ -68,7 +73,7 @@ fi
 
 echo -e "${GREEN}[3/7] 构建前端...${NC}"
 # 使用生产环境配置构建
-cp .env.production .env
+cp "$ENV_FILE" .env
 npm run build
 
 # 恢复开发环境配置
@@ -82,7 +87,7 @@ echo -e "${GREEN}[4/7] 验证构建...${NC}"
 if ! grep -q "$SERVER_IP:8000" dist/assets/*.js; then
     echo -e "${YELLOW}❌ 错误: 构建文件未包含正确的 Supabase URL${NC}"
     echo "期望: $SERVER_IP:8000"
-    echo "请检查 .env.production 配置"
+    echo "请检查 $ENV_FILE 配置"
     exit 1
 fi
 echo -e "${GREEN}   ✅ 构建验证通过${NC}"
@@ -94,7 +99,7 @@ scp -r dist "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/"
 echo "   复制 api..."
 scp -r api "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/"
 echo "   复制 docker-compose.yml..."
-scp docker-compose.yml "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/"
+scp config/docker/docker-compose.yml "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/"
 
 echo -e "${GREEN}[6/7] 重启服务...${NC}"
 ssh "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker-compose restart"
@@ -103,7 +108,7 @@ echo -e "${GREEN}[7/7] 验证部署...${NC}"
 sleep 10
 
 # 获取 ANON_KEY
-ANON_KEY=$(grep VITE_SUPABASE_ANON_KEY .env.production | cut -d'=' -f2)
+ANON_KEY=$(grep VITE_SUPABASE_ANON_KEY "$ENV_FILE" | cut -d'=' -f2)
 
 # 测试用户创建 API
 TEST_RESULT=$(curl -s -X POST "http://$SERVER_IP/api/auth/create-user" \

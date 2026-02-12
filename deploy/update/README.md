@@ -23,7 +23,7 @@
 |------|------|
 | `deploy.sh` | 更新部署脚本（在开发机执行） |
 | `update-server.sh` | 服务器更新脚本（在服务器执行） |
-| `docker-compose.yml` | 服务配置（可选更新） |
+| `docker-compose.yml` | 服务配置（引用 config/docker/docker-compose.yml） |
 
 ## 部署步骤
 
@@ -37,7 +37,7 @@ cd /path/to/pmsy
 
 脚本会自动完成：
 1. 检查环境配置
-2. 构建前端（使用 .env.production）
+2. 构建前端（使用 config/env/.env.production）
 3. 验证构建结果
 4. 复制文件到服务器
 5. 重启服务
@@ -49,8 +49,8 @@ cd /path/to/pmsy
 ```bash
 cd /path/to/pmsy
 
-# 确保 .env.production 配置正确
-cat .env.production | grep VITE_SUPABASE_URL
+# 确保 config/env/.env.production 配置正确
+cat config/env/.env.production | grep VITE_SUPABASE_URL
 
 # 构建前端
 npm run build
@@ -68,7 +68,7 @@ scp -r dist ubuntu@YOUR_SERVER_IP:/opt/pmsy/
 scp -r api ubuntu@YOUR_SERVER_IP:/opt/pmsy/
 
 # 复制配置文件（如有更新）
-scp docker-compose.yml ubuntu@YOUR_SERVER_IP:/opt/pmsy/
+scp config/docker/docker-compose.yml ubuntu@YOUR_SERVER_IP:/opt/pmsy/
 ```
 
 #### 步骤3：重启服务（服务器）
@@ -82,7 +82,7 @@ ssh ubuntu@YOUR_SERVER_IP "cd /opt/pmsy && sudo docker-compose restart"
 - [ ] 前端代码已更新
 - [ ] API 代码已更新（如有）
 - [ ] 配置文件已更新（如有）
-- [ ] `.env.production` 配置正确
+- [ ] `config/env/.env.production` 配置正确
 - [ ] 已备份重要数据（建议）
 
 ## 更新后验证
@@ -103,7 +103,7 @@ ssh ubuntu@YOUR_SERVER_IP "cd /opt/pmsy && sudo docker-compose restart"
 ## 常见问题
 
 ### Q: 更新后登录失败？
-A: 检查 `.env.production` 中的 `VITE_SUPABASE_URL` 是否指向正确的服务器 IP
+A: 检查 `config/env/.env.production` 中的 `VITE_SUPABASE_URL` 是否指向正确的服务器 IP
 
 ### Q: 更新后数据丢失？
 A: 确保没有删除 Docker 卷，检查 `docker volume ls` 是否有 `pmsy_postgres_data`

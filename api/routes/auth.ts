@@ -19,7 +19,8 @@ async function handleCreateUserWithRootFallback(req: Request, res: Response) {
   console.log('Falling back to Root User creation strategy...');
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    // 直接使用 auth 服务地址，绕过 Kong 网关
+    const supabaseUrl = process.env.SUPABASE_AUTH_URL || 'http://auth:9999';
     const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !anonKey) {
@@ -172,56 +173,66 @@ router.post('/create-user', async (req: Request, res: Response): Promise<void> =
   const finalEmail = email || `${username}@pmsy.com`;
 
   try {
-    // 1. 调用 Supabase Admin API 创建用户
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: finalEmail,
-      password: password,
-      email_confirm: true, // 自动确认邮箱
-      user_metadata: {
-        username: username,
-        full_name: full_name || username
-      }
+    // 1. 直接调用 GoTrue Admin API 创建用户（绕过 Supabase 客户端库）
+    const authUrl = process.env.SUPABASE_AUTH_URL || 'http://auth:9999';
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    console.log('Creating user via direct GoTrue API call...');
+    console.log('Auth URL:', authUrl);
+    
+    const response = await fetch(`${authUrl}/admin/users`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: finalEmail,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          username: username,
+          full_name: full_name || username
+        }
+      })
     });
 
-    if (authError) {
-      // 如果是 API Key 错误，尝试 Fallback 策略
-      if (authError.message && (authError.message.includes('Invalid API key') || authError.status === 401)) {
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('GoTrue API error:', response.status, errorText);
+      
+      // 如果是 401/403 错误，尝试 Fallback 策略
+      if (response.status === 401 || response.status === 403) {
         console.warn('Service Role Key invalid, switching to Root User fallback...');
         await handleCreateUserWithRootFallback(req, res);
         return;
       }
       
-      // 检查是否误用了 Anon Key (403 not_admin)
-      if (authError.status === 403 || authError.code === 'not_admin' || authError.message.includes('User not allowed')) {
-        throw new Error('配置错误：当前使用的 API Key 权限不足。请确保 .env 文件中的 SUPABASE_SERVICE_ROLE_KEY 是 "service_role" 类型（secret），而不是 "anon" 类型（public）。');
-      }
-
-      throw authError;
+      throw new Error(`GoTrue API error: ${response.status} - ${errorText}`);
     }
 
-    if (!authData.user) {
-      throw new Error('用户创建失败');
-    }
+    const authData = await response.json();
+    console.log('User created successfully:', authData.id);
 
     // 2. 更新用户角色 (Profiles 表)
     // 注意：系统中的触发器通常会创建初始 Profile，这里我们需要更新其 Role
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .update({ 
+      .update({
         role: role || 'user',
         username: username // 确保 username 同步
       })
-      .eq('id', authData.user.id);
+      .eq('id', authData.id);
 
     if (profileError) {
       console.warn('用户创建成功但角色更新失败:', profileError);
       // 不中断流程，返回成功但带有警告
     }
 
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       message: '用户创建成功',
-      user: authData.user 
+      user: authData
     });
 
   } catch (error) {

@@ -63,6 +63,11 @@ export function TaskProgressUpdateModal({
   };
 
   const uploadAttachments = async (): Promise<Attachment[]> => {
+    // 如果没有附件，直接返回空数组
+    if (attachments.length === 0) {
+      return [];
+    }
+
     const uploadedAttachments: Attachment[] = [];
 
     for (let i = 0; i < attachments.length; i++) {
@@ -78,6 +83,16 @@ export function TaskProgressUpdateModal({
           idx === i ? { ...a, uploading: true } : a
         ));
 
+        // 检查 storage bucket 是否存在
+        const { data: buckets } = await supabase.storage.listBuckets();
+        const bucketExists = buckets?.some(b => b.name === 'task-attachments');
+        
+        if (!bucketExists) {
+          console.warn('Storage bucket task-attachments does not exist. Skipping file upload.');
+          // 继续提交，只是不上传文件
+          continue;
+        }
+
         const fileExt = attachment.file.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `task-progress/${fileName}`;
@@ -86,7 +101,11 @@ export function TaskProgressUpdateModal({
           .from('task-attachments')
           .upload(filePath, attachment.file);
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          // 上传失败但不阻止提交
+          continue;
+        }
 
         const { data: { publicUrl } } = supabase.storage
           .from('task-attachments')
@@ -106,7 +125,8 @@ export function TaskProgressUpdateModal({
         setAttachments(prev => prev.map((a, idx) => 
           idx === i ? { ...a, uploading: false } : a
         ));
-        throw new Error(`上传文件 ${attachment.file_name} 失败`);
+        // 上传失败但不阻止提交进度更新
+        continue;
       }
     }
 

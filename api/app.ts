@@ -49,7 +49,7 @@ app.use(
 /**
  * error handler middleware
  */
-app.use((error: Error, _req: Request, res: Response) => {
+app.use((error: Error, _req: Request, res: Response, _next: express.NextFunction) => {
   console.error('Server error:', error)
   res.status(500).json({
     success: false,

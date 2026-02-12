@@ -2,9 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Task, Profile, Project, TaskComment, TaskProgressLog, ProjectModule, TaskModule } from '../../types';
-import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
+import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp, Edit2, Trash2, Calendar, Folder, User, Users, Tag, Clock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { TaskInfo } from './components/TaskInfo';
 import { TaskComments } from './components/TaskComments';
 import { TaskProgressUpdateModal } from './components/TaskProgressUpdateModal';
 
@@ -32,14 +31,11 @@ const TaskDetailPage = () => {
   const [currentProgress, setCurrentProgress] = useState(0);
 
   // 权限判断
-  const isOwner = user?.id === task?.created_by;  // 责任人（创建者）
-  const isAssignee = task?.assignees?.some(a => a.user_id === user?.id);  // 处理人
+  const isOwner = user?.id === task?.created_by;
+  const isAssignee = task?.assignees?.some(a => a.user_id === user?.id);
   const isTaskActive = task?.status !== 'done' && task?.status !== 'canceled';
   
-  // 编辑权限：只有责任人可以编辑任务属性
   const canEdit = isOwner && isTaskActive;
-  
-  // 状态更新权限：责任人或处理人都可以更新状态
   const canUpdateStatus = (isOwner || isAssignee) && isTaskActive;
 
   useEffect(() => {
@@ -76,13 +72,29 @@ const TaskDetailPage = () => {
           { data: logsData }
       ] = await Promise.all([
         supabase.from('task_comments').select(`*, creator:created_by(*)`).eq('task_id', id).order('created_at', { ascending: true }),
-        supabase.from('task_progress_logs').select(`*, creator:created_by(*), attachments:task_progress_attachments(*)`).eq('task_id', id).order('created_at', { ascending: false })
+        supabase.from('task_progress_logs').select(`*, creator:created_by(*)`).eq('task_id', id).order('created_at', { ascending: false })
       ]);
 
-      setComments(commentsData || []);
-      setLogs(logsData || []);
+      // 单独获取附件数据
+      let logsWithAttachments = logsData || [];
+      if (logsData && logsData.length > 0) {
+        const logIds = logsData.map(log => log.id);
+        const { data: attachmentsData } = await supabase
+          .from('task_progress_attachments')
+          .select('*')
+          .in('progress_log_id', logIds);
+        
+        if (attachmentsData) {
+          logsWithAttachments = logsData.map(log => ({
+            ...log,
+            attachments: attachmentsData.filter(att => att.progress_log_id === log.id)
+          }));
+        }
+      }
 
-      // 设置当前进度
+      setComments(commentsData || []);
+      setLogs(logsWithAttachments);
+
       const latestLog = logsData?.[0];
       if (latestLog?.progress !== undefined && latestLog?.progress !== null) {
         setCurrentProgress(latestLog.progress);
@@ -109,94 +121,92 @@ const TaskDetailPage = () => {
     }
   };
 
-  const handleAddAssignee = async (userId: string) => {
-    if (!task) return;
-    try {
-        const { error } = await supabase.from('task_assignees').insert({
-            task_id: task.id,
-            user_id: userId,
-            is_primary: false
-        });
-        if (error) throw error;
-        fetchTaskDetails(true);
-    } catch (error) {
-        console.error('Error adding assignee:', error);
-        alert('添加处理人失败');
-    }
-  };
-
-  const handleRemoveAssignee = async (userId: string) => {
-    if (!task || !task.assignees) return;
-    if (task.assignees.length <= 1) {
-        alert('必须保留至少一个处理人');
-        return;
-    }
-    if (!confirm('确定要移除该处理人吗？')) return;
-
-    try {
-        const { error } = await supabase
-            .from('task_assignees')
-            .delete()
-            .eq('task_id', task.id)
-            .eq('user_id', userId);
-        if (error) throw error;
-        fetchTaskDetails(true);
-    } catch (error) {
-        console.error('Error removing assignee:', error);
-        alert('移除处理人失败');
-    }
-  };
-
-  const handleUpdateModules = async (moduleIds: string[]) => {
-      if (!task) return;
-      try {
-          await supabase.from('task_modules').delete().eq('task_id', task.id);
-          
-          if (moduleIds.length > 0) {
-              const toInsert = moduleIds.map(mid => ({
-                  task_id: task.id,
-                  module_id: mid,
-                  created_by: user?.id
-              }));
-              const { error } = await supabase.from('task_modules').insert(toInsert);
-              if (error) throw error;
-          }
-          fetchTaskDetails(true);
-      } catch (error) {
-          console.error('Error updating modules:', error);
-          alert('更新关联模块失败');
-      }
-  };
-
   const handleStatusChange = async (newStatus: string) => {
     if (!task) return;
-    
     try {
-      const updates: { status: string; completed_at?: string | null } = { status: newStatus };
+      const updates: any = { status: newStatus };
       if (newStatus === 'done') {
         updates.completed_at = new Date().toISOString();
+        setCurrentProgress(100);
       } else {
         updates.completed_at = null;
       }
-
-      const { error } = await supabase
-        .from('tasks')
-        .update(updates)
-        .eq('id', task.id);
-
+      const { error } = await supabase.from('tasks').update(updates).eq('id', task.id);
       if (error) throw error;
       
-      await supabase.from('task_progress_logs').insert({
-        task_id: task.id,
-        progress: newStatus === 'done' ? 100 : task.status === 'done' ? 0 : undefined,
-        description: `状态变更为: ${newStatus}`,
-        created_by: user?.id
-      });
-
+      const notifications = task.assignees
+        ?.filter(a => a.user_id !== user?.id)
+        .map(a => ({
+          user_id: a.user_id,
+          title: '任务状态更新',
+          content: `任务 "${task.title}" 状态已变更为 ${newStatus}`,
+          type: 'info',
+          is_read: false
+        })) || [];
+      
+      if (notifications.length > 0) {
+        await supabase.from('notifications').insert(notifications);
+      }
+      
       fetchTaskDetails(true);
     } catch (error) {
       console.error('Error updating status:', error);
       alert('状态更新失败');
+    }
+  };
+
+  const handleAddAssignee = async (userId: string) => {
+    if (!task) return;
+    try {
+      const { error } = await supabase.from('task_assignees').insert({
+        task_id: task.id,
+        user_id: userId,
+        is_primary: task.assignees?.length === 0
+      });
+      if (error) throw error;
+      fetchTaskDetails(true);
+    } catch (error) {
+      console.error('Error adding assignee:', error);
+      alert('添加处理人失败');
+    }
+  };
+
+  const handleRemoveAssignee = async (userId: string) => {
+    if (!task) return;
+    try {
+      const { error } = await supabase.from('task_assignees')
+        .delete()
+        .eq('task_id', task.id)
+        .eq('user_id', userId);
+      if (error) throw error;
+      fetchTaskDetails(true);
+    } catch (error) {
+      console.error('Error removing assignee:', error);
+      alert('移除处理人失败');
+    }
+  };
+
+  const handleUpdateModules = async (moduleIds: string[]) => {
+    if (!task) return;
+    try {
+      const { error: deleteError } = await supabase.from('task_modules')
+        .delete()
+        .eq('task_id', task.id);
+      if (deleteError) throw deleteError;
+
+      if (moduleIds.length > 0) {
+        const { error: insertError } = await supabase.from('task_modules').insert(
+          moduleIds.map(moduleId => ({
+            task_id: task.id,
+            module_id: moduleId
+          }))
+        );
+        if (insertError) throw insertError;
+      }
+      fetchTaskDetails(true);
+    } catch (error) {
+      console.error('Error updating modules:', error);
+      alert('更新模块失败');
     }
   };
 
@@ -216,11 +226,23 @@ const TaskDetailPage = () => {
     }
   };
 
-  // 处理进度更新提交
   const handleProgressUpdate = async (progress: number, content: string, attachments: any[]) => {
-    if (!task || !user) return;
+    console.log('handleProgressUpdate called:', { progress, content, attachmentsCount: attachments.length });
+    
+    if (!task || !user) {
+      console.error('Task or user is null:', { task, user });
+      alert('任务或用户信息缺失');
+      return;
+    }
 
     try {
+      console.log('Inserting progress log:', {
+        task_id: task.id,
+        progress,
+        description: content,
+        created_by: user.id
+      });
+
       // 1. 创建进度更新记录
       const { data: progressLog, error: logError } = await supabase
         .from('task_progress_logs')
@@ -233,7 +255,12 @@ const TaskDetailPage = () => {
         .select()
         .single();
 
-      if (logError) throw logError;
+      if (logError) {
+        console.error('Error inserting progress log:', logError);
+        throw new Error(`创建进度记录失败: ${logError.message}`);
+      }
+
+      console.log('Progress log created:', progressLog);
 
       // 2. 保存附件记录
       if (attachments.length > 0 && progressLog) {
@@ -247,76 +274,84 @@ const TaskDetailPage = () => {
             file_size: att.file_size
           }));
 
+        console.log('Attachments to insert:', attachmentsToInsert);
+
         if (attachmentsToInsert.length > 0) {
           const { error: attError } = await supabase
             .from('task_progress_attachments')
             .insert(attachmentsToInsert);
 
-          if (attError) throw attError;
+          if (attError) {
+            console.error('Error inserting attachments:', attError);
+            // 附件保存失败不影响主流程
+          }
         }
       }
 
       // 3. 如果进度为100%，自动完成任务
       if (progress === 100 && task.status !== 'done') {
-        await supabase
+        console.log('Auto-completing task...');
+        const { error: updateError } = await supabase
           .from('tasks')
           .update({
             status: 'done',
             completed_at: new Date().toISOString()
           })
           .eq('id', task.id);
-      }
 
-      // 4. 发送通知给责任人和其他处理人
-      const notifications = [];
-
-      // 通知责任人（如果不是自己）
-      if (task.created_by !== user.id) {
-        notifications.push({
-          user_id: task.created_by,
-          title: '任务进度更新',
-          content: `任务 "${task.title}" 进度更新为 ${progress}%`,
-          type: 'info',
-          is_read: false
-        });
-      }
-
-      // 通知其他处理人
-      task.assignees?.forEach(assignee => {
-        if (assignee.user_id !== user.id) {
-          notifications.push({
-            user_id: assignee.user_id,
-            title: '任务进度更新',
-            content: `任务 "${task.title}" 进度更新为 ${progress}%`,
-            type: 'info',
-            is_read: false
-          });
+        if (updateError) {
+          console.error('Error updating task status:', updateError);
         }
-      });
-
-      if (notifications.length > 0) {
-        await supabase.from('notifications').insert(notifications);
       }
 
-      // 刷新数据
-      fetchTaskDetails(true);
+      // 4. 发送通知（暂时禁用，测试基本功能）
+      // const notificationData = [];
+      // if (task.created_by !== user.id) {
+      //   notificationData.push({
+      //     user_id: task.created_by,
+      //     title: '任务进度更新',
+      //     content: `任务 "${task.title}" 进度更新为 ${progress}%`,
+      //     type: 'info',
+      //     is_read: false,
+      //     link: `/tasks/${task.id}`
+      //   });
+      // }
+      // task.assignees?.forEach(assignee => {
+      //   if (assignee.user_id !== user.id) {
+      //     notificationData.push({
+      //       user_id: assignee.user_id,
+      //       title: '任务进度更新',
+      //       content: `任务 "${task.title}" 进度更新为 ${progress}%`,
+      //       type: 'info',
+      //       is_read: false,
+      //       link: `/tasks/${task.id}`
+      //     });
+      //   }
+      // });
+      // if (notificationData.length > 0) {
+      //   const { error: notifError } = await supabase.from('notifications').insert(notificationData);
+      //   if (notifError) {
+      //     console.error('Notification error:', notifError);
+      //   }
+      // }
 
-      // 更新当前进度状态
+      // 5. 刷新数据
+      console.log('Refreshing task details...');
+      await fetchTaskDetails(true);
       setCurrentProgress(progress);
+      console.log('Progress update completed successfully!');
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting progress update:', error);
-      alert('提交进度更新失败');
+      alert(`提交进度更新失败: ${error.message || '未知错误'}`);
       throw error;
     }
   };
 
-  // 获取最新的进度值
   const getLatestProgress = () => {
     if (logs.length > 0 && logs[0].progress !== undefined && logs[0].progress !== null) {
       return logs[0].progress;
     }
-    // 根据状态返回默认进度
     switch (task?.status) {
       case 'done': return 100;
       case 'in_progress': return 50;
@@ -343,11 +378,11 @@ const TaskDetailPage = () => {
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'high':
-        return <span className="badge bg-red-100 text-red-700"><AlertCircle className="w-3 h-3 mr-1" />高优先级</span>;
+        return <span className="badge bg-red-100 text-red-700"><AlertCircle className="w-3 h-3 mr-1" />高</span>;
       case 'medium':
-        return <span className="badge bg-sun-100 text-sun-700">中优先级</span>;
+        return <span className="badge bg-sun-100 text-sun-700">中</span>;
       case 'low':
-        return <span className="badge bg-mint-100 text-mint-700">低优先级</span>;
+        return <span className="badge bg-mint-100 text-mint-700">低</span>;
       default:
         return null;
     }
@@ -422,31 +457,62 @@ const TaskDetailPage = () => {
     return 'text-dark-400 group-hover:text-dark-500';
   };
 
+  // 获取最近一条进度更新
+  const latestLog = logs[0];
+
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in">
+    <div className="max-w-5xl mx-auto animate-fade-in">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={() => navigate('/tasks')}
-          className="p-2.5 hover:bg-dark-100 rounded-xl transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-dark-600" />
-        </button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-display font-bold text-dark-900">{task.title}</h1>
-            {getStatusBadge(task.status)}
-            {getPriorityBadge(task.priority)}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate('/tasks')}
+            className="p-2.5 hover:bg-dark-100 rounded-xl transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-dark-600" />
+          </button>
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-2xl font-display font-bold text-dark-900">{task.title}</h1>
+              {getStatusBadge(task.status)}
+              {getPriorityBadge(task.priority)}
+            </div>
+            <p className="text-sm text-dark-500 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md gradient-primary flex items-center justify-center text-white text-xs font-bold">
+                {task.creator?.full_name?.charAt(0) || '?'}
+              </span>
+              <span className="font-medium text-dark-700">{task.creator?.full_name}</span>
+              <span className="text-dark-400">·</span>
+              <span>{new Date(task.created_at).toLocaleDateString('zh-CN')}</span>
+            </p>
           </div>
-          <p className="text-sm text-dark-500 flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg gradient-primary flex items-center justify-center text-white text-xs font-bold">
-              {task.creator?.full_name?.charAt(0) || '?'}
-            </span>
-            <span className="font-medium text-dark-700">{task.creator?.full_name}</span>
-            <span>·</span>
-            <span>{new Date(task.created_at).toLocaleDateString('zh-CN')}</span>
-          </p>
         </div>
+        
+        {/* 编辑/删除按钮 - 右上角 */}
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {/* TODO: 打开编辑弹窗 */}}
+              className="btn-secondary text-sm py-2 px-4"
+            >
+              <Edit2 className="w-4 h-4" />
+              编辑
+            </button>
+            <button
+              onClick={() => {
+                if (confirm('确定要删除这个任务吗？')) {
+                  supabase.from('tasks').delete().eq('id', task.id).then(() => {
+                    navigate('/tasks');
+                  });
+                }
+              }}
+              className="btn-secondary text-sm py-2 px-4 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            >
+              <Trash2 className="w-4 h-4" />
+              删除
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -472,19 +538,257 @@ const TaskDetailPage = () => {
       </div>
 
       {/* Content */}
-      <div className="card p-6">
+      <div className="space-y-6">
         {activeTab === 'details' && (
-          <TaskInfo
-            task={task}
-            availableModules={availableModules}
-            allUsers={allUsers}
-            canEdit={canEdit}
-            canUpdateStatus={canUpdateStatus}
-            onStatusChange={handleStatusChange}
-            onAddAssignee={handleAddAssignee}
-            onRemoveAssignee={handleRemoveAssignee}
-            onUpdateModules={handleUpdateModules}
-          />
+          <>
+            {/* 任务描述 - 最上方 */}
+            <div className="card p-6">
+              <h3 className="text-sm font-semibold text-dark-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary-500" />
+                任务描述
+              </h3>
+              {task.description ? (
+                <div className="prose prose-sm max-w-none text-dark-700 whitespace-pre-wrap">
+                  {task.description}
+                </div>
+              ) : (
+                <p className="text-dark-400 italic">暂无任务描述</p>
+              )}
+            </div>
+
+            {/* 两栏布局：任务信息 + 进度与操作 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* 左侧：任务信息 */}
+              <div className="lg:col-span-2 space-y-6">
+                <div className="card p-6">
+                  <h3 className="text-sm font-semibold text-dark-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-violet-500" />
+                    任务信息
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* 状态 */}
+                    <div>
+                      <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        状态
+                      </label>
+                      <select
+                        value={task.status}
+                        onChange={(e) => handleStatusChange(e.target.value)}
+                        disabled={!canUpdateStatus}
+                        className="w-full"
+                      >
+                        <option value="todo">待办</option>
+                        <option value="in_progress">进行中</option>
+                        <option value="done">已完成</option>
+                        <option value="canceled">已取消</option>
+                      </select>
+                    </div>
+
+                    {/* 优先级 */}
+                    <div>
+                      <label className="block text-sm font-medium text-dark-500 mb-2">优先级</label>
+                      <div className="flex items-center gap-2">
+                        {getPriorityBadge(task.priority || 'medium')}
+                      </div>
+                    </div>
+
+                    {/* 责任人 */}
+                    <div>
+                      <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5" />
+                        责任人
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center text-xs font-bold text-white">
+                          {task.creator?.full_name?.charAt(0) || '?'}
+                        </div>
+                        <span className="text-dark-700 font-medium">{task.creator?.full_name || '未知'}</span>
+                        <span className="text-xs text-dark-400">(创建者)</span>
+                      </div>
+                    </div>
+
+                    {/* 处理人 */}
+                    <div>
+                      <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" />
+                        处理人
+                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {task.assignees?.map((assignee) => (
+                          <div key={assignee.user_id} className="flex items-center gap-1.5 bg-violet-50 px-2 py-1 rounded-lg">
+                            <div className="w-6 h-6 rounded-md bg-violet-100 flex items-center justify-center text-xs font-bold text-violet-600">
+                              {assignee.user.full_name?.charAt(0) || '?'}
+                            </div>
+                            <span className="text-sm text-dark-700">{assignee.user.full_name}</span>
+                            {assignee.is_primary && (
+                              <span className="text-xs text-violet-600 font-medium">(主)</span>
+                            )}
+                            {canEdit && (
+                              <button
+                                onClick={() => handleRemoveAssignee(assignee.user_id)}
+                                className="ml-1 text-dark-400 hover:text-red-600"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {canEdit && (
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleAddAssignee(e.target.value);
+                                e.target.value = '';
+                              }
+                            }}
+                            className="text-sm py-1 px-2 w-32"
+                            value=""
+                          >
+                            <option value="">+ 添加</option>
+                            {allUsers
+                              .filter(u => !task.assignees?.some(a => a.user_id === u.id) && u.id !== task.created_by)
+                              .map(u => (
+                                <option key={u.id} value={u.id}>{u.full_name}</option>
+                              ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 所属项目 */}
+                    <div>
+                      <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
+                        <Folder className="w-3.5 h-3.5" />
+                        所属项目
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-dark-700 font-medium">{task.project?.name || '-'}</span>
+                      </div>
+                    </div>
+
+                    {/* 截止日期 */}
+                    <div>
+                      <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5" />
+                        截止日期
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-dark-700">
+                          {task.due_date 
+                            ? new Date(task.due_date).toLocaleDateString('zh-CN')
+                            : '未设置'
+                          }
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 关联模块 */}
+                  <div className="mt-6 pt-6 border-t border-dark-100">
+                    <label className="block text-sm font-medium text-dark-500 mb-3">关联模块</label>
+                    <div className="flex flex-wrap gap-2">
+                      {task.task_modules?.map((tm) => (
+                        <span key={tm.module_id} className="badge badge-primary">
+                          {tm.module?.name}
+                        </span>
+                      ))}
+                      {canEdit && (
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              const currentIds = task.task_modules?.map(tm => tm.module_id) || [];
+                              if (!currentIds.includes(e.target.value)) {
+                                handleUpdateModules([...currentIds, e.target.value]);
+                              }
+                              e.target.value = '';
+                            }
+                          }}
+                          className="text-sm py-1 px-2 w-32"
+                          value=""
+                        >
+                          <option value="">+ 添加模块</option>
+                          {availableModules
+                            .filter(m => !task.task_modules?.some(tm => tm.module_id === m.id))
+                            .map(m => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 右侧：进度与操作 */}
+              <div className="space-y-6">
+                <div className="card p-6">
+                  <h3 className="text-sm font-semibold text-dark-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-mint-500" />
+                    进度与操作
+                  </h3>
+
+                  {/* 当前进度 */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-dark-600">当前进度</span>
+                      <span className="text-lg font-bold text-primary-600">{currentProgress}%</span>
+                    </div>
+                    <div className="w-full h-3 bg-dark-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-primary-400 to-primary-500 rounded-full transition-all duration-500"
+                        style={{ width: `${currentProgress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 更新进度按钮 */}
+                  {(isOwner || isAssignee) && isTaskActive && (
+                    <button
+                      onClick={() => setShowProgressModal(true)}
+                      className="w-full btn-primary mb-6"
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                      更新进度
+                    </button>
+                  )}
+
+                  {/* 最近更新 */}
+                  {latestLog && (
+                    <div className="pt-4 border-t border-dark-100">
+                      <h4 className="text-sm font-medium text-dark-600 mb-3">最近更新</h4>
+                      <div className="bg-dark-50 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center text-xs font-bold text-white">
+                            {latestLog.creator?.full_name?.charAt(0) || '?'}
+                          </div>
+                          <span className="text-sm font-medium text-dark-700">{latestLog.creator?.full_name}</span>
+                          <span className="text-xs text-dark-400">
+                            {new Date(latestLog.created_at).toLocaleDateString('zh-CN')}
+                          </span>
+                        </div>
+                        
+                        {latestLog.progress !== undefined && latestLog.progress !== null && (
+                          <div className="mb-2">
+                            <span className="text-sm font-bold text-primary-600">进度: {latestLog.progress}%</span>
+                          </div>
+                        )}
+                        
+                        <p className="text-sm text-dark-600 line-clamp-2">{latestLog.description}</p>
+                        
+                        {latestLog.attachments && latestLog.attachments.length > 0 && (
+                          <div className="mt-2 text-xs text-dark-400">
+                            📎 {latestLog.attachments.length} 个附件
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
         )}
 
         {activeTab === 'comments' && (
@@ -495,21 +799,7 @@ const TaskDetailPage = () => {
         )}
 
         {activeTab === 'history' && (
-          <div className="space-y-4">
-            {/* 更新进度按钮 */}
-            {(isOwner || isAssignee) && isTaskActive && (
-              <div className="flex justify-end mb-4">
-                <button
-                  onClick={() => setShowProgressModal(true)}
-                  className="btn-primary"
-                >
-                  <TrendingUp className="w-4 h-4" />
-                  更新进度
-                </button>
-              </div>
-            )}
-
-            {/* 进度更新列表 */}
+          <div className="card p-6 space-y-4">
             {logs.map((log) => (
               <div key={log.id} className="flex gap-4 p-4 bg-dark-50 rounded-xl">
                 <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center text-white font-bold flex-shrink-0 shadow-glow">
@@ -523,7 +813,6 @@ const TaskDetailPage = () => {
                     </span>
                   </div>
 
-                  {/* 进度条（如果有进度值） */}
                   {log.progress !== undefined && log.progress !== null && (
                     <div className="mb-3">
                       <div className="flex items-center gap-2 mb-1">
@@ -539,10 +828,8 @@ const TaskDetailPage = () => {
                     </div>
                   )}
 
-                  {/* 更新内容 */}
                   <p className="text-dark-700 whitespace-pre-wrap">{log.description}</p>
 
-                  {/* 附件列表 */}
                   {log.attachments && log.attachments.length > 0 && (
                     <div className="mt-3 space-y-2">
                       <p className="text-xs font-medium text-dark-500">附件:</p>
@@ -571,14 +858,6 @@ const TaskDetailPage = () => {
                   <History className="h-8 w-8 text-dark-400" />
                 </div>
                 <p className="text-dark-500">暂无历史记录</p>
-                {(isOwner || isAssignee) && isTaskActive && (
-                  <button
-                    onClick={() => setShowProgressModal(true)}
-                    className="mt-4 text-primary-600 hover:text-primary-700 font-medium"
-                  >
-                    添加第一条进度更新
-                  </button>
-                )}
               </div>
             )}
           </div>

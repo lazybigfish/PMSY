@@ -1,0 +1,210 @@
+_format_version: '2.1'
+_transform: true
+
+###
+### Consumers / Users
+###
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtc3kiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3MDg2MzY5NCwiZXhwIjoyMDg2MjIzNjk0fQ.4asR7SimAk1UwthtIo5LD22qee5hsGAoZqDcwoQaSCw
+  - username: service_role
+    keyauth_credentials:
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtc3kiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzcwODYzNjk0LCJleHAiOjIwODYyMjM2OTR9.kcaiSbeQJljHw-KnBqKuPY_D9cASMt1MZVkCOROJ1AM
+
+###
+### Access Control List
+###
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
+###
+### Services
+###
+services:
+  ## OpenAuth Service
+  - name: auth-v1-open
+    url: http://auth:9999/verify
+    routes:
+      - name: auth-v1-open
+        strip_path: true
+        paths:
+          - /auth/v1/verify
+    plugins:
+      - name: cors
+  - name: auth-v1-open-callback
+    url: http://auth:9999/callback
+    routes:
+      - name: auth-v1-open-callback
+        strip_path: true
+        paths:
+          - /auth/v1/callback
+    plugins:
+      - name: cors
+  - name: auth-v1-open-authorize
+    url: http://auth:9999/authorize
+    routes:
+      - name: auth-v1-open-authorize
+        strip_path: true
+        paths:
+          - /auth/v1/authorize
+    plugins:
+      - name: cors
+  - name: auth-v1-open-saml
+    url: http://auth:9999/saml
+    routes:
+      - name: auth-v1-open-saml
+        strip_path: true
+        paths:
+          - /auth/v1/saml
+    plugins:
+      - name: cors
+  - name: auth-v1-open-oidc
+    url: http://auth:9999/oidc
+    routes:
+      - name: auth-v1-open-oidc
+        strip_path: true
+        paths:
+          - /auth/v1/oidc
+    plugins:
+      - name: cors
+
+  ## Secure Auth Service
+  - name: auth-v1
+    url: http://auth:9999
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## REST Service
+  - name: rest-v1
+    url: http://rest:3000
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1
+      - name: rest-v1-rpc
+        strip_path: true
+        paths:
+          - /rest/v1/rpc
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## Realtime Service
+  - name: realtime-v1
+    url: http://realtime:4000
+    routes:
+      - name: realtime-v1-all
+        strip_path: true
+        paths:
+          - /realtime/v1
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## Storage Service
+  - name: storage-v1
+    url: http://storage:5000
+    routes:
+      - name: storage-v1-all
+        strip_path: true
+        paths:
+          - /storage/v1
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## Meta Service
+  - name: meta-v1
+    url: http://meta:8080
+    routes:
+      - name: meta-v1-all
+        strip_path: true
+        paths:
+          - /pg
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+
+  ## Studio Service
+  - name: studio
+    url: http://studio:3000
+    routes:
+      - name: studio-all
+        strip_path: false
+        paths:
+          - /
+    plugins:
+      - name: cors
+      - name: basic-auth
+        config:
+          hide_credentials: true
+
+  ## PMSY API Service
+  - name: pmsy-api
+    url: http://api:3001
+    routes:
+      - name: pmsy-api-all
+        strip_path: true
+        paths:
+          - /api
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon

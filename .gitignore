@@ -31,5 +31,8 @@ dist-ssr
 
 # Deployment cache
 deploy/cache/
+.deploy-cache/
 deploy-package/
 pmsy-deploy-*/
+docker-images/
+docker-images-*/

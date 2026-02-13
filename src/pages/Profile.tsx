@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
+import { useAuth } from '../context/AuthContextNew';
 import { User, Mail, Shield, Calendar, Edit2, Save, X, Lock, Eye, EyeOff } from 'lucide-react';
 import { Profile } from '../types';
 
 const ProfilePage: React.FC = () => {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Profile>>({});
@@ -48,16 +48,13 @@ const ProfilePage: React.FC = () => {
     
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: formData.full_name,
-          phone: formData.phone,
-          bio: formData.bio,
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      await api.auth.updateUser({
+        full_name: formData.full_name,
+        phone: formData.phone,
+      });
+      
+      // 刷新用户信息
+      await refreshProfile();
       
       setIsEditing(false);
       alert('个人信息更新成功');
@@ -96,11 +93,7 @@ const ProfilePage: React.FC = () => {
 
     setChangingPassword(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
-      });
-
-      if (error) throw error;
+      await api.auth.updatePassword(passwordData.currentPassword, passwordData.newPassword);
       
       setShowPasswordModal(false);
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -294,7 +287,7 @@ const ProfilePage: React.FC = () => {
 
       {/* 修改密码弹窗 */}
       {showPasswordModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">修改密码</h3>
@@ -310,6 +303,33 @@ const ProfilePage: React.FC = () => {
             </div>
 
             <div className="space-y-4">
+              {/* 当前密码 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  当前密码
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword.current ? 'text' : 'password'}
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 pr-10 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                    placeholder="请输入当前密码"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword({ ...showPassword, current: !showPassword.current })}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    {showPassword.current ? (
+                      <EyeOff className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
               {/* 新密码 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -379,7 +399,7 @@ const ProfilePage: React.FC = () => {
               <button
                 onClick={handleChangePassword}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                disabled={changingPassword || !passwordData.newPassword || !passwordData.confirmPassword}
+                disabled={changingPassword || !passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword}
               >
                 {changingPassword ? (
                   <div className="flex items-center">

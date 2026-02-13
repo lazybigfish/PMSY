@@ -1,18 +1,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { Project } from '../../types';
 import { ArrowLeft, Edit2, Package, Flag, AlertTriangle, FileText, Layers, BarChart3, Sparkles, X, Check, Eye } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContextNew';
 import ProjectOverview from './tabs/ProjectOverview';
 import FunctionalModules from './tabs/FunctionalModules';
 import Milestones from './tabs/Milestones';
 import Risks from './tabs/Risks';
 import Reports from './tabs/Reports';
 import Suppliers from './tabs/Suppliers';
-
-// ProjectOverviewProps is defined in ProjectOverview.tsx
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,81 +27,78 @@ const ProjectDetail = () => {
 
   const [canEdit, setCanEdit] = useState(false);
   const [canViewAll, setCanViewAll] = useState(false);
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
 
-  // Redirect to overview if non-member tries to access other tabs
   useEffect(() => {
-    if (!canViewAll && activeTab !== 'overview') {
+    if (permissionsLoaded && !canViewAll && activeTab !== 'overview') {
       setSearchParams({ tab: 'overview' });
     }
-  }, [canViewAll, activeTab, setSearchParams]);
+  }, [permissionsLoaded, canViewAll, activeTab, setSearchParams]);
 
   useEffect(() => {
     if (id) {
       fetchProjectDetails();
-      checkEditPermission();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  const checkEditPermission = async () => {
-    if (!user || !id) return;
-    
-    // Check if user is manager in project_members
-    await supabase
-      .from('project_members')
-      .select('role')
-      .eq('project_id', id)
-      .eq('user_id', user.id)
-      .single();
-
-    // Permission granted if user is project manager (from projects table) OR has 'manager' role in members
-    // Note: We'll set the final permission after project data is loaded,
-    // but here we check the members table part.
-    // Actually, let's wait for project fetch to complete to check project.manager_id
-  };
 
   const fetchProjectDetails = async () => {
     try {
       setLoading(true);
       
-      // 获取项目信息
-      const { data: projectData, error: projectError } = await supabase
+      const projectData = await api.db
         .from('projects')
-        .select(`
-          *,
-          manager:profiles(id, full_name, email)
-        `)
+        .select('*')
         .eq('id', id)
         .single();
 
-      if (projectError) throw projectError;
-      setProject(projectData);
-      setEditForm(projectData);
+      if (!projectData) {
+        setPermissionsLoaded(true);
+        return;
+      }
+
+      // 获取项目经理信息
+      let managerData = null;
+      if (projectData.manager_id) {
+        const managerResult = await api.db
+          .from('profiles')
+          .select('id, full_name, email')
+          .eq('id', projectData.manager_id)
+          .single();
+        managerData = managerResult;
+      }
+
+      const projectWithManager = {
+        ...projectData,
+        manager: managerData
+      };
+
+      setProject(projectWithManager);
+      setEditForm(projectWithManager);
 
       // Check permissions
       if (user) {
         const isCreator = projectData.manager_id === user.id;
         const isAdmin = profile?.role === 'admin';
         
-        const { data: memberData } = await supabase
-            .from('project_members')
-            .select('role')
-            .eq('project_id', id)
-            .eq('user_id', user.id)
-            .single();
+        const memberData = await api.db
+          .from('project_members')
+          .select('role')
+          .eq('project_id', id)
+          .eq('user_id', user.id)
+          .single();
             
         const isManager = memberData?.role === 'manager';
         const isMember = !!memberData;
         
-        // Can edit if creator, admin, or manager
         setCanEdit(isCreator || isAdmin || isManager);
-        
-        // Can view all if creator, admin, manager, or member
         setCanViewAll(isCreator || isAdmin || isManager || isMember);
       }
 
+      setPermissionsLoaded(true);
+
     } catch (error) {
       console.error('Error fetching project details:', error);
+      setPermissionsLoaded(true);
     } finally {
       setLoading(false);
     }
@@ -111,7 +106,6 @@ const ProjectDetail = () => {
 
   const handleUpdateProject = async () => {
     try {
-      // Create a clean update object
       const updates = {
         name: editForm.name,
         customer_name: editForm.customer_name,
@@ -120,25 +114,20 @@ const ProjectDetail = () => {
         is_public: editForm.is_public
       };
 
-      const { error } = await supabase
+      await api.db
         .from('projects')
         .update(updates)
         .eq('id', id);
 
-      if (error) throw error;
-
-      // Update project_clients association if client changed
       if (selectedClientId) {
-        // Check if association exists
-        const { data: existing } = await supabase
+        const existing = await api.db
           .from('project_clients')
           .select('id')
           .eq('project_id', id)
           .single();
 
         if (existing) {
-          // Update existing
-          await supabase
+          await api.db
             .from('project_clients')
             .update({
               client_id: selectedClientId,
@@ -146,8 +135,7 @@ const ProjectDetail = () => {
             })
             .eq('id', existing.id);
         } else {
-          // Create new
-          await supabase
+          await api.db
             .from('project_clients')
             .insert({
               project_id: id,
@@ -167,7 +155,6 @@ const ProjectDetail = () => {
     }
   };
 
-  // All tabs for project members
   const allTabs = [
     { id: 'overview', label: '项目概览', icon: BarChart3, color: 'primary' },
     { id: 'modules', label: '功能模块', icon: Layers, color: 'violet' },
@@ -177,7 +164,6 @@ const ProjectDetail = () => {
     { id: 'reports', label: '周日报', icon: FileText, color: 'primary' },
   ];
 
-  // Only overview tab for non-members
   const limitedTabs = [
     { id: 'overview', label: '项目概览', icon: BarChart3, color: 'primary' },
   ];
@@ -188,18 +174,18 @@ const ProjectDetail = () => {
     if (isActive) {
       switch (color) {
         case 'primary':
-          return 'border-primary-500 text-primary-600';
+          return 'border-primary-500 text-primary-600 bg-primary-50/50';
         case 'violet':
-          return 'border-violet-500 text-violet-600';
+          return 'border-violet-500 text-violet-600 bg-violet-50/50';
         case 'mint':
-          return 'border-mint-500 text-mint-600';
+          return 'border-mint-500 text-mint-600 bg-mint-50/50';
         case 'sun':
-          return 'border-sun-500 text-sun-600';
+          return 'border-sun-500 text-sun-600 bg-sun-50/50';
         default:
-          return 'border-dark-500 text-dark-700';
+          return 'border-dark-500 text-dark-700 bg-dark-50/50';
       }
     }
-    return 'border-transparent text-dark-500 hover:text-dark-700 hover:border-dark-300';
+    return 'border-transparent text-dark-500 hover:text-dark-700 hover:border-dark-300 hover:bg-dark-50/30';
   };
 
   const getTabIconColors = (color: string, isActive: boolean) => {
@@ -253,12 +239,11 @@ const ProjectDetail = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* 返回按钮和标题 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <button
             onClick={() => navigate('/projects')}
-            className="p-2.5 hover:bg-dark-100 rounded-xl transition-colors"
+            className="p-2.5 hover:bg-dark-100 rounded-xl transition-all duration-200 ease-out hover:scale-105"
           >
             <ArrowLeft className="h-5 w-5 text-dark-600" />
           </button>
@@ -326,7 +311,6 @@ const ProjectDetail = () => {
         </div>
       </div>
 
-      {/* Tab 导航 */}
       <div className="border-b border-dark-200">
         <nav className="-mb-px flex space-x-1">
           {tabs.map((tab) => {
@@ -348,7 +332,6 @@ const ProjectDetail = () => {
         </nav>
       </div>
 
-      {/* Tab 内容 */}
       <div className="mt-6">
         {activeTab === 'overview' && (
           <ProjectOverview 

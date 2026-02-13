@@ -1,10 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { Project } from '../../types';
-import { useAuth } from '../../context/AuthContext';
-import { Plus, Search, Loader2, Layers, Flag, FileText, Eye, Trash2, Activity, Sparkles, TrendingUp, CheckCircle, Globe } from 'lucide-react';
+import { useAuth } from '../../context/AuthContextNew';
+import { Plus, Search, Loader2, Layers, FileText, Eye, Trash2, Activity, Sparkles, TrendingUp, CheckCircle, Globe } from 'lucide-react';
 
 interface ProjectWithDetails extends Project {
   current_stage_name?: string;
@@ -29,25 +29,27 @@ const ProjectList = () => {
   }, []);
 
   const fetchFinalStageName = async () => {
-    // Determine the name of the final milestone stage from active template
-    const { data: activeVersion } = await supabase
-      .from('template_versions')
-      .select('id')
-      .eq('is_active', true)
-      .single();
-
-    if (activeVersion) {
-      const { data: lastStage } = await supabase
-        .from('milestone_templates')
-        .select('name')
-        .eq('version_id', activeVersion.id)
-        .order('phase_order', { ascending: false })
-        .limit(1)
+    try {
+      const activeVersion = await api.db
+        .from('template_versions')
+        .select('id')
+        .eq('is_active', true)
         .single();
-      
-      if (lastStage) {
-        setFinalStageName(lastStage.name);
+
+      if (activeVersion) {
+        const lastStage = await api.db
+          .from('milestone_templates')
+          .select('name')
+          .eq('version_id', activeVersion.id)
+          .order('phase_order', { ascending: false })
+          .limit(1);
+        
+        if (lastStage && lastStage[0]) {
+          setFinalStageName(lastStage[0].name);
+        }
       }
+    } catch (error) {
+      console.warn('Could not fetch final stage name:', error);
     }
   };
 
@@ -55,73 +57,88 @@ const ProjectList = () => {
     try {
       setLoading(true);
       
-      // 使用 Supabase 联表查询一次性获取所有数据
-      // 注意：Supabase JS 客户端支持通过外键关系进行嵌套查询
-      const { data: projectsData, error } = await supabase
+      // 获取所有项目
+      const projectsData = await api.db
         .from('projects')
-        .select(`
-          *,
-          milestones:project_milestones(status, name, phase_order),
-          modules:project_modules(status, progress),
-          risks(level, status),
-          members:project_members(count)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       // 获取当前用户在所有项目中的角色
-      const { data: userMemberships, error: membershipError } = await supabase
+      const userMemberships = await api.db
         .from('project_members')
         .select('project_id, role')
         .eq('user_id', user?.id);
 
-      if (error) throw error;
-
       // 创建用户角色映射
       const userRoleMap = new Map<string, 'manager' | 'member'>();
-      if (!membershipError && userMemberships) {
+      if (userMemberships) {
         userMemberships.forEach((membership: { project_id: string; role: 'manager' | 'member' }) => {
           userRoleMap.set(membership.project_id, membership.role);
         });
       }
 
-      // 在前端处理数据，而不是 N+1 请求
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // 获取所有里程碑
+      const milestones = await api.db
+        .from('project_milestones')
+        .select('project_id, status, name, phase_order');
+
+      // 获取所有模块
+      const modules = await api.db
+        .from('project_modules')
+        .select('project_id, status, progress');
+
+      // 获取所有风险
+      const risks = await api.db
+        .from('risks')
+        .select('project_id, level, status');
+
+      // 获取成员数量
+      const members = await api.db
+        .from('project_members')
+        .select('project_id');
+
+      // 按项目分组数据
+      const milestonesByProject: Record<string, any[]> = {};
+      milestones?.forEach((m: any) => {
+        if (!milestonesByProject[m.project_id]) milestonesByProject[m.project_id] = [];
+        milestonesByProject[m.project_id].push(m);
+      });
+
+      const modulesByProject: Record<string, any[]> = {};
+      modules?.forEach((m: any) => {
+        if (!modulesByProject[m.project_id]) modulesByProject[m.project_id] = [];
+        modulesByProject[m.project_id].push(m);
+      });
+
+      const risksByProject: Record<string, any[]> = {};
+      risks?.forEach((r: any) => {
+        if (!risksByProject[r.project_id]) risksByProject[r.project_id] = [];
+        risksByProject[r.project_id].push(r);
+      });
+
+      const memberCountByProject: Record<string, number> = {};
+      members?.forEach((m: any) => {
+        memberCountByProject[m.project_id] = (memberCountByProject[m.project_id] || 0) + 1;
+      });
+
+      // 处理数据
       const projectsWithDetails = (projectsData || []).map((project: any) => {
-        // 1. 处理里程碑：找当前进行中的，或者第一个
-        // 先按 phase_order 排序
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sortedMilestones = (project.milestones || []).sort((a: any, b: any) => a.phase_order - b.phase_order);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const projectMilestones = milestonesByProject[project.id] || [];
+        const sortedMilestones = projectMilestones.sort((a: any, b: any) => a.phase_order - b.phase_order);
         const currentMilestone = sortedMilestones.find((m: any) => m.status === 'in_progress') || sortedMilestones[0];
 
-        // 2. 处理模块进度
-        const modules = project.modules || [];
-        const totalModules = modules.length;
-        // 计算所有功能模块的完成度平均值（基于 progress 字段）
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const totalProgress = modules.reduce((sum: number, m: any) => sum + (m.progress || 0), 0);
+        const projectModules = modulesByProject[project.id] || [];
+        const totalModules = projectModules.length;
+        const totalProgress = projectModules.reduce((sum: number, m: any) => sum + (m.progress || 0), 0);
         const moduleProgress = totalModules > 0 ? Math.round(totalProgress / totalModules) : 0;
-        
-        // Debug log
-        if (totalModules > 0) {
-          console.log(`Project ${project.id}: ${totalModules} modules, totalProgress=${totalProgress}, avg=${moduleProgress}`);
-          console.log('Module progress values:', modules.map((m: any) => ({ id: m.id, progress: m.progress, status: m.status })));
-        }
 
-        // 3. 处理成员数量
-        // 注意：Supabase 的 select(..., { count: 'exact' }) 在联表时行为不同
-        // 这里我们实际上获取的是 project_members 数组的长度，因为 select('members:project_members(count)') 返回的是对象数组
-        // 如果数据量巨大，这可能不是最佳方案，但在列表页通常成员数不会特别多
-        const memberCount = project.members?.[0]?.count || 0; // 修正：如果使用了 count 聚合
+        const memberCount = memberCountByProject[project.id] || 0;
 
-        // 4. 计算健康度
-        const risks = project.risks || [];
+        const projectRisks = risksByProject[project.id] || [];
         let healthScore = 100;
-        if (risks.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const activeRisks = risks.filter((r: any) => r.status !== 'closed');
+        if (projectRisks.length > 0) {
+          const activeRisks = projectRisks.filter((r: any) => r.status !== 'closed');
           if (activeRisks.length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const deductions = activeRisks.reduce((total: number, risk: any) => {
               switch (risk.level) {
                 case 'high': return total + 20;
@@ -134,7 +151,6 @@ const ProjectList = () => {
           }
         }
 
-        // 5. 确定用户在该项目中的角色
         let userRole: 'manager' | 'member' | null = null;
         if (project.manager_id === user?.id) {
           userRole = 'manager';
@@ -161,22 +177,13 @@ const ProjectList = () => {
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    console.log('Delete button clicked for project:', projectId);
     const confirmed = confirm('确定要删除此项目吗？此操作不可恢复。');
-    console.log('Confirm result:', confirmed);
     
-    if (!confirmed) {
-      console.log('Delete cancelled by user');
-      return;
-    }
+    if (!confirmed) return;
     
     try {
-      console.log('Starting delete operation...');
-      const { error } = await supabase.from('projects').delete().eq('id', projectId);
-      if (error) throw error;
-      console.log('Delete successful, updating UI...');
+      await api.db.from('projects').delete().eq('id', projectId);
       setProjects(prevProjects => prevProjects.filter(p => p.id !== projectId));
-      console.log('UI updated');
     } catch (error) {
       console.error('Error deleting project:', error);
       alert('删除项目失败');
@@ -263,20 +270,20 @@ const ProjectList = () => {
 
       {/* 统计信息 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="stat-card card-hover">
+        <div className="stat-card card-hover hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200 ease-out cursor-pointer">
           <div className="flex items-center justify-between mb-3">
             <span className="stat-label">项目总数</span>
-            <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
               <Layers className="w-5 h-5 text-primary-600" />
             </div>
           </div>
           <div className="stat-value text-gradient">{projects.length}</div>
         </div>
-        
-        <div className="stat-card card-hover">
+
+        <div className="stat-card card-hover hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200 ease-out cursor-pointer">
           <div className="flex items-center justify-between mb-3">
             <span className="stat-label">合同总金额</span>
-            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
               <TrendingUp className="w-5 h-5 text-violet-600" />
             </div>
           </div>
@@ -289,11 +296,11 @@ const ProjectList = () => {
           </div>
           <p className="text-xs text-dark-400 mt-1">作为项目经理</p>
         </div>
-        
-        <div className="stat-card card-hover">
+
+        <div className="stat-card card-hover hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200 ease-out cursor-pointer">
           <div className="flex items-center justify-between mb-3">
             <span className="stat-label">已验收项目</span>
-            <div className="w-10 h-10 rounded-xl bg-mint-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-mint-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
               <CheckCircle className="w-5 h-5 text-mint-600" />
             </div>
           </div>
@@ -302,11 +309,11 @@ const ProjectList = () => {
           </div>
           <p className="text-xs text-dark-400 mt-1">作为项目经理</p>
         </div>
-        
-        <div className="stat-card card-hover">
+
+        <div className="stat-card card-hover hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200 ease-out cursor-pointer">
           <div className="flex items-center justify-between mb-3">
             <span className="stat-label">公开项目</span>
-            <div className="w-10 h-10 rounded-xl bg-sun-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-sun-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
               <Globe className="w-5 h-5 text-sun-600" />
             </div>
           </div>
@@ -377,14 +384,17 @@ const ProjectList = () => {
               </tr>
             ) : (
               filteredProjects.map((project, index) => (
-                <tr key={project.id} className="hover:bg-dark-50/50 transition-colors">
+                <tr key={project.id} className="hover:bg-dark-50/50 hover:shadow-sm transition-all duration-200 ease-out group">
                   <td className="px-6 py-5 whitespace-nowrap text-sm text-dark-500">
                     {index + 1}
                   </td>
-                  <td className="px-6 py-5 min-w-[200px]">
+                  <td 
+                    className="px-6 py-5 min-w-[200px] cursor-pointer hover:bg-dark-100/50 transition-colors duration-200"
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                  >
                     <div className="flex flex-col">
                       <div className="flex items-center">
-                        <span className="text-base font-bold text-dark-900">{project.name}</span>
+                        <span className="text-base font-bold text-dark-900 hover:text-primary-600 transition-colors duration-200">{project.name}</span>
                         {project.is_public && (
                           <span title="公开项目" className="ml-2">
                             <Eye className="h-4 w-4 text-mint-500" />
@@ -397,7 +407,6 @@ const ProjectList = () => {
                           <Layers className="w-3 h-3" />
                           {project.member_count || 0} 成员
                         </span>
-                        {getStatusBadge(project.status)}
                       </div>
                     </div>
                   </td>
@@ -405,12 +414,18 @@ const ProjectList = () => {
                     {formatAmount(project.amount)}
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-center">
-                    <span className={`badge ${getStageColor(project.current_stage_name || '')}`}>
+                    <span 
+                      onClick={() => navigate(`/projects/${project.id}?tab=milestones`)}
+                      className={`badge ${getStageColor(project.current_stage_name || '')} cursor-pointer hover:opacity-80 hover:scale-105 transition-all duration-200 inline-block`}
+                    >
                       {project.current_stage_name || '未设置'}
                     </span>
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-center">
-                    <div className="flex items-center justify-center">
+                    <div 
+                      onClick={() => navigate(`/projects/${project.id}?tab=modules`)}
+                      className="flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity duration-200"
+                    >
                       <div className="w-20 bg-dark-200 rounded-full h-2.5 mr-3 overflow-hidden">
                         <div 
                           className="bg-gradient-to-r from-primary-500 to-violet-500 h-full rounded-full transition-all duration-500"
@@ -421,7 +436,10 @@ const ProjectList = () => {
                     </div>
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-center">
-                    <div className="flex items-center justify-center">
+                    <div 
+                      onClick={() => navigate(`/projects/${project.id}?tab=risks`)}
+                      className="flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity duration-200"
+                    >
                       <Activity className={`h-4 w-4 mr-1.5 ${
                         (project.health_score || 0) >= 80 ? 'text-mint-500' :
                         (project.health_score || 0) >= 60 ? 'text-sun-500' : 'text-red-500'
@@ -447,25 +465,9 @@ const ProjectList = () => {
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-center">
                     <div className="flex items-center justify-center space-x-2">
-                      <button 
-                        onClick={() => navigate(`/projects/${project.id}?tab=modules`)}
-                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-violet-700 bg-violet-100 hover:bg-violet-200 transition-colors"
-                        title="功能模块"
-                      >
-                        <Layers className="h-3.5 w-3.5 mr-1" />
-                        模块
-                      </button>
-                      <button 
-                        onClick={() => navigate(`/projects/${project.id}?tab=milestones`)}
-                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-mint-700 bg-mint-100 hover:bg-mint-200 transition-colors"
-                        title="里程碑"
-                      >
-                        <Flag className="h-3.5 w-3.5 mr-1" />
-                        里程碑
-                      </button>
-                      <button 
+                      <button
                         onClick={() => navigate(`/projects/${project.id}`)}
-                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-dark-700 bg-dark-100 hover:bg-dark-200 transition-colors"
+                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-dark-700 bg-dark-100 hover:bg-dark-200 hover:scale-105 transition-all duration-200 ease-out"
                         title="详情"
                       >
                         <FileText className="h-3.5 w-3.5 mr-1" />
@@ -477,7 +479,7 @@ const ProjectList = () => {
                             e.stopPropagation();
                             handleDeleteProject(project.id);
                           }}
-                          className="inline-flex items-center p-1.5 text-dark-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          className="inline-flex items-center p-1.5 text-dark-400 hover:text-red-500 hover:bg-red-50 rounded-lg hover:scale-105 transition-all duration-200 ease-out"
                           title="删除"
                         >
                           <Trash2 className="h-4 w-4" />

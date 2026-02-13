@@ -316,7 +316,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
     <DialogPrimitive.Root open={open} onOpenChange={(open) => !open && onClose()}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 bg-black/50 z-40" />
-        <DialogPrimitive.Content className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 overflow-y-auto p-0 flex flex-col animate-in slide-in-from-right duration-300">
+        <DialogPrimitive.Content className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl z-[100] overflow-y-auto p-0 flex flex-col animate-in slide-in-from-right duration-300">
           <DialogPrimitive.Title className="sr-only">任务详情</DialogPrimitive.Title>
           
           {/* Header */}

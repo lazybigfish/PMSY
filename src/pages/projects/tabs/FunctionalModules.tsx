@@ -34,7 +34,21 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
         .order('sort_order', { ascending: true });
 
       if (error) throw error;
-      setModules(buildTree(data || []));
+      const treeData = buildTree(data || []);
+      setModules(treeData);
+      
+      // 默认展开所有模块
+      const allExpanded: Record<string, boolean> = {};
+      const setAllExpanded = (nodes: ProjectModule[]) => {
+        nodes.forEach((node) => {
+          allExpanded[node.id] = true;
+          if (node.children && node.children.length > 0) {
+            setAllExpanded(node.children);
+          }
+        });
+      };
+      setAllExpanded(treeData);
+      setExpanded(allExpanded);
     } catch (error) {
       console.error('Error fetching modules:', error);
     } finally {
@@ -81,6 +95,46 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
     });
 
     return roots;
+  };
+
+  // 统计各层级模块数据（使用加权平均计算完成度）
+  const calculateLevelStats = (moduleList: ProjectModule[]) => {
+    const stats: Record<number, { total: number; totalProgress: number }> = {};
+
+    const traverse = (nodes: ProjectModule[]) => {
+      nodes.forEach((node) => {
+        const level = node.level || 1;
+        if (!stats[level]) {
+          stats[level] = { total: 0, totalProgress: 0 };
+        }
+        stats[level].total += 1;
+        // 累加每个模块的进度值
+        stats[level].totalProgress += (node.progress || 0);
+        if (node.children && node.children.length > 0) {
+          traverse(node.children);
+        }
+      });
+    };
+
+    traverse(moduleList);
+    return stats;
+  };
+
+  // 获取层级名称
+  const getLevelName = (level: number) => {
+    const levelNames: Record<number, string> = {
+      1: '一级',
+      2: '二级',
+      3: '三级',
+      4: '四级',
+      5: '五级',
+      6: '六级',
+      7: '七级',
+      8: '八级',
+      9: '九级',
+      10: '十级',
+    };
+    return levelNames[level] || `${level}级`;
   };
 
   const toggleExpand = (id: string) => {
@@ -454,6 +508,29 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
             )}
           </button>
 
+          {/* 进度显示 */}
+          <div className="flex items-center mr-3 w-24">
+            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden mr-2">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  node.status === 'completed' ? 'bg-green-500' :
+                  node.status === 'in_progress' ? 'bg-blue-500' :
+                  node.status === 'delayed' ? 'bg-red-400' :
+                  'bg-gray-400'
+                }`}
+                style={{ width: `${node.progress || 0}%` }}
+              />
+            </div>
+            <span className={`text-xs font-medium w-8 text-right ${
+              node.status === 'completed' ? 'text-green-600' :
+              node.status === 'in_progress' ? 'text-blue-600' :
+              node.status === 'delayed' ? 'text-red-500' :
+              'text-gray-500'
+            }`}>
+              {node.progress || 0}%
+            </span>
+          </div>
+
           <div className="flex items-center space-x-2">
             {/* Quick Start Button */}
             {node.status !== 'in_progress' && node.status !== 'completed' && (
@@ -632,8 +709,57 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
+      {/* 统计卡片 */}
+      {modules.length > 0 && (
+        <div className="w-full">
+          {(() => {
+            const stats = calculateLevelStats(modules);
+            const levels = Object.keys(stats).map(Number).sort((a, b) => a - b);
+            const cardCount = levels.length;
+            return (
+              <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cardCount}, minmax(0, 1fr))` }}>
+                {levels.map((level) => {
+                  const { total, totalProgress } = stats[level];
+                  // 加权平均完成度 = 总进度 / 模块数量
+                  const percentage = total > 0 ? Math.round(totalProgress / total) : 0;
+                  return (
+                    <div
+                      key={level}
+                      className="relative h-24 bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 cursor-pointer group"
+                    >
+                      {/* 背景填充层 - 柔和的海洋蓝绿色系 */}
+                      <div
+                        className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-teal-400/30 via-cyan-400/20 to-blue-300/10 transition-all duration-500 ease-out group-hover:from-teal-400/40 group-hover:via-cyan-400/30 group-hover:to-blue-300/20"
+                        style={{ height: `${percentage}%` }}
+                      />
+                      {/* 内容层 */}
+                      <div className="relative z-10 flex flex-col items-center justify-center h-full p-3">
+                        <span className="text-sm font-medium text-gray-500 mb-1">{getLevelName(level)}模块</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl font-bold text-gray-900">{total}</span>
+                          <span className="text-xs text-gray-400">个</span>
+                        </div>
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full transition-all duration-500"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold text-teal-600">{percentage}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-4">
           {modules.length === 0 ? (
             <div className="text-center text-gray-500 py-8">暂无功能模块。请从Excel导入开始。</div>
           ) : (

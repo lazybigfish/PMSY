@@ -494,7 +494,7 @@ export default function MilestoneTemplates() {
 
       {/* Version Modal */}
       {showVersionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">新建版本</h3>
             <div className="space-y-4">
@@ -552,7 +552,7 @@ export default function MilestoneTemplates() {
 
       {/* Milestone Edit Modal */}
       {editingMilestone && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {editingMilestone.id ? '编辑阶段' : '新增阶段'}
@@ -598,7 +598,7 @@ export default function MilestoneTemplates() {
 
       {/* Task Edit Modal */}
       {editingTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {editingTask.id ? '编辑任务' : '新增任务'}

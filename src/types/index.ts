@@ -162,6 +162,7 @@ export interface ProjectSupplier {
 export interface SupplierAcceptance {
     id: string;
     project_supplier_id: string;
+    acceptance_type: 'initial' | 'final' | 'phase';
     acceptance_date: string;
     result: 'pass' | 'fail';
     description: string;
@@ -316,6 +317,8 @@ export interface ForumPost {
   is_essence: boolean;
   view_count: number;
   reply_count: number;
+  like_count: number;
+  is_liked?: boolean;
   last_reply_at?: string;
   last_reply_by?: string;
   last_reply_user?: Profile;

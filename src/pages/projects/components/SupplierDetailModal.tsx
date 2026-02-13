@@ -1,8 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectSupplier, ProjectModule, SupplierAcceptance } from '../../../types';
-import { FileText, X, ExternalLink, Plus, Upload, ChevronRight, ChevronDown } from 'lucide-react';
+import { FileText, X, ExternalLink, Plus, Upload, ChevronRight, ChevronDown, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
+import { DatePicker } from '../../../components/DatePicker';
+
+// 验收类型配置
+const ACCEPTANCE_TYPE_CONFIG = {
+  initial: { label: '初验', color: 'bg-blue-100 text-blue-800', icon: Clock },
+  final: { label: '终验', color: 'bg-green-100 text-green-800', icon: CheckCircle },
+  phase: { label: '阶段性验收', color: 'bg-yellow-100 text-yellow-800', icon: AlertCircle },
+};
 
 // 模块树形选择组件（用于详情页编辑）
 interface ModuleTreeSelectProps {
@@ -14,7 +22,6 @@ interface ModuleTreeSelectProps {
 function ModuleTreeSelect({ modules, selectedIds, onChange }: ModuleTreeSelectProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  // 构建树形结构
   const buildTree = (items: ProjectModule[]): ProjectModule[] => {
     const map: Record<string, ProjectModule> = {};
     const roots: ProjectModule[] = [];
@@ -34,7 +41,6 @@ function ModuleTreeSelect({ modules, selectedIds, onChange }: ModuleTreeSelectPr
     return roots;
   };
 
-  // 获取所有子模块ID（递归）
   const getAllChildrenIds = (module: ProjectModule): string[] => {
     const ids: string[] = [module.id];
     if (module.children) {
@@ -45,7 +51,6 @@ function ModuleTreeSelect({ modules, selectedIds, onChange }: ModuleTreeSelectPr
     return ids;
   };
 
-  // 检查是否所有子模块都被选中
   const areAllChildrenSelected = (module: ProjectModule): boolean => {
     if (!module.children || module.children.length === 0) {
       return selectedIds.includes(module.id);
@@ -53,7 +58,6 @@ function ModuleTreeSelect({ modules, selectedIds, onChange }: ModuleTreeSelectPr
     return module.children.every(child => areAllChildrenSelected(child));
   };
 
-  // 检查是否有部分子模块被选中
   const hasSomeChildrenSelected = (module: ProjectModule): boolean => {
     if (!module.children || module.children.length === 0) {
       return false;
@@ -67,10 +71,8 @@ function ModuleTreeSelect({ modules, selectedIds, onChange }: ModuleTreeSelectPr
     const isSelected = selectedIds.includes(module.id);
 
     if (isSelected) {
-      // 取消选择：移除该模块及其所有子模块
       onChange(selectedIds.filter(id => !allIds.includes(id)));
     } else {
-      // 选择：添加该模块及其所有子模块
       const newIds = [...selectedIds];
       allIds.forEach(id => {
         if (!newIds.includes(id)) {
@@ -177,11 +179,11 @@ interface SupplierDetailModalProps {
 }
 
 export function SupplierDetailModal({ projectSupplier, projectModules, onClose, onUpdate }: SupplierDetailModalProps) {
-  const [activeTab, setActiveTab] = useState<'info' | 'acceptance' | 'payment'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'acceptance-payment'>('info');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-lg max-w-5xl w-full h-[90vh] flex flex-col shadow-xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-6xl w-full h-[90vh] flex flex-col shadow-xl">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
           <div>
             <h3 className="text-xl font-bold text-gray-900">{projectSupplier.supplier?.name}</h3>
@@ -206,24 +208,14 @@ export function SupplierDetailModal({ projectSupplier, projectModules, onClose, 
               基本信息
             </button>
             <button
-              onClick={() => setActiveTab('acceptance')}
+              onClick={() => setActiveTab('acceptance-payment')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'acceptance'
+                activeTab === 'acceptance-payment'
                   ? 'border-indigo-500 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              验收记录
-            </button>
-            <button
-              onClick={() => setActiveTab('payment')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'payment'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              付款管理
+              验收与付款
             </button>
           </nav>
         </div>
@@ -237,13 +229,8 @@ export function SupplierDetailModal({ projectSupplier, projectModules, onClose, 
               onUpdate={onUpdate}
             />
           )}
-          {activeTab === 'acceptance' && (
-            <SupplierAcceptanceTab
-              projectSupplier={projectSupplier}
-            />
-          )}
-          {activeTab === 'payment' && (
-            <SupplierPaymentTab
+          {activeTab === 'acceptance-payment' && (
+            <SupplierAcceptancePaymentTab
               projectSupplier={projectSupplier}
               onUpdate={onUpdate}
             />
@@ -252,6 +239,63 @@ export function SupplierDetailModal({ projectSupplier, projectModules, onClose, 
       </div>
     </div>
   );
+}
+
+// 获取验收状态显示配置
+function getAcceptanceStatusConfig(acceptances: SupplierAcceptance[]) {
+  if (acceptances.length === 0) {
+    return {
+      label: '未验收',
+      color: 'bg-gray-50',
+      textColor: 'text-gray-600',
+      subText: '暂无验收记录'
+    };
+  }
+
+  const hasFinal = acceptances.some(a => a.acceptance_type === 'final');
+  const hasInitial = acceptances.some(a => a.acceptance_type === 'initial');
+  const hasPhase = acceptances.some(a => a.acceptance_type === 'phase');
+
+  // 按日期排序获取最新验收
+  const sortedAcceptances = [...acceptances].sort(
+    (a, b) => new Date(b.acceptance_date).getTime() - new Date(a.acceptance_date).getTime()
+  );
+  const latestAcceptance = sortedAcceptances[0];
+  const latestTypeConfig = ACCEPTANCE_TYPE_CONFIG[latestAcceptance.acceptance_type];
+
+  if (hasFinal) {
+    return {
+      label: '终验完成',
+      color: 'bg-green-50',
+      textColor: 'text-green-600',
+      subText: `最新: ${latestTypeConfig.label} ${new Date(latestAcceptance.acceptance_date).toLocaleDateString('zh-CN')}`
+    };
+  }
+
+  if (hasInitial) {
+    return {
+      label: '初验完成',
+      color: 'bg-blue-50',
+      textColor: 'text-blue-600',
+      subText: `最新: 初验 ${new Date(latestAcceptance.acceptance_date).toLocaleDateString('zh-CN')}`
+    };
+  }
+
+  if (hasPhase) {
+    return {
+      label: '阶段性验收',
+      color: 'bg-yellow-50',
+      textColor: 'text-yellow-600',
+      subText: `最新: 阶段性验收 ${new Date(latestAcceptance.acceptance_date).toLocaleDateString('zh-CN')}`
+    };
+  }
+
+  return {
+    label: '未验收',
+    color: 'bg-gray-50',
+    textColor: 'text-gray-600',
+    subText: '暂无验收记录'
+  };
 }
 
 // 基本信息标签页
@@ -265,8 +309,11 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
-  // 计算验收状态
-  const [acceptanceStatus, setAcceptanceStatus] = useState<{ isAccepted: boolean; count: number }>({ isAccepted: false, count: 0 });
+  const [acceptanceStatus, setAcceptanceStatus] = useState<{
+    count: number;
+    config: { label: string; color: string; textColor: string; subText: string };
+  }>({ count: 0, config: { label: '未验收', color: 'bg-gray-50', textColor: 'text-gray-600', subText: '暂无验收记录' } });
+  
   const [paymentStats, setPaymentStats] = useState({
     totalPaid: 0,
     remaining: 0,
@@ -285,10 +332,9 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
       .eq('project_supplier_id', projectSupplier.id);
     
     const acceptances = data || [];
-    const passedCount = acceptances.filter(a => a.result === 'pass').length;
     setAcceptanceStatus({
-      isAccepted: passedCount > 0,
-      count: acceptances.length
+      count: acceptances.length,
+      config: getAcceptanceStatusConfig(acceptances)
     });
   };
 
@@ -338,7 +384,6 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
     }
   };
 
-  // 检查用户是否是团队成员
   const canEditModules = async () => {
     if (!user) return false;
     const { data } = await supabase
@@ -375,13 +420,13 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
           <p className="text-sm text-gray-600 mb-1">未支付比例</p>
           <p className="text-lg font-bold text-purple-600">{paymentStats.remainingPercentage.toFixed(1)}%</p>
         </div>
-        <div className={`${acceptanceStatus.isAccepted ? 'bg-green-50' : 'bg-gray-50'} p-4 rounded-lg text-center`}>
-          <p className="text-sm text-gray-600 mb-1">是否验收</p>
-          <p className={`text-lg font-bold ${acceptanceStatus.isAccepted ? 'text-green-600' : 'text-gray-600'}`}>
-            {acceptanceStatus.isAccepted ? '已验收' : '未验收'}
+        <div className={`${acceptanceStatus.config.color} p-4 rounded-lg text-center`}>
+          <p className="text-sm text-gray-600 mb-1">验收状态</p>
+          <p className={`text-lg font-bold ${acceptanceStatus.config.textColor}`}>
+            {acceptanceStatus.config.label}
           </p>
           {acceptanceStatus.count > 0 && (
-            <p className="text-xs text-gray-500">{acceptanceStatus.count} 条记录</p>
+            <p className="text-xs text-gray-500 mt-1">{acceptanceStatus.count} 条记录</p>
           )}
         </div>
       </div>
@@ -469,16 +514,39 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
   );
 }
 
-// 验收记录标签页
-function SupplierAcceptanceTab({ projectSupplier }: {
+// 验收与付款合并标签页
+function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
   projectSupplier: ProjectSupplier;
+  onUpdate: () => void;
 }) {
   const [acceptances, setAcceptances] = useState<SupplierAcceptance[]>([]);
+  const [paymentPlans, setPaymentPlans] = useState<SupplierPaymentPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddAcceptanceModal, setShowAddAcceptanceModal] = useState(false);
+  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<SupplierPaymentPlan | null>(null);
+
+  // 统计计算
+  const contractAmount = projectSupplier.contract_amount || 0;
+  const totalPaid = paymentPlans
+    .filter(p => p.status === 'paid')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const remaining = contractAmount - totalPaid;
+  const remainingPercentage = contractAmount > 0 ? (remaining / contractAmount) * 100 : 0;
 
   useEffect(() => {
-    fetchAcceptances();
+    fetchData();
   }, [projectSupplier.id]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([fetchAcceptances(), fetchPaymentPlans()]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchAcceptances = async () => {
     try {
@@ -492,76 +560,8 @@ function SupplierAcceptanceTab({ projectSupplier }: {
       setAcceptances(data || []);
     } catch (error) {
       console.error('Error fetching acceptances:', error);
-    } finally {
-      setLoading(false);
     }
   };
-
-  if (loading) {
-    return <div className="text-center py-8">加载中...</div>;
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h4 className="text-lg font-medium text-gray-900">验收记录</h4>
-        <button className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-          <Plus className="h-4 w-4 mr-2" />
-          新增验收
-        </button>
-      </div>
-
-      {acceptances.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">暂无验收记录</div>
-      ) : (
-        <div className="space-y-3">
-          {acceptances.map((acceptance) => (
-            <div key={acceptance.id} className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-medium text-gray-900">验收记录</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    验收日期: {new Date(acceptance.acceptance_date).toLocaleDateString('zh-CN')}
-                  </p>
-                </div>
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                  acceptance.result === 'pass'
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {acceptance.result === 'pass' ? '通过' : '不通过'}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// 付款管理标签页
-function SupplierPaymentTab({ projectSupplier, onUpdate }: {
-  projectSupplier: ProjectSupplier;
-  onUpdate: () => void;
-}) {
-  const [paymentPlans, setPaymentPlans] = useState<SupplierPaymentPlan[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<SupplierPaymentPlan | null>(null);
-
-  // 统计计算
-  const contractAmount = projectSupplier.contract_amount || 0;
-  const totalPaid = paymentPlans
-    .filter(p => p.status === 'paid')
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
-  const remaining = contractAmount - totalPaid;
-  const remainingPercentage = contractAmount > 0 ? (remaining / contractAmount) * 100 : 0;
-
-  useEffect(() => {
-    fetchPaymentPlans();
-  }, [projectSupplier.id]);
 
   const fetchPaymentPlans = async () => {
     try {
@@ -575,8 +575,50 @@ function SupplierPaymentTab({ projectSupplier, onUpdate }: {
       setPaymentPlans(data || []);
     } catch (error) {
       console.error('Error fetching payment plans:', error);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const handleAddAcceptance = async (type: 'initial' | 'final' | 'phase', date: string) => {
+    try {
+      const { error } = await supabase
+        .from('supplier_acceptances')
+        .insert({
+          project_supplier_id: projectSupplier.id,
+          acceptance_type: type,
+          acceptance_date: date,
+          result: 'pass',
+          description: '',
+          attachments: [],
+          created_by: (await supabase.auth.getUser()).data.user?.id
+        });
+
+      if (error) throw error;
+      
+      await fetchAcceptances();
+      onUpdate();
+      setShowAddAcceptanceModal(false);
+    } catch (error) {
+      console.error('Error adding acceptance:', error);
+      alert('新增验收记录失败');
+    }
+  };
+
+  const handleDeleteAcceptance = async (id: string) => {
+    if (!confirm('确定要删除这条验收记录吗？')) return;
+
+    try {
+      const { error } = await supabase
+        .from('supplier_acceptances')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      await fetchAcceptances();
+      onUpdate();
+    } catch (error) {
+      console.error('Error deleting acceptance:', error);
+      alert('删除验收记录失败');
     }
   };
 
@@ -584,7 +626,6 @@ function SupplierPaymentTab({ projectSupplier, onUpdate }: {
     try {
       let voucherUrl = '';
       
-      // 上传凭证文件
       if (voucherFile) {
         const fileExt = voucherFile.name.split('.').pop();
         const fileName = `${plan.id}_${Date.now()}.${fileExt}`;
@@ -601,7 +642,6 @@ function SupplierPaymentTab({ projectSupplier, onUpdate }: {
         voucherUrl = publicUrl;
       }
 
-      // 更新付款计划状态
       const { error } = await supabase
         .from('supplier_payment_plans')
         .update({
@@ -614,7 +654,6 @@ function SupplierPaymentTab({ projectSupplier, onUpdate }: {
 
       if (error) throw error;
 
-      // 刷新数据
       await fetchPaymentPlans();
       onUpdate();
       setShowConfirmModal(false);
@@ -641,7 +680,6 @@ function SupplierPaymentTab({ projectSupplier, onUpdate }: {
 
       if (error) throw error;
 
-      // 刷新数据
       await fetchPaymentPlans();
       onUpdate();
     } catch (error) {
@@ -656,7 +694,7 @@ function SupplierPaymentTab({ projectSupplier, onUpdate }: {
 
   return (
     <div className="space-y-6">
-      {/* 统计指标区域 */}
+      {/* 统计卡片区域 */}
       <div className="grid grid-cols-4 gap-4">
         <div className="bg-blue-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">合同金额</p>
@@ -676,115 +714,161 @@ function SupplierPaymentTab({ projectSupplier, onUpdate }: {
         </div>
       </div>
 
-      {/* 新增付款计划按钮 */}
-      <div className="flex justify-between items-center">
-        <h4 className="text-lg font-medium text-gray-900">付款计划</h4>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          新增付款计划
-        </button>
+      {/* 左右分栏 */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* 左侧：验收记录 */}
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h4 className="text-lg font-medium text-gray-900">验收记录</h4>
+            <button 
+              onClick={() => setShowAddAcceptanceModal(true)}
+              className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              新增验收
+            </button>
+          </div>
+
+          {acceptances.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">暂无验收记录</div>
+          ) : (
+            <div className="space-y-3">
+              {acceptances.map((acceptance) => {
+                const typeConfig = ACCEPTANCE_TYPE_CONFIG[acceptance.acceptance_type];
+                const TypeIcon = typeConfig.icon;
+                
+                return (
+                  <div key={acceptance.id} className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-full ${typeConfig.color}`}>
+                          <TypeIcon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${typeConfig.color}`}>
+                              {typeConfig.label}
+                            </span>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                              acceptance.result === 'pass'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {acceptance.result === 'pass' ? '通过' : '不通过'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {new Date(acceptance.acceptance_date).toLocaleDateString('zh-CN')}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteAcceptance(acceptance.id)}
+                        className="text-gray-400 hover:text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 右侧：付款管理 */}
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h4 className="text-lg font-medium text-gray-900">付款管理</h4>
+            <button 
+              onClick={() => setShowAddPaymentModal(true)}
+              className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              新增付款计划
+            </button>
+          </div>
+
+          {paymentPlans.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">暂无付款计划</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">序号</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">金额</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paymentPlans.map((plan, index) => (
+                    <tr key={plan.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(plan.planned_date).toLocaleDateString('zh-CN')}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ¥{plan.amount?.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          plan.status === 'paid'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-orange-100 text-orange-800'
+                        }`}>
+                          {plan.status === 'paid' ? '已付款' : '待付款'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium">
+                        {plan.status === 'pending' ? (
+                          <button
+                            onClick={() => {
+                              setSelectedPlan(plan);
+                              setShowConfirmModal(true);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900"
+                          >
+                            确认付款
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleRevokePayment(plan)}
+                            className="text-orange-600 hover:text-orange-900"
+                          >
+                            撤回
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 付款计划列表 */}
-      {paymentPlans.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">暂无付款计划</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">序号</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">付款时间</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">付款金额</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">付款比例</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">付款事由</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">实际付款时间</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">付款凭证</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paymentPlans.map((plan, index) => (
-                <tr key={plan.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {new Date(plan.planned_date).toLocaleDateString('zh-CN')}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    ¥{plan.amount?.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{plan.percentage}%</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{plan.reason}</td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      plan.status === 'paid'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-orange-100 text-orange-800'
-                    }`}>
-                      {plan.status === 'paid' ? '已付款' : '待付款'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {plan.actual_payment_date 
-                      ? new Date(plan.actual_payment_date).toLocaleDateString('zh-CN')
-                      : '-'
-                    }
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {plan.voucher_url ? (
-                      <a 
-                        href={plan.voucher_url} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="text-indigo-600 hover:text-indigo-800"
-                      >
-                        查看凭证
-                      </a>
-                    ) : (
-                      '-'
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                    {plan.status === 'pending' ? (
-                      <button
-                        onClick={() => {
-                          setSelectedPlan(plan);
-                          setShowConfirmModal(true);
-                        }}
-                        className="text-indigo-600 hover:text-indigo-900"
-                      >
-                        确认付款
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleRevokePayment(plan)}
-                        className="text-orange-600 hover:text-orange-900"
-                      >
-                        撤回付款
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* 新增验收弹窗 */}
+      {showAddAcceptanceModal && (
+        <AddAcceptanceModal
+          onClose={() => setShowAddAcceptanceModal(false)}
+          onConfirm={handleAddAcceptance}
+        />
       )}
 
       {/* 新增付款计划弹窗 */}
-      {showAddModal && (
+      {showAddPaymentModal && (
         <AddPaymentPlanModal
           projectSupplierId={projectSupplier.id}
           contractAmount={contractAmount}
-          onClose={() => setShowAddModal(false)}
+          onClose={() => setShowAddPaymentModal(false)}
           onSuccess={() => {
             fetchPaymentPlans();
             onUpdate();
-            setShowAddModal(false);
+            setShowAddPaymentModal(false);
           }}
         />
       )}
@@ -800,6 +884,97 @@ function SupplierPaymentTab({ projectSupplier, onUpdate }: {
           onConfirm={handleConfirmPayment}
         />
       )}
+    </div>
+  );
+}
+
+// 新增验收弹窗
+function AddAcceptanceModal({ 
+  onClose, 
+  onConfirm 
+}: { 
+  onClose: () => void;
+  onConfirm: (type: 'initial' | 'final' | 'phase', date: string) => void;
+}) {
+  const [selectedType, setSelectedType] = useState<'initial' | 'final' | 'phase'>('initial');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const handleSubmit = () => {
+    onConfirm(selectedType, selectedDate);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
+      <div className="bg-white rounded-lg max-w-md w-full">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-900">新增验收</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* 验收类型选择 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              选择验收类型 <span className="text-red-500">*</span>
+            </label>
+            <div className="space-y-2">
+              {(['initial', 'final', 'phase'] as const).map((type) => {
+                const config = ACCEPTANCE_TYPE_CONFIG[type];
+                const Icon = config.icon;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setSelectedType(type)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
+                      selectedType === type
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-full ${config.color}`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <span className="font-medium text-gray-900">{config.label}</span>
+                    {selectedType === type && (
+                      <CheckCircle className="h-5 w-5 text-indigo-600 ml-auto" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 验收日期 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              验收日期 <span className="text-red-500">*</span>
+            </label>
+            <DatePicker
+              value={selectedDate}
+              onChange={(date) => setSelectedDate(date)}
+              placeholder="选择验收日期"
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSubmit}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+          >
+            确定
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -852,7 +1027,6 @@ function AddPaymentPlanModal({
       
       const updated = { ...plan, [field]: value };
       
-      // 自动计算付款金额
       if (field === 'percentage') {
         updated.amount = Math.round(contractAmount * (Number(value) / 100));
       }
@@ -862,7 +1036,6 @@ function AddPaymentPlanModal({
   };
 
   const handleSubmit = async () => {
-    // 验证所有字段
     for (const plan of plans) {
       if (!plan.planned_date || plan.percentage <= 0 || !plan.reason) {
         alert('请填写所有必填字段');
@@ -880,28 +1053,20 @@ function AddPaymentPlanModal({
         status: 'pending'
       }));
 
-      console.log('Creating payment plans:', paymentPlans);
-
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('supplier_payment_plans')
-        .insert(paymentPlans)
-        .select();
+        .insert(paymentPlans);
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw new Error(`创建失败: ${error.message} (code: ${error.code})`);
-      }
-
-      console.log('Created payment plans:', data);
+      if (error) throw error;
       onSuccess();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating payment plans:', error);
-      alert(error.message || '创建付款计划失败');
+      alert('创建付款计划失败');
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
           <h3 className="text-lg font-medium text-gray-900">新增付款计划</h3>
@@ -936,11 +1101,11 @@ function AddPaymentPlanModal({
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     付款时间 <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={plan.planned_date}
-                    onChange={(e) => handlePlanChange(plan.id, 'planned_date', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(date) => handlePlanChange(plan.id, 'planned_date', date)}
+                    placeholder="选择付款时间"
+                    className="w-full"
                   />
                 </div>
 
@@ -1034,7 +1199,7 @@ function ConfirmPaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
       <div className="bg-white rounded-lg max-w-md w-full">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
           <h3 className="text-lg font-medium text-gray-900">确认付款</h3>
@@ -1057,11 +1222,11 @@ function ConfirmPaymentModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               实际付款时间 <span className="text-red-500">*</span>
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={actualDate}
-              onChange={(e) => setActualDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              onChange={(date) => setActualDate(date)}
+              placeholder="选择实际付款时间"
+              className="w-full"
             />
           </div>
 

@@ -57,11 +57,58 @@ fi
 SUPABASE_URL=$(grep VITE_SUPABASE_URL "$ENV_FILE" | cut -d'=' -f2)
 if [[ "$SUPABASE_URL" == *"localhost"* ]] || [[ "$SUPABASE_URL" == *"supabase.co"* ]]; then
     echo -e "${YELLOW}⚠️ 警告: VITE_SUPABASE_URL 配置可能错误: $SUPABASE_URL${NC}"
-    echo "生产环境应该使用服务器 IP: http://$SERVER_IP:8000"
+    echo "生产环境应该使用服务器 IP: http://$SERVER_IP"
     read -p "是否继续? (y/N) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         exit 1
+    fi
+fi
+
+# ==========================================
+# 关键：验证 Key 与 JWT_SECRET 匹配
+# ==========================================
+echo -e "${GREEN}[1.5/7] 验证 JWT Key...${NC}"
+
+# 读取 JWT_SECRET 和 Key
+JWT_SECRET=$(grep "^JWT_SECRET=" config/env/.env.supabase 2>/dev/null | cut -d'=' -f2)
+ANON_KEY=$(grep "^VITE_SUPABASE_ANON_KEY=" "$ENV_FILE" | cut -d'=' -f2)
+
+# 验证函数
+verify_jwt() {
+    local token="$1"
+    local secret="$2"
+    local header_b64=$(echo "$token" | cut -d'.' -f1)
+    local payload_b64=$(echo "$token" | cut -d'.' -f2)
+    local signature=$(echo "$token" | cut -d'.' -f3)
+    local expected_sig=$(echo -n "${header_b64}.${payload_b64}" | openssl dgst -sha256 -hmac "$secret" -binary | base64 | tr '+/' '-_' | tr -d '=')
+    [ "$signature" = "$expected_sig" ]
+}
+
+# 检查 Key 是否匹配
+if [ -n "$JWT_SECRET" ] && [ -n "$ANON_KEY" ]; then
+    if ! verify_jwt "$ANON_KEY" "$JWT_SECRET"; then
+        echo -e "${YELLOW}⚠️ 警告: ANON_KEY 与 JWT_SECRET 不匹配${NC}"
+        echo ""
+        
+        # 检查生成脚本是否存在
+        if [ -f "deploy/scripts/generate-jwt-keys.sh" ]; then
+            echo -e "${YELLOW}正在自动重新生成 Key...${NC}"
+            ./deploy/scripts/generate-jwt-keys.sh "$JWT_SECRET"
+            
+            # 重新读取 Key
+            ANON_KEY=$(grep "^VITE_SUPABASE_ANON_KEY=" "$ENV_FILE" | cut -d'=' -f2)
+            
+            echo ""
+            echo -e "${YELLOW}⚠️  重要: Key 已更新，将重新构建前端${NC}"
+            echo ""
+        else
+            echo -e "${RED}❌ 错误: Key 生成脚本不存在${NC}"
+            echo "   请手动运行: ./deploy/scripts/generate-jwt-keys.sh"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}   ✅ Key 验证通过${NC}"
     fi
 fi
 
@@ -74,7 +121,20 @@ fi
 echo -e "${GREEN}[3/7] 构建前端...${NC}"
 # 使用生产环境配置构建
 cp "$ENV_FILE" .env
+
+# 备份并移除 .env.local（Vite 会优先使用它）
+if [ -f ".env.local" ]; then
+    mv .env.local .env.local.backup
+    echo "   已备份 .env.local（避免覆盖生产配置）"
+fi
+
 npm run build
+
+# 恢复 .env.local
+if [ -f ".env.local.backup" ]; then
+    mv .env.local.backup .env.local
+    echo "   已恢复 .env.local"
+fi
 
 # 恢复开发环境配置
 if [ -f ".env.backup.development" ]; then
@@ -84,9 +144,9 @@ else
 fi
 
 echo -e "${GREEN}[4/7] 验证构建...${NC}"
-if ! grep -q "$SERVER_IP:8000" dist/assets/*.js; then
+if ! grep -q "$SERVER_IP" dist/assets/*.js; then
     echo -e "${YELLOW}❌ 错误: 构建文件未包含正确的 Supabase URL${NC}"
-    echo "期望: $SERVER_IP:8000"
+    echo "期望: $SERVER_IP"
     echo "请检查 $ENV_FILE 配置"
     exit 1
 fi
@@ -131,7 +191,7 @@ echo ""
 echo "访问地址:"
 echo "  - 前端: http://$SERVER_IP"
 echo "  - Studio: http://$SERVER_IP:3000"
-echo "  - API: http://$SERVER_IP:8000"
+echo "  - API: http://$SERVER_IP"
 echo ""
 echo -e "${YELLOW}请测试登录功能确认更新成功${NC}"
 echo ""

@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: pmsy-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-pmsy}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pmsy_dev_password}
+      POSTGRES_DB: ${DB_NAME:-pmsy_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pmsy} -d ${DB_NAME:-pmsy_dev}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: pmsy-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+  # MinIO 文件存储
+  minio:
+    image: minio/minio:latest
+    container_name: pmsy-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+  # API 服务
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pmsy-api
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-pmsy}
+      - DB_PASSWORD=${DB_PASSWORD:-pmsy_dev_password}
+      - DB_NAME=${DB_NAME:-pmsy_dev}
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_USE_SSL=false
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_key_change_in_production}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      - PORT=${PORT:-3001}
+    ports:
+      - "${PORT:-3001}:3001"
+    volumes:
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  pmsy-network:
+    driver: bridge

@@ -50,10 +50,10 @@ export default function WaterModule() {
           <div className="flex gap-6 mt-6 border-b border-gray-200">
             <button
               onClick={() => handleTabChange('hotnews')}
-              className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors border-b-2 ${
+              className={`flex items-center gap-2 pb-3 text-sm font-medium transition-all duration-200 ease-out border-b-2 rounded-t-lg px-3 -mb-px ${
                 activeTab === 'hotnews'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-blue-500 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
               <Flame className="w-4 h-4" />
@@ -61,10 +61,10 @@ export default function WaterModule() {
             </button>
             <button
               onClick={() => handleTabChange('forum')}
-              className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors border-b-2 ${
+              className={`flex items-center gap-2 pb-3 text-sm font-medium transition-all duration-200 ease-out border-b-2 rounded-t-lg px-3 -mb-px ${
                 activeTab === 'forum'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-blue-500 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
               <MessageSquare className="w-4 h-4" />

@@ -23,43 +23,9 @@ services:
     networks:
       - supabase-network
 
-  # Supabase - Kong API 网关
-  kong:
-    image: kong:2.8.1
-    container_name: supabase-kong
-    command: >
-      sh -c "
-        cp /home/kong/kong.yml /tmp/kong.yml &&
-        kong start -c /tmp/kong.yml &&
-        tail -f /usr/local/kong/logs/access.log
-      "
-    environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
-      KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
-      SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtc3kiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3MDg2MzY5NCwiZXhwIjoyMDg2MjIzNjk0fQ.4asR7SimAk1UwthtIo5LD22qee5hsGAoZqDcwoQaSCw}
-      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtc3kiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzcwODYzNjk0LCJleHAiOjIwODYyMjM2OTR9.kcaiSbeQJljHw-KnBqKuPY_D9cASMt1MZVkCOROJ1AM}
-      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-supabase}
-      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-Pmsy2024@Studio#Admin}
-    volumes:
-      - ./volumes/api/kong.yml:/home/kong/kong.yml:ro
-    ports:
-      - "8000:8000/tcp"
-      - "8443:8443/tcp"
-    depends_on:
-      - auth
-      - rest
-      - realtime
-      - storage
-      - meta
-    restart: unless-stopped
-    networks:
-      - supabase-network
-
   # Supabase - GoTrue 认证服务
   auth:
-    image: supabase/gotrue:v2.158.1
+    image: supabase/gotrue:v2.125.0
     container_name: supabase-auth
     depends_on:
       db:
@@ -91,6 +57,8 @@ services:
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+    ports:
+      - "9999:9999"
     restart: unless-stopped
     networks:
       - supabase-network
@@ -103,7 +71,9 @@ services:
       db:
         condition: service_healthy
     environment:
-      PGRST_DB_URI: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-Pmsy2024@LocalDb#Secure}@db:5432/${POSTGRES_DB:-postgres}
+      # 使用环境变量构建连接字符串，避免硬编码密码
+      # 部署脚本会在服务器上根据 .env 文件中的 POSTGRES_PASSWORD 自动替换
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-Pmsy2024@LocalDb#Secure}@db:5432/postgres
       PGRST_DB_SCHEMAS: public,storage,graphql_public
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: ${JWT_SECRET:-Pmsy2024-JWT-Secret-Key-For-Local-Dev}
@@ -114,27 +84,27 @@ services:
 
   # Supabase - Realtime 实时订阅
   realtime:
-    image: supabase/realtime:v2.28.32
+    image: supabase/realtime:v2.25.0
     container_name: supabase-realtime
     depends_on:
       db:
         condition: service_healthy
     environment:
-      PORT: 4000
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-Pmsy2024@LocalDb#Secure}
-      DB_NAME: ${POSTGRES_DB:-postgres}
-      DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
-      DB_ENC_KEY: ${JWT_SECRET:-Pmsy2024-JWT-Secret-Key-For-Local-Dev}
-      JWT_SECRET: ${JWT_SECRET:-Pmsy2024-JWT-Secret-Key-For-Local-Dev}
-      SECRET_KEY_BASE: ${JWT_SECRET:-Pmsy2024-JWT-Secret-Key-For-Local-Dev}
-      ERL_AFLAGS: -proto_dist inet_tcp
-      DNS_NODES: "''"
-      RLIMIT_NOFILE: "10000"
-      APP_NAME: realtime
-      SEED_SELF_HOST: "true"
+      - PORT=4000
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-Pmsy2024@LocalDb#Secure}
+      - DB_NAME=${POSTGRES_DB:-postgres}
+      - DB_AFTER_CONNECT_QUERY=SET search_path TO _realtime
+      - DB_ENC_KEY=${JWT_SECRET:-Pmsy2024-JWT-Secret-Key-For-Local-Dev}
+      - JWT_SECRET=${JWT_SECRET:-Pmsy2024-JWT-Secret-Key-For-Local-Dev}
+      - SECRET_KEY_BASE=${JWT_SECRET:-Pmsy2024-JWT-Secret-Key-For-Local-Dev}
+      - ERL_AFLAGS=-proto_dist inet_tcp
+      - DNS_NODES=''
+      - RLIMIT_NOFILE=10000
+      - APP_NAME=realtime
+      - SEED_SELF_HOST=true
     restart: unless-stopped
     networks:
       - supabase-network
@@ -207,14 +177,14 @@ services:
     environment:
       STUDIO_PG_META_URL: http://meta:8080
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Pmsy2024@LocalDb#Secure}
-      SUPABASE_URL: http://kong:8000
-      SUPABASE_PUBLIC_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      SUPABASE_URL: ${API_EXTERNAL_URL:-http://localhost}
+      SUPABASE_PUBLIC_URL: ${API_EXTERNAL_URL:-http://localhost}
       SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtc3kiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3MDg2MzY5NCwiZXhwIjoyMDg2MjIzNjk0fQ.4asR7SimAk1UwthtIo5LD22qee5hsGAoZqDcwoQaSCw}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtc3kiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzcwODYzNjk0LCJleHAiOjIwODYyMjM2OTR9.kcaiSbeQJljHw-KnBqKuPY_D9cASMt1MZVkCOROJ1AM}
       AUTH_JWT_SECRET: ${JWT_SECRET:-Pmsy2024-JWT-Secret-Key-For-Local-Dev}
       AUTH_JWT_AUD: authenticated
-      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
-      API_URL: http://kong:8000
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost}
+      API_URL: ${API_EXTERNAL_URL:-http://localhost}
       LOGFLARE_API_KEY: ""
       LOGFLARE_URL: ""
     ports:
@@ -229,18 +199,20 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: pmsy-api
+    ports:
+      - "3001:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - VITE_SUPABASE_URL=${API_EXTERNAL_URL:-http://localhost:8000}
+      - VITE_SUPABASE_URL=${API_EXTERNAL_URL:-http://localhost}
       - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtc3kiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3MDg2MzY5NCwiZXhwIjoyMDg2MjIzNjk0fQ.4asR7SimAk1UwthtIo5LD22qee5hsGAoZqDcwoQaSCw}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtc3kiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzcwODYzNjk0LCJleHAiOjIwODYyMjM2OTR9.kcaiSbeQJljHw-KnBqKuPY_D9cASMt1MZVkCOROJ1AM}
       - SUPABASE_AUTH_URL=http://auth:9999
       - ROOT_USER_EMAIL=${ROOT_USER_EMAIL:-root@pmsy.com}
       - ROOT_USER_PASSWORD=${ROOT_USER_PASSWORD:-root123456}
     depends_on:
-      kong:
-        condition: service_started
+      - auth
+      - rest
     restart: unless-stopped
     networks:
       - supabase-network
@@ -258,7 +230,8 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - api
-      - kong
+      - auth
+      - rest
     restart: unless-stopped
     networks:
       - supabase-network

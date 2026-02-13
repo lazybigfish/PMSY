@@ -171,10 +171,17 @@ create table if not exists public.notifications (
 create table if not exists public.forum_posts (
   id uuid default uuid_generate_v4() primary key,
   title text not null,
-  content text not null,
+  content jsonb not null default '{}',
   author_id uuid references public.profiles(id) on delete cascade not null,
+  category text default 'other',
   is_pinned boolean default false,
+  is_essence boolean default false,
   view_count integer default 0,
+  reply_count integer default 0,
+  like_count integer default 0,
+  last_reply_at timestamp with time zone,
+  last_reply_by uuid references public.profiles(id),
+  attachments jsonb default '[]',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -183,11 +190,20 @@ create table if not exists public.forum_posts (
 create table if not exists public.forum_replies (
   id uuid default uuid_generate_v4() primary key,
   post_id uuid references public.forum_posts(id) on delete cascade not null,
-  content text not null,
+  content jsonb not null default '{}',
   author_id uuid references public.profiles(id) on delete cascade not null,
   parent_id uuid references public.forum_replies(id) on delete cascade,
+  quoted_reply_id uuid references public.forum_replies(id) on delete set null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Forum Post Likes
+create table if not exists public.forum_post_likes (
+  post_id uuid references public.forum_posts(id) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  primary key (post_id, user_id)
 );
 
 -- Enable RLS
@@ -205,6 +221,7 @@ alter table public.task_assignees enable row level security;
 alter table public.notifications enable row level security;
 alter table public.forum_posts enable row level security;
 alter table public.forum_replies enable row level security;
+alter table public.forum_post_likes enable row level security;
 
 -- Basic RLS Policies
 -- Profiles
@@ -238,15 +255,17 @@ grant all on public.task_assignees to authenticated;
 grant all on public.notifications to authenticated;
 grant all on public.forum_posts to authenticated;
 grant all on public.forum_replies to authenticated;
+grant all on public.forum_post_likes to authenticated;
 
 -- Create admin user profile if not exists
+-- 默认管理员账号: admin@pmsy.com / Willyou@2026
 insert into public.profiles (id, username, full_name, role, email, created_at, updated_at)
 select 
-  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+  '00000000-0000-0000-0000-000000000001',
   'admin',
   '系统管理员',
   'admin',
   'admin@pmsy.com',
   now(),
   now()
-where not exists (select 1 from public.profiles where id = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+where not exists (select 1 from public.profiles where id = '00000000-0000-0000-0000-000000000001');

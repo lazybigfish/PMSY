@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Plus, Search, Building2, Phone, MapPin, User, Edit2, Trash2, Eye, X, Sparkles, TrendingUp, FolderOpen } from 'lucide-react';
 import { Client, ClientContact } from '../../types';
+import { formatAmount } from '../../lib/utils';
 
 interface ClientWithContacts extends Client {
   contacts?: ClientContact[];
@@ -128,7 +129,7 @@ const ClientList = () => {
             return (
               <div
                 key={client.id}
-                className="card card-hover cursor-pointer group flex flex-col"
+                className="card card-hover cursor-pointer group flex flex-col hover:-translate-y-0.5 hover:shadow-lg hover:border-primary-300 transition-all duration-200 ease-out"
                 onClick={() => {
                   setSelectedClient(client);
                   setShowDetailModal(true);
@@ -138,11 +139,11 @@ const ClientList = () => {
                 <div className="p-6 flex-1">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center">
-                      <div className="h-12 w-12 rounded-xl bg-primary-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <div className="h-12 w-12 rounded-xl bg-primary-100 flex items-center justify-center group-hover:scale-110 group-hover:bg-primary-200 transition-all duration-200">
                         <Building2 className="h-6 w-6 text-primary-600" />
                       </div>
                       <div className="ml-3">
-                        <h3 className="text-lg font-bold text-dark-900 line-clamp-1" title={client.name}>{client.name}</h3>
+                        <h3 className="text-lg font-bold text-dark-900 line-clamp-1 group-hover:text-primary-600 transition-colors duration-200" title={client.name}>{client.name}</h3>
                         <div className="flex items-center text-sm text-dark-500 mt-1">
                           <MapPin className="h-4 w-4 mr-1" />
                           {client.location}
@@ -183,7 +184,7 @@ const ClientList = () => {
                       setSelectedClient(client);
                       setShowDetailModal(true);
                     }}
-                    className="p-2 text-dark-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors"
+                    className="p-2 text-dark-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all duration-200 ease-out hover:scale-105"
                     title="查看详情"
                   >
                     <Eye className="h-4 w-4" />
@@ -194,7 +195,7 @@ const ClientList = () => {
                       setSelectedClient(client);
                       setShowEditModal(true);
                     }}
-                    className="p-2 text-dark-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-colors"
+                    className="p-2 text-dark-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all duration-200 ease-out hover:scale-105"
                     title="编辑"
                   >
                     <Edit2 className="h-4 w-4" />
@@ -204,7 +205,7 @@ const ClientList = () => {
                       e.stopPropagation();
                       handleDelete(client.id);
                     }}
-                    className="p-2 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                    className="p-2 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 ease-out hover:scale-105"
                     title="删除"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -365,7 +366,7 @@ const ClientFormModal: React.FC<ClientFormModalProps> = ({ onClose, onSuccess, c
   };
 
   return (
-    <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+    <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fade-in">
       <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-display font-bold text-dark-900">
@@ -513,7 +514,7 @@ const ClientDetailModal: React.FC<ClientDetailModalProps> = ({ client, onClose, 
   };
 
   return (
-    <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+    <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fade-in">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in">
         {/* Header */}
         <div className="px-6 py-5 border-b border-dark-100 flex items-center justify-between bg-gradient-to-r from-primary-50/50 to-transparent">
@@ -548,7 +549,7 @@ const ClientDetailModal: React.FC<ClientDetailModalProps> = ({ client, onClose, 
                 </div>
               </div>
               <div className="stat-value text-primary-600">
-                ¥{totalAmount.toLocaleString()}
+                {formatAmount(totalAmount)}
               </div>
             </div>
             <div className="stat-card">
@@ -621,7 +622,7 @@ const ClientDetailModal: React.FC<ClientDetailModalProps> = ({ client, onClose, 
                         {item.project?.name}
                       </p>
                       <p className="text-xs text-dark-500 mt-1">
-                        合同金额: ¥{(item.contract_amount || 0).toLocaleString()}
+                        合同金额: {formatAmount(item.contract_amount || 0)}
                       </p>
                     </div>
                     <a

@@ -29,6 +29,56 @@ const TaskDetailPage = () => {
   const [allUsers, setAllUsers] = useState<Profile[]>([]);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [currentProgress, setCurrentProgress] = useState(0);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [editedDescription, setEditedDescription] = useState('');
+
+  // 将模块列表转换为层级结构
+  const buildModuleHierarchy = (modules: ProjectModule[]): ProjectModule[] => {
+    const moduleMap = new Map<string, ProjectModule>();
+    const rootModules: ProjectModule[] = [];
+    
+    // 首先将所有模块放入 map
+    modules.forEach(m => {
+      moduleMap.set(m.id, { ...m, children: [] });
+    });
+    
+    // 构建层级关系
+    modules.forEach(m => {
+      const module = moduleMap.get(m.id)!;
+      if (m.parent_id && moduleMap.has(m.parent_id)) {
+        const parent = moduleMap.get(m.parent_id)!;
+        if (!parent.children) parent.children = [];
+        parent.children.push(module);
+      } else {
+        rootModules.push(module);
+      }
+    });
+    
+    return rootModules;
+  };
+
+  // 递归渲染层级选项
+  const renderModuleOptions = (modules: ProjectModule[], level: number = 0, excludedIds: string[] = []): JSX.Element[] => {
+    const options: JSX.Element[] = [];
+    
+    modules.forEach(m => {
+      if (!excludedIds.includes(m.id)) {
+        const indent = '  '.repeat(level);
+        const prefix = level > 0 ? '└─ ' : '';
+        options.push(
+          <option key={m.id} value={m.id}>
+            {indent}{prefix}{m.name}
+          </option>
+        );
+        
+        if (m.children && m.children.length > 0) {
+          options.push(...renderModuleOptions(m.children, level + 1, excludedIds));
+        }
+      }
+    });
+    
+    return options;
+  };
 
   // 权限判断
   const isOwner = user?.id === task?.created_by;
@@ -429,16 +479,16 @@ const TaskDetailPage = () => {
     if (isActive) {
       switch (color) {
         case 'primary':
-          return 'border-primary-500 text-primary-600';
+          return 'border-primary-500 text-primary-600 bg-primary-50/50';
         case 'violet':
-          return 'border-violet-500 text-violet-600';
+          return 'border-violet-500 text-violet-600 bg-violet-50/50';
         case 'mint':
-          return 'border-mint-500 text-mint-600';
+          return 'border-mint-500 text-mint-600 bg-mint-50/50';
         default:
-          return 'border-dark-500 text-dark-700';
+          return 'border-dark-500 text-dark-700 bg-dark-50/50';
       }
     }
-    return 'border-transparent text-dark-500 hover:text-dark-700 hover:border-dark-300';
+    return 'border-transparent text-dark-500 hover:text-dark-700 hover:border-dark-300 hover:bg-dark-50/30';
   };
 
   const getTabIconColors = (color: string, isActive: boolean) => {
@@ -467,7 +517,7 @@ const TaskDetailPage = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/tasks')}
-            className="p-2.5 hover:bg-dark-100 rounded-xl transition-colors"
+            className="p-2.5 hover:bg-dark-100 rounded-xl transition-all duration-200 ease-out hover:scale-105"
           >
             <ArrowLeft className="w-5 h-5 text-dark-600" />
           </button>
@@ -488,16 +538,9 @@ const TaskDetailPage = () => {
           </div>
         </div>
         
-        {/* 编辑/删除按钮 - 右上角 */}
+        {/* 删除按钮 - 右上角，仅任务创建者可删除 */}
         {canEdit && (
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {/* TODO: 打开编辑弹窗 */}}
-              className="btn-secondary text-sm py-2 px-4"
-            >
-              <Edit2 className="w-4 h-4" />
-              编辑
-            </button>
             <button
               onClick={() => {
                 if (confirm('确定要删除这个任务吗？')) {
@@ -543,11 +586,62 @@ const TaskDetailPage = () => {
           <>
             {/* 任务描述 - 最上方 */}
             <div className="card p-6">
-              <h3 className="text-sm font-semibold text-dark-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-primary-500" />
-                任务描述
-              </h3>
-              {task.description ? (
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-dark-700 uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary-500" />
+                  任务描述
+                </h3>
+                {canEdit && !isEditingDescription && (
+                  <button
+                    onClick={() => {
+                      setEditedDescription(task.description || '');
+                      setIsEditingDescription(true);
+                    }}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    编辑
+                  </button>
+                )}
+                {isEditingDescription && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsEditingDescription(false)}
+                      className="text-sm text-dark-500 hover:text-dark-700 px-2 py-1"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { error } = await supabase
+                            .from('tasks')
+                            .update({ description: editedDescription })
+                            .eq('id', task.id);
+                          if (error) throw error;
+                          setTask(prev => prev ? { ...prev, description: editedDescription } : null);
+                          setIsEditingDescription(false);
+                        } catch (error) {
+                          console.error('Error updating description:', error);
+                          alert('更新描述失败');
+                        }
+                      }}
+                      className="text-sm bg-primary-600 text-white px-3 py-1 rounded-lg hover:bg-primary-700"
+                    >
+                      保存
+                    </button>
+                  </div>
+                )}
+              </div>
+              {isEditingDescription ? (
+                <textarea
+                  value={editedDescription}
+                  onChange={(e) => setEditedDescription(e.target.value)}
+                  rows={6}
+                  className="input w-full resize-none"
+                  placeholder="输入任务描述"
+                />
+              ) : task.description ? (
                 <div className="prose prose-sm max-w-none text-dark-700 whitespace-pre-wrap">
                   {task.description}
                 </div>
@@ -705,15 +799,16 @@ const TaskDetailPage = () => {
                               e.target.value = '';
                             }
                           }}
-                          className="text-sm py-1 px-2 w-32"
+                          className="text-sm py-1.5 px-2 pr-8 border border-dark-200 rounded-lg bg-white hover:border-primary-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none appearance-none cursor-pointer min-w-[160px]"
+                          style={{ backgroundImage: 'none' }}
                           value=""
                         >
                           <option value="">+ 添加模块</option>
-                          {availableModules
-                            .filter(m => !task.task_modules?.some(tm => tm.module_id === m.id))
-                            .map(m => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
+                          {renderModuleOptions(
+                            buildModuleHierarchy(availableModules),
+                            0,
+                            task.task_modules?.map(tm => tm.module_id) || []
+                          )}
                         </select>
                       )}
                     </div>

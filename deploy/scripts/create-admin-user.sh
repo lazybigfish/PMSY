@@ -2,7 +2,7 @@
 
 # 创建 PMSY 初始管理员用户
 # 默认账号: admin@pmsy.com
-# 默认密码: admin123
+# 默认密码: Willyou@2026
 
 set -e
 
@@ -27,7 +27,7 @@ fi
 
 # 默认账号信息
 DEFAULT_EMAIL="admin@pmsy.com"
-DEFAULT_PASSWORD="admin123"
+DEFAULT_PASSWORD="Willyou@2026"
 DEFAULT_USERNAME="admin"
 
 echo -e "${BLUE}将创建以下管理员账号:${NC}"
@@ -62,7 +62,7 @@ fi
 USER_ID=$(uuidgen 2>/dev/null || python3 -c "import uuid; print(uuid.uuid4())" 2>/dev/null || echo "$(cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s%N)")
 
 # 加密密码（使用 bcrypt）
-# 注意：这里使用一个预计算的 bcrypt hash，对应密码 'admin123'
+# 注意：这里使用一个预计算的 bcrypt hash，对应密码 'Willyou@2026'
 # 实际生产环境应该使用更安全的密码
 ENCRYPTED_PASSWORD='\$2a\$10\$abcdefghijklmnopqrstuvwxycdefghijklmnopqrstu'  # 占位符
 

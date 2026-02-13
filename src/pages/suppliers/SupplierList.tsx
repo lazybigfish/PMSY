@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { Plus, Search, Edit2, Trash2, Eye, X, User, Phone, Mail, MapPin, Building2, Sparkles, TrendingUp, FolderOpen, CheckCircle } from 'lucide-react';
 
 import { Supplier } from '../../types';
+import { formatAmount } from '../../lib/utils';
 
 export default function SupplierList() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -319,7 +320,7 @@ export default function SupplierList() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+        <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fade-in">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-display font-bold text-dark-900">
@@ -429,7 +430,7 @@ export default function SupplierList() {
 
       {/* Detail Modal */}
       {isDetailModalOpen && (
-        <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+        <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fade-in">
           <div className="bg-white rounded-2xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in">
             <div className="px-6 py-5 border-b border-dark-100 flex items-center justify-between bg-gradient-to-r from-sun-50/50 to-transparent rounded-t-2xl">
               <div className="flex items-center gap-3">
@@ -477,7 +478,7 @@ export default function SupplierList() {
                         <TrendingUp className="h-5 w-5 text-mint-600" />
                       </div>
                     </div>
-                    <div className="stat-value text-mint-600">¥{detailData.totalAmount.toLocaleString()}</div>
+                    <div className="stat-value text-mint-600">{formatAmount(detailData.totalAmount)}</div>
                   </div>
                 </div>
 
@@ -500,7 +501,7 @@ export default function SupplierList() {
                               {project.projectName}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-dark-600 font-mono">
-                              ¥{project.amount.toLocaleString()}
+                              {formatAmount(project.amount)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-dark-600">
                               {project.acceptanceStatus}

@@ -21,45 +21,45 @@ const SystemSettings = () => {
         <TabsList className="flex space-x-1 rounded-xl bg-gray-100 p-1 overflow-x-auto">
           <TabsTrigger
             value="users"
-            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all"
+            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all duration-200 ease-out hover:bg-gray-200/50 hover:text-gray-900"
           >
             用户管理
           </TabsTrigger>
           <TabsTrigger
             value="roles"
-            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all"
+            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all duration-200 ease-out hover:bg-gray-200/50 hover:text-gray-900"
           >
             角色权限
           </TabsTrigger>
           <TabsTrigger
             value="milestone-templates"
-            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all"
+            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all duration-200 ease-out hover:bg-gray-200/50 hover:text-gray-900"
           >
             里程碑模板
           </TabsTrigger>
           <TabsTrigger
             value="report-templates"
-            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all"
+            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all duration-200 ease-out hover:bg-gray-200/50 hover:text-gray-900"
           >
             报告模板
           </TabsTrigger>
           <TabsTrigger
             value="ai-config"
-            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all"
+            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all duration-200 ease-out hover:bg-gray-200/50 hover:text-gray-900"
           >
             AI配置
           </TabsTrigger>
           {isAdmin && (
             <TabsTrigger
               value="hot-news"
-              className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all"
+              className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all duration-200 ease-out hover:bg-gray-200/50 hover:text-gray-900"
             >
               热点配置
             </TabsTrigger>
           )}
           <TabsTrigger
             value="general"
-            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all"
+            className="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 text-gray-700 ring-white ring-opacity-60 ring-offset-2 focus:outline-none focus:ring-2 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow transition-all duration-200 ease-out hover:bg-gray-200/50 hover:text-gray-900"
           >
             通用设置
           </TabsTrigger>

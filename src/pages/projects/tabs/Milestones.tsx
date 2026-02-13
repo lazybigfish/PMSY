@@ -131,12 +131,31 @@ export default function Milestones({ projectId }: MilestonesProps) {
     }
 
     try {
+      // 更新当前阶段状态
       const { error } = await supabase
         .from('project_milestones')
         .update({ status })
         .eq('id', id);
 
       if (error) throw error;
+
+      // 如果当前阶段标记为已完成，自动切换到下一个阶段并设为进行中
+      if (status === 'completed') {
+        const currentMilestone = milestones.find(m => m.id === id);
+        if (currentMilestone) {
+          const nextMilestone = milestones.find(m => m.phase_order === currentMilestone.phase_order + 1);
+          if (nextMilestone && nextMilestone.status === 'pending') {
+            await supabase
+              .from('project_milestones')
+              .update({ status: 'in_progress' })
+              .eq('id', nextMilestone.id);
+            // 自动选中新阶段
+            setSelectedMilestoneId(nextMilestone.id);
+            fetchMilestoneTasks(nextMilestone.id);
+          }
+        }
+      }
+
       fetchMilestones();
     } catch (error) {
       console.error('Error updating status:', error);
@@ -537,28 +556,38 @@ export default function Milestones({ projectId }: MilestonesProps) {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => downloadMilestoneDocs(selectedMilestone)}
-                    className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
+                    className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 h-[38px] whitespace-nowrap"
                     title="打包下载本阶段所有附件"
                   >
-                    <Download className="h-4 w-4 mr-1" />
+                    <Download className="h-4 w-4 mr-1 flex-shrink-0" />
                     阶段下载
                   </button>
-                  <select
-                    value={selectedMilestone.status}
-                    onChange={(e) => updateMilestoneStatus(selectedMilestone.id, e.target.value)}
-                    className="px-3 py-2 border rounded-lg text-sm"
-                  >
-                    <option value="pending">未开始</option>
-                    <option value="in_progress">进行中</option>
-                    <option value="completed">已完成</option>
-                  </select>
+                  <div className="flex items-center bg-gray-100 rounded-lg p-1 h-[38px]">
+                    {[
+                      { value: 'pending', label: '未开始' },
+                      { value: 'in_progress', label: '进行中' },
+                      { value: 'completed', label: '已完成' }
+                    ].map((status) => (
+                      <button
+                        key={status.value}
+                        onClick={() => updateMilestoneStatus(selectedMilestone.id, status.value)}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors whitespace-nowrap ${
+                          selectedMilestone.status === status.value
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        {status.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Filters */}
             <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-3">
                 <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
@@ -572,7 +601,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value as 'all' | 'completed' | 'pending')}
-                  className="px-3 py-2 border rounded-lg text-sm"
+                  className="px-3 py-2 border rounded-lg text-sm h-[38px]"
                 >
                   <option value="all">全部状态</option>
                   <option value="completed">已完成</option>
@@ -581,7 +610,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
                 <select
                   value={filterRequired}
                   onChange={(e) => setFilterRequired(e.target.value as 'all' | 'required' | 'optional')}
-                  className="px-3 py-2 border rounded-lg text-sm"
+                  className="px-3 py-2 border rounded-lg text-sm h-[38px]"
                 >
                   <option value="all">全部类型</option>
                   <option value="required">必选</option>
@@ -589,14 +618,14 @@ export default function Milestones({ projectId }: MilestonesProps) {
                 </select>
                 <button
                   onClick={() => setShowAddTaskModal(true)}
-                  className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+                  className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 h-[38px] whitespace-nowrap"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   新增任务
                 </button>
                 <button
                   onClick={downloadAllDocs}
-                  className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700"
+                  className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 h-[38px] whitespace-nowrap"
                   title="打包下载所有阶段的所有附件"
                 >
                   <Archive className="h-4 w-4 mr-1" />
@@ -637,7 +666,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
 
       {/* Add Milestone Modal */}
       {showAddMilestoneModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">新增阶段</h3>
             <form onSubmit={handleAddMilestone} className="space-y-4">
@@ -730,7 +759,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
 
       {/* Add Task Modal */}
       {showAddTaskModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">新增任务</h3>
             <form onSubmit={handleAddTask} className="space-y-4">

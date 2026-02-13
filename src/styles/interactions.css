@@ -1,0 +1,286 @@
+/**
+ * 系统全局交互效果 CSS
+ * 用于统一鼠标悬停、焦点等交互效果
+ */
+
+/* ============================================
+   基础过渡动画
+   ============================================ */
+
+.interactive-transition {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+.interactive-transform {
+  transition-property: transform, box-shadow, border-color, background-color, color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+/* GPU 加速优化 */
+.gpu-accelerated {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* ============================================
+   卡片悬停效果
+   ============================================ */
+
+.hover-lift {
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out, border-color 200ms ease-out;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.hover-lift:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* ============================================
+   按钮悬停效果
+   ============================================ */
+
+.hover-button {
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out, background-color 200ms ease-out;
+}
+
+.hover-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.hover-button:active {
+  transform: translateY(0) scale(0.95);
+}
+
+/* 图标按钮 */
+.hover-icon-button {
+  transition: transform 200ms ease-out, background-color 200ms ease-out, color 200ms ease-out;
+}
+
+.hover-icon-button:hover {
+  transform: scale(1.05);
+}
+
+.hover-icon-button:active {
+  transform: scale(0.95);
+}
+
+/* ============================================
+   导航项悬停效果
+   ============================================ */
+
+.hover-nav-item {
+  position: relative;
+  transition: background-color 200ms ease-out, color 200ms ease-out;
+}
+
+.hover-nav-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 2rem;
+  border-radius: 0 9999px 9999px 0;
+  transition: width 200ms ease-out;
+}
+
+.hover-nav-item:hover::before {
+  width: 3px;
+}
+
+/* ============================================
+   列表项悬停效果
+   ============================================ */
+
+.hover-list-item {
+  transition: background-color 200ms ease-out, transform 200ms ease-out;
+}
+
+.hover-list-item:hover {
+  background-color: rgba(243, 244, 246, 0.5);
+}
+
+/* 表格行悬停 */
+.hover-table-row {
+  transition: background-color 200ms ease-out;
+}
+
+.hover-table-row:hover {
+  background-color: rgba(249, 250, 251, 1);
+}
+
+/* ============================================
+   标签/徽章悬停效果
+   ============================================ */
+
+.hover-tag {
+  transition: transform 200ms ease-out, background-color 200ms ease-out, color 200ms ease-out;
+}
+
+.hover-tag:hover {
+  transform: scale(1.02);
+}
+
+/* ============================================
+   链接悬停效果
+   ============================================ */
+
+.hover-link {
+  transition: color 200ms ease-out;
+}
+
+.hover-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ============================================
+   输入框悬停效果
+   ============================================ */
+
+.hover-input {
+  transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.hover-input:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+/* ============================================
+   焦点效果
+   ============================================ */
+
+.focus-ring {
+  transition: box-shadow 200ms ease-out;
+}
+
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5), 0 0 0 4px rgba(59, 130, 246, 0.1);
+}
+
+/* ============================================
+   减少动画偏好支持
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .interactive-transition,
+  .interactive-transform,
+  .hover-lift,
+  .hover-button,
+  .hover-icon-button,
+  .hover-nav-item,
+  .hover-list-item,
+  .hover-table-row,
+  .hover-tag,
+  .hover-link,
+  .hover-input,
+  .focus-ring {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .hover-lift:hover,
+  .hover-button:hover,
+  .hover-icon-button:hover {
+    transform: none !important;
+  }
+
+  .hover-tag:hover {
+    transform: none !important;
+  }
+
+  .hover-nav-item::before {
+    transition: none !important;
+  }
+}
+
+/* ============================================
+   触摸设备适配
+   ============================================ */
+
+@media (hover: none) {
+  .hover-lift:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .hover-button:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .hover-icon-button:hover {
+    transform: none;
+  }
+
+  .hover-tag:hover {
+    transform: none;
+  }
+
+  /* 触摸设备使用激活状态代替悬停 */
+  .hover-lift:active {
+    transform: scale(0.99);
+  }
+
+  .hover-button:active {
+    transform: scale(0.95);
+  }
+}
+
+/* ============================================
+   禁用状态
+   ============================================ */
+
+.interactive-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.interactive-disabled .hover-lift,
+.interactive-disabled .hover-button,
+.interactive-disabled .hover-icon-button,
+.interactive-disabled .hover-nav-item,
+.interactive-disabled .hover-list-item,
+.interactive-disabled .hover-tag,
+.interactive-disabled .hover-link {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* ============================================
+   工具类
+   ============================================ */
+
+/* 光标样式 */
+.cursor-interactive {
+  cursor: pointer;
+}
+
+/* 禁用文本选择（用于按钮等） */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 平滑滚动 */
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smooth-scroll {
+    scroll-behavior: auto;
+  }
+}

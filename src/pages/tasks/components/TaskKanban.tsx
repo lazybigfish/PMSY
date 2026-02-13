@@ -1,12 +1,78 @@
 import React from 'react';
 import { Task, Profile, Project } from '../../../types';
-import { Clock } from 'lucide-react';
+import { Clock, AlertCircle } from 'lucide-react';
 
 interface TaskWithDetails extends Task {
   project?: Project;
   assignees?: { user_id: string; is_primary: boolean; user: Profile }[];
   assignee_profiles?: Profile[];
 }
+
+// 判断任务是否即将到期（3天内）
+const isDueSoon = (task: Task): boolean => {
+  if (!task.due_date || task.status === 'done') return false;
+  const due = new Date(task.due_date);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const threeDaysLater = new Date(now);
+  threeDaysLater.setDate(now.getDate() + 3);
+  threeDaysLater.setHours(23, 59, 59, 999);
+
+  return due >= now && due <= threeDaysLater;
+};
+
+// 判断任务是否已超期
+const isOverdue = (task: Task): boolean => {
+  if (!task.due_date || task.status === 'done') return false;
+  const due = new Date(task.due_date);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return due < now;
+};
+
+// 获取任务卡片的边框样式
+const getTaskCardBorderClass = (task: Task): string => {
+  if (isOverdue(task)) {
+    return 'border-red-400 shadow-red-100';
+  }
+  if (isDueSoon(task)) {
+    return 'border-yellow-400 shadow-yellow-100';
+  }
+  return 'border-gray-100';
+};
+
+// 获取截止日期的样式
+const getDueDateDisplay = (task: Task) => {
+  if (!task.due_date) return null;
+
+  const isTaskOverdue = isOverdue(task);
+  const isTaskDueSoon = isDueSoon(task);
+
+  if (isTaskOverdue) {
+    return (
+      <div className="flex items-center text-xs text-red-600 font-semibold">
+        <AlertCircle size={12} className="mr-1" />
+        {new Date(task.due_date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+      </div>
+    );
+  }
+
+  if (isTaskDueSoon) {
+    return (
+      <div className="flex items-center text-xs text-yellow-700 font-medium">
+        <Clock size={12} className="mr-1" />
+        {new Date(task.due_date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center text-xs text-gray-400">
+      <Clock size={12} className="mr-1" />
+      {new Date(task.due_date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+    </div>
+  );
+};
 
 interface TaskKanbanProps {
   tasks: TaskWithDetails[];
@@ -37,15 +103,15 @@ export const TaskKanban: React.FC<TaskKanbanProps> = ({ tasks, onTaskClick }) =>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               {colTasks.map((task) => (
-                <div 
+                <div
                   key={task.id}
                   onClick={() => onTaskClick(task.id)}
-                  className="bg-white p-3 rounded shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+                  className={`bg-white p-3 rounded shadow-sm border-2 hover:shadow-md transition-all cursor-pointer ${getTaskCardBorderClass(task)}`}
                 >
                   <div className="flex justify-between items-start mb-2">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border
-                      ${task.priority === 'high' ? 'bg-red-50 text-red-700 border-red-100' : 
-                        task.priority === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' : 
+                      ${task.priority === 'high' ? 'bg-red-50 text-red-700 border-red-100' :
+                        task.priority === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
                         'bg-green-50 text-green-700 border-green-100'}`}>
                       {task.priority.toUpperCase()}
                     </span>
@@ -55,9 +121,9 @@ export const TaskKanban: React.FC<TaskKanbanProps> = ({ tasks, onTaskClick }) =>
                       </span>
                     )}
                   </div>
-                  
+
                   <h4 className="text-sm font-medium text-gray-900 mb-1 line-clamp-2">{task.title}</h4>
-                  
+
                   <div className="flex items-center justify-between mt-3">
                     <div className="flex -space-x-2">
                       {task.assignees?.map((a) => (
@@ -73,13 +139,8 @@ export const TaskKanban: React.FC<TaskKanbanProps> = ({ tasks, onTaskClick }) =>
                          <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[10px] text-gray-400">?</div>
                       )}
                     </div>
-                    
-                    {task.due_date && (
-                      <div className={`flex items-center text-xs ${new Date(task.due_date) < new Date() && task.status !== 'done' ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                        <Clock size={12} className="mr-1" />
-                        {new Date(task.due_date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
-                      </div>
-                    )}
+
+                    {getDueDateDisplay(task)}
                   </div>
                 </div>
               ))}

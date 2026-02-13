@@ -112,7 +112,7 @@ export default function UserManagement() {
 
     try {
       setSubmitting(true);
-      // 调用后端 API 创建用户
+      // 通过 Nginx 代理访问 API 服务（避免跨域问题）
       const response = await fetch('/api/auth/create-user', {
         method: 'POST',
         headers: {
@@ -286,7 +286,7 @@ export default function UserManagement() {
 
       {/* Reset Password Modal */}
       {resetPasswordUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">重置密码</h2>
@@ -340,7 +340,7 @@ export default function UserManagement() {
 
       {/* Add User Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">新增用户</h2>

@@ -411,7 +411,7 @@ export default function Suppliers({ projectId }: SuppliersProps) {
 
       {/* Add Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-lg max-w-lg w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">关联新供应商</h3>
             <div className="space-y-4 max-h-[70vh] overflow-y-auto">

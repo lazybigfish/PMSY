@@ -137,7 +137,30 @@ fi
 
 # 构建前端
 echo -e "${YELLOW}[3/6] 构建前端...${NC}"
+
+# 使用生产环境配置构建
+if [ -f "config/env/.env.production" ]; then
+    cp config/env/.env.production .env
+    echo "   使用 config/env/.env.production 构建前端"
+elif [ -f ".env.production" ]; then
+    cp .env.production .env
+    echo "   使用 .env.production 构建前端"
+fi
+
+# 备份并移除 .env.local（Vite 会优先使用它）
+if [ -f ".env.local" ]; then
+    mv .env.local .env.local.backup
+    echo "   已备份 .env.local（避免覆盖生产配置）"
+fi
+
 npm run build
+
+# 恢复 .env.local
+if [ -f ".env.local.backup" ]; then
+    mv .env.local.backup .env.local
+    echo "   已恢复 .env.local"
+fi
+
 echo -e "${GREEN}✓ 前端构建完成${NC}"
 echo ""
 

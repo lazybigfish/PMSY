@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Trash2, RotateCcw, History } from 'lucide-react';
 import { Project, Profile } from '../../../types';
+import { DatePicker } from '../../../components/DatePicker';
 
 export type SearchOperator = 'contains' | 'not_contains' | 'eq' | 'neq' | 'gt' | 'lt' | 'empty' | 'not_empty';
 
@@ -204,11 +205,11 @@ export const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
         return null;
       case 'date':
         return (
-          <input
-            type="date"
-            className="block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
+          <DatePicker
             value={condition.value}
-            onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
+            onChange={(date) => updateCondition(condition.id, { value: date })}
+            placeholder="选择日期"
+            className="w-full"
           />
         );
       case 'boolean':

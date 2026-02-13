@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContextNew';
+import { api } from '../lib/api';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Notifications } from './Notifications';
+import { getNavItemClasses } from '../lib/interactions';
+import type { ThemeColor } from '../lib/interactions';
 
 const Layout = () => {
   const { signOut, profile } = useAuth();
@@ -57,33 +59,31 @@ const Layout = () => {
           return;
         }
 
-        const { data, error } = await supabase
+        // 使用新的 API 获取权限
+        const data = await api.db
           .from('role_permissions')
           .select('module_key')
           .eq('role_key', profile.role);
 
-        if (error) {
-          console.warn('Error fetching permissions (using default):', error);
-          if (profile.role === 'admin') {
-             setAllowedModules(new Set(allNavigation.map(n => n.key)));
-          } else {
-             setAllowedModules(new Set(['dashboard', 'projects', 'tasks', 'files', 'stakeholders']));
-          }
+        if (data && data.length > 0) {
+          const perms = new Set<string>();
+          data.forEach((p: { module_key: string }) => perms.add(p.module_key));
+          setAllowedModules(perms);
         } else {
-          if (data && data.length > 0) {
-            const perms = new Set<string>();
-            data.forEach((p: { module_key: string }) => perms.add(p.module_key));
-            setAllowedModules(perms);
+          if (profile.role === 'admin') {
+            setAllowedModules(new Set(allNavigation.map(n => n.key)));
           } else {
-             if (profile.role === 'admin') {
-                setAllowedModules(new Set(allNavigation.map(n => n.key)));
-             } else {
-                setAllowedModules(new Set(['dashboard', 'projects', 'tasks', 'files', 'stakeholders']));
-             }
+            setAllowedModules(new Set(['dashboard', 'projects', 'tasks', 'files', 'stakeholders']));
           }
         }
       } catch (err) {
         console.error('Permission fetch error:', err);
+        // 出错时使用默认权限
+        if (profile?.role === 'admin') {
+          setAllowedModules(new Set(allNavigation.map(n => n.key)));
+        } else {
+          setAllowedModules(new Set(['dashboard', 'projects', 'tasks', 'files', 'stakeholders']));
+        }
       } finally {
         setLoadingPerms(false);
       }
@@ -98,21 +98,14 @@ const Layout = () => {
   );
 
   const getNavColors = (color: string, isActive: boolean) => {
+    const themeColor = color as ThemeColor;
+    const navClasses = getNavItemClasses(themeColor, isActive);
+    
     if (isActive) {
-      switch (color) {
-        case 'primary':
-          return 'bg-primary-50 text-primary-600';
-        case 'violet':
-          return 'bg-violet-50 text-violet-600';
-        case 'mint':
-          return 'bg-mint-50 text-mint-600';
-        case 'sun':
-          return 'bg-sun-50 text-sun-600';
-        default:
-          return 'bg-dark-100 text-dark-900';
-      }
+      return cn(navClasses, 'text-dark-900 font-semibold');
     }
-    return 'text-dark-500 hover:bg-dark-100 hover:text-dark-900';
+    
+    return navClasses;
   };
 
   return (

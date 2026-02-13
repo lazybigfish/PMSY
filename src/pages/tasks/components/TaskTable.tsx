@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckSquare, Square, Eye, EyeOff, Trash2, ArrowUpDown } from 'lucide-react';
+import { CheckSquare, Square, Eye, EyeOff, Trash2, ArrowUpDown, AlertCircle, Clock } from 'lucide-react';
 import { Task, Profile, Project } from '../../../types';
 
 interface TaskWithDetails extends Task {
@@ -9,6 +9,54 @@ interface TaskWithDetails extends Task {
   assignees?: { user_id: string; is_primary: boolean; user: Profile }[];
   assignee_profiles?: Profile[];
 }
+
+// 判断任务是否即将到期（3天内）
+const isDueSoon = (task: Task): boolean => {
+  if (!task.due_date || task.status === 'done') return false;
+  const due = new Date(task.due_date);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const threeDaysLater = new Date(now);
+  threeDaysLater.setDate(now.getDate() + 3);
+  threeDaysLater.setHours(23, 59, 59, 999);
+
+  return due >= now && due <= threeDaysLater;
+};
+
+// 判断任务是否已超期
+const isOverdue = (task: Task): boolean => {
+  if (!task.due_date || task.status === 'done') return false;
+  const due = new Date(task.due_date);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return due < now;
+};
+
+// 获取任务行的样式类名
+const getTaskRowClass = (task: Task, isSelected: boolean): string => {
+  const baseClass = 'transition-colors ';
+  const hoverClass = 'hover:bg-dark-50 ';
+  const selectedClass = isSelected ? 'bg-primary-50/50 ' : '';
+
+  if (isOverdue(task)) {
+    return baseClass + hoverClass + selectedClass + 'bg-red-50/60 border-l-4 border-l-red-500';
+  }
+  if (isDueSoon(task)) {
+    return baseClass + hoverClass + selectedClass + 'bg-yellow-50/60 border-l-4 border-l-yellow-400';
+  }
+  return baseClass + hoverClass + selectedClass;
+};
+
+// 获取截止日期的样式类名
+const getDueDateClass = (task: Task): string => {
+  if (isOverdue(task)) {
+    return 'text-red-600 font-semibold flex items-center gap-1';
+  }
+  if (isDueSoon(task)) {
+    return 'text-yellow-700 font-medium flex items-center gap-1';
+  }
+  return 'text-dark-600';
+};
 
 interface TaskTableProps {
   tasks: TaskWithDetails[];
@@ -128,9 +176,9 @@ export function TaskTable({
         </thead>
         <tbody className="bg-white divide-y divide-dark-100">
           {tasks.map((task) => (
-            <tr 
-              key={task.id} 
-              className={`hover:bg-dark-50 transition-colors ${selectedTasks.has(task.id) ? 'bg-primary-50/50' : ''}`}
+            <tr
+              key={task.id}
+              className={getTaskRowClass(task, selectedTasks.has(task.id))}
             >
               <td className="px-4 py-3">
                 <button
@@ -165,20 +213,32 @@ export function TaskTable({
                   {priorityLabels[task.priority || 'medium']}
                 </span>
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3 relative">
                 <select
                   value={task.status}
                   onChange={(e) => onUpdateStatus(task.id, e.target.value)}
-                  className="w-24"
+                  className="w-28 py-1.5 px-2 pr-8 text-sm border border-dark-200 rounded-lg bg-white hover:border-primary-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none appearance-none cursor-pointer"
+                  style={{ backgroundImage: 'none' }}
                 >
                   <option value="todo">待办</option>
                   <option value="in_progress">进行中</option>
                   <option value="done">已完成</option>
                   <option value="canceled">已取消</option>
                 </select>
+                <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <svg className="w-4 h-4 text-dark-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </td>
-              <td className="px-4 py-3 text-sm text-dark-600">
-                {task.due_date ? new Date(task.due_date).toLocaleDateString('zh-CN') : '-'}
+              <td className="px-4 py-3 text-sm">
+                {task.due_date ? (
+                  <span className={getDueDateClass(task)}>
+                    {isOverdue(task) && <AlertCircle className="w-4 h-4" />}
+                    {isDueSoon(task) && !isOverdue(task) && <Clock className="w-4 h-4" />}
+                    {new Date(task.due_date).toLocaleDateString('zh-CN')}
+                  </span>
+                ) : '-'}
               </td>
               <td className="px-4 py-3">
                 {/* 责任人 */}

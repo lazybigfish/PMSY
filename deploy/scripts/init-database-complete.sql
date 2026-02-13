@@ -323,26 +323,43 @@ CREATE TABLE IF NOT EXISTS public.project_clients (
 -- 9. 论坛/水区表
 -- ==========================================
 
+-- 论坛帖子表
 CREATE TABLE IF NOT EXISTS public.forum_posts (
   id uuid default gen_random_uuid() primary key,
   title text not null,
-  content text not null,
+  content jsonb not null default '{}',
   author_id uuid references public.profiles(id) on delete cascade not null,
-  category text default 'general',
+  category text default 'other',
   is_pinned boolean default false,
+  is_essence boolean default false,
   view_count integer default 0,
+  reply_count integer default 0,
+  like_count integer default 0,
+  last_reply_at timestamp with time zone,
+  last_reply_by uuid references public.profiles(id),
+  attachments jsonb default '[]',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- 论坛回复表
 CREATE TABLE IF NOT EXISTS public.forum_replies (
   id uuid default gen_random_uuid() primary key,
   post_id uuid references public.forum_posts(id) on delete cascade not null,
-  content text not null,
+  content jsonb not null default '{}',
   author_id uuid references public.profiles(id) on delete cascade not null,
   parent_id uuid references public.forum_replies(id) on delete cascade,
+  quoted_reply_id uuid references public.forum_replies(id) on delete set null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 论坛帖子点赞表
+CREATE TABLE IF NOT EXISTS public.forum_post_likes (
+  post_id uuid references public.forum_posts(id) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  primary key (post_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.hot_news (
@@ -687,7 +704,88 @@ CREATE POLICY project_clients_read ON public.project_clients FOR SELECT TO authe
 
 -- Forum
 CREATE POLICY forum_posts_read ON public.forum_posts FOR SELECT TO authenticated USING (true);
+CREATE POLICY forum_posts_insert ON public.forum_posts FOR INSERT TO authenticated WITH CHECK (auth.uid() = author_id);
+CREATE POLICY forum_posts_update ON public.forum_posts FOR UPDATE TO authenticated USING (
+  auth.uid() = author_id OR
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+);
+CREATE POLICY forum_posts_delete ON public.forum_posts FOR DELETE TO authenticated USING (
+  auth.uid() = author_id OR
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
 CREATE POLICY forum_replies_read ON public.forum_replies FOR SELECT TO authenticated USING (true);
+CREATE POLICY forum_replies_insert ON public.forum_replies FOR INSERT TO authenticated WITH CHECK (auth.uid() = author_id);
+CREATE POLICY forum_replies_update ON public.forum_replies FOR UPDATE TO authenticated USING (
+  auth.uid() = author_id OR
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+);
+CREATE POLICY forum_replies_delete ON public.forum_replies FOR DELETE TO authenticated USING (
+  auth.uid() = author_id OR
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+CREATE POLICY forum_post_likes_read ON public.forum_post_likes FOR SELECT TO authenticated USING (true);
+CREATE POLICY forum_post_likes_insert ON public.forum_post_likes FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY forum_post_likes_delete ON public.forum_post_likes FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
+-- 论坛相关索引
+CREATE INDEX IF NOT EXISTS idx_forum_posts_author ON public.forum_posts(author_id);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_category ON public.forum_posts(category);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_pinned ON public.forum_posts(is_pinned);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_created ON public.forum_posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_last_reply ON public.forum_posts(last_reply_at DESC);
+CREATE INDEX IF NOT EXISTS idx_forum_replies_post ON public.forum_replies(post_id);
+CREATE INDEX IF NOT EXISTS idx_forum_replies_author ON public.forum_replies(author_id);
+CREATE INDEX IF NOT EXISTS idx_forum_post_likes_post ON public.forum_post_likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_forum_post_likes_user ON public.forum_post_likes(user_id);
+
+-- 论坛帖子点赞数自动更新触发器
+CREATE OR REPLACE FUNCTION update_post_like_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE public.forum_posts
+        SET like_count = like_count + 1
+        WHERE id = NEW.post_id;
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE public.forum_posts
+        SET like_count = GREATEST(0, like_count - 1)
+        WHERE id = OLD.post_id;
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_update_like_count ON public.forum_post_likes;
+CREATE TRIGGER trigger_update_like_count
+    AFTER INSERT OR DELETE ON public.forum_post_likes
+    FOR EACH ROW
+    EXECUTE FUNCTION update_post_like_count();
+
+-- 论坛帖子更新时间触发器
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_forum_posts_updated_at ON public.forum_posts;
+CREATE TRIGGER update_forum_posts_updated_at
+    BEFORE UPDATE ON public.forum_posts
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_forum_replies_updated_at ON public.forum_replies;
+CREATE TRIGGER update_forum_replies_updated_at
+    BEFORE UPDATE ON public.forum_replies
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 CREATE POLICY hot_news_read ON public.hot_news FOR SELECT TO authenticated USING (true);
 
 -- Operation Logs

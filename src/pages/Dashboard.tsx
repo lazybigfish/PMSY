@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { Task } from '../types';
 import { 
   Loader2, 
@@ -18,7 +18,7 @@ import {
   FolderOpen,
   Zap
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContextNew';
 import { StatsCards } from './dashboard/components/StatsCards';
 import { MyTasks } from './dashboard/components/MyTasks';
 import { HotNews } from './dashboard/components/HotNews';
@@ -80,7 +80,6 @@ const Dashboard = () => {
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 获取当前问候语
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return '早安';
@@ -97,49 +96,47 @@ const Dashboard = () => {
 
   const fetchCommentCounts = async (newsIds: string[]) => {
     if (newsIds.length === 0) return {} as Record<string, number>;
-    const { data, error } = await supabase
-      .from('news_comments')
-      .select('news_id')
-      .in('news_id', newsIds);
+    try {
+      const data = await api.db
+        .from('news_comments')
+        .select('news_id')
+        .in('news_id', newsIds);
 
-    if (error) {
+      const counts: Record<string, number> = {};
+      for (const row of (data || []) as { news_id: string }[]) {
+        const id = row.news_id;
+        counts[id] = (counts[id] || 0) + 1;
+      }
+      return counts;
+    } catch (error) {
       console.error('Error fetching comment counts:', error);
       return {} as Record<string, number>;
     }
-
-    const counts: Record<string, number> = {};
-    for (const row of (data || []) as { news_id: string }[]) {
-      const id = row.news_id;
-      counts[id] = (counts[id] || 0) + 1;
-    }
-    return counts;
   };
 
   const fetchCommentsForNews = async (newsId: string) => {
     setCommentsLoading(true);
     try {
-      const { data, error } = await supabase
+      const data = await api.db
         .from('news_comments')
         .select('id, content, created_at, user_id, user:profiles(id, full_name, username)')
         .eq('news_id', newsId)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        const { data: fallbackData, error: fallbackError } = await supabase
+      setComments((data || []) as unknown as NewsComment[]);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+      try {
+        const fallbackData = await api.db
           .from('news_comments')
           .select('id, content, created_at, user_id')
           .eq('news_id', newsId)
           .order('created_at', { ascending: true });
-
-        if (fallbackError) throw fallbackError;
         setComments((fallbackData || []) as unknown as NewsComment[]);
-        return;
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        setComments([]);
       }
-
-      setComments((data || []) as unknown as NewsComment[]);
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-      setComments([]);
     } finally {
       setCommentsLoading(false);
     }
@@ -164,12 +161,11 @@ const Dashboard = () => {
 
     setCommentSubmitting(true);
     try {
-      const { error } = await supabase.from('news_comments').insert({
+      await api.db.from('news_comments').insert({
         news_id: activeNews.id,
         user_id: user.id,
         content
       });
-      if (error) throw error;
 
       setCommentDraft('');
       setCommentCounts((prev) => ({
@@ -190,20 +186,19 @@ const Dashboard = () => {
       setLoading(true);
       
       // 1. Fetch Projects & Calculate Stats
-      const { data: projects } = await supabase.from('projects').select('*');
+      const projects = await api.db.from('projects').select('*');
       
       const totalProjects = projects?.length || 0;
-      const activeProjects = projects?.filter(p => p.status === 'in_progress').length || 0;
-      const completedProjects = projects?.filter(p => p.status === 'completed').length || 0;
-      void projects;
+      const activeProjects = projects?.filter((p: any) => p.status === 'in_progress').length || 0;
+      const completedProjects = projects?.filter((p: any) => p.status === 'completed').length || 0;
       
       // Calculate total budget
       const totalBudget = projects
-        ?.filter((p) => p.manager_id === user?.id)
-        .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+        ?.filter((p: any) => p.manager_id === user?.id)
+        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
 
       // 2. Fetch My Tasks
-      const { data: tasks } = await supabase
+      const tasks = await api.db
         .from('tasks')
         .select('*')
         .eq('assigned_to', user?.id)
@@ -214,10 +209,10 @@ const Dashboard = () => {
       setMyTasks(myTaskList.slice(0, 6));
       
       // Calculate Stats from tasks
-      const highPriorityCount = myTaskList.filter(t => t.priority === 'high').length;
+      const highPriorityCount = myTaskList.filter((t: any) => t.priority === 'high').length;
       
       // Task Center aligned stats
-      const { data: tasksForStats } = await supabase
+      const tasksForStats = await api.db
         .from('tasks')
         .select('id, status, due_date');
         
@@ -230,14 +225,20 @@ const Dashboard = () => {
         return due < now;
       }).length;
 
-      // 3. Fetch Risks
-      const { count: riskCount } = await supabase
-        .from('risks')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'open');
+      // 3. Fetch Risks - 使用 count 方法
+      let riskCount = 0;
+      try {
+        const risks = await api.db
+          .from('risks')
+          .select('id')
+          .eq('status', 'open');
+        riskCount = risks?.length || 0;
+      } catch (e) {
+        console.warn('Could not fetch risks:', e);
+      }
 
       // 4. Fetch Hot News
-      const { data: newsData } = await supabase
+      const newsData = await api.db
         .from('hot_news')
         .select('*')
         .order('published_at', { ascending: false })
@@ -245,7 +246,7 @@ const Dashboard = () => {
         
       if (newsData) {
         setHotNews(newsData);
-        const counts = await fetchCommentCounts(newsData.map((n) => n.id));
+        const counts = await fetchCommentCounts(newsData.map((n: any) => n.id));
         setCommentCounts(counts);
       } else {
         setHotNews([]);
@@ -259,7 +260,7 @@ const Dashboard = () => {
         taskTotal,
         overdueTasks: overdueCount,
         highPriorityTasks: highPriorityCount,
-        pendingRisks: riskCount || 0,
+        pendingRisks: riskCount,
         totalBudget
       });
 
@@ -333,7 +334,7 @@ const Dashboard = () => {
 
       {/* News Detail Modal */}
       {activeNews && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
           <div className="absolute inset-0 bg-dark-900/60 backdrop-blur-sm" onClick={closeNews} />
           <div className="relative bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-dark-100 overflow-hidden max-h-[90vh] flex flex-col animate-scale-in">
             <div className="px-6 py-5 border-b border-dark-100 flex items-start justify-between gap-4 bg-gradient-to-r from-primary-50/50 to-transparent">

@@ -157,11 +157,12 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
         const totalContract = suppliers?.reduce((sum, s) => sum + (s.contract_amount || 0), 0) || 0;
         setContractAmount(totalContract);
 
-        // 查询已支付金额总和
+        // 查询已支付金额总和（从 supplier_payment_plans 表中筛选 status = 'paid' 的记录）
         const { data: payments, error: paymentError } = await supabase
-          .from('supplier_payments')
+          .from('supplier_payment_plans')
           .select('amount')
-          .in('project_supplier_id', supplierIds);
+          .in('project_supplier_id', supplierIds)
+          .eq('status', 'paid');
 
         if (paymentError) throw paymentError;
 

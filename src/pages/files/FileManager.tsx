@@ -246,7 +246,7 @@ export default function FileManager() {
           {folders.map((folder) => (
             <tr
               key={folder.id}
-              className="hover:bg-gray-50 cursor-pointer"
+              className="hover:bg-gray-50 hover:shadow-sm transition-all duration-200 ease-out cursor-pointer group"
               onDoubleClick={() => navigateToFolder(folder.id)}
             >
               <td className="px-4 py-3">
@@ -254,10 +254,10 @@ export default function FileManager() {
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-yellow-100 rounded-lg">
+                  <div className="p-2 bg-yellow-100 rounded-lg group-hover:scale-110 transition-transform duration-200">
                     <Folder className="w-5 h-5 text-yellow-600" />
                   </div>
-                  <span className="font-medium text-gray-900">{folder.name}</span>
+                  <span className="font-medium text-gray-900 group-hover:text-yellow-600 transition-colors duration-200">{folder.name}</span>
                 </div>
               </td>
               <td className="px-4 py-3 text-sm text-gray-500">-</td>
@@ -266,7 +266,7 @@ export default function FileManager() {
                 {format(new Date(folder.created_at), 'yyyy-MM-dd HH:mm')}
               </td>
               <td className="px-4 py-3 text-center">
-                <button className="p-1 text-gray-400 hover:text-gray-600">
+                <button className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-all duration-200">
                   <MoreVertical className="w-4 h-4" />
                 </button>
               </td>
@@ -275,7 +275,7 @@ export default function FileManager() {
           {files.map((file) => (
             <tr
               key={file.id}
-              className={`hover:bg-gray-50 ${selectedFiles.has(file.id) ? 'bg-blue-50' : ''}`}
+              className={`hover:bg-gray-50 hover:shadow-sm transition-all duration-200 ease-out ${selectedFiles.has(file.id) ? 'bg-blue-50' : ''}`}
               onContextMenu={(e) => handleContextMenu(e, file)}
             >
               <td className="px-4 py-3">
@@ -306,14 +306,14 @@ export default function FileManager() {
                 <div className="flex items-center justify-center gap-1">
                   <button
                     onClick={() => handleDownload(file)}
-                    className="p-1 text-gray-400 hover:text-blue-600"
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 hover:scale-105"
                     title="下载"
                   >
                     <Download className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(file.id)}
-                    className="p-1 text-gray-400 hover:text-red-600"
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 hover:scale-105"
                     title="删除"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -329,28 +329,28 @@ export default function FileManager() {
         {folders.map((folder) => (
           <div
             key={folder.id}
-            className="p-4 border border-gray-200 rounded-lg hover:shadow-md cursor-pointer"
+            className="p-4 border border-gray-200 rounded-lg hover:shadow-lg hover:-translate-y-0.5 hover:border-yellow-300 transition-all duration-200 ease-out cursor-pointer group"
             onDoubleClick={() => navigateToFolder(folder.id)}
           >
-            <div className="p-3 bg-yellow-100 rounded-lg w-fit mx-auto mb-2">
+            <div className="p-3 bg-yellow-100 rounded-lg w-fit mx-auto mb-2 group-hover:scale-110 group-hover:bg-yellow-200 transition-all duration-200">
               <Folder className="w-8 h-8 text-yellow-600" />
             </div>
-            <p className="text-sm text-center font-medium text-gray-900 truncate">{folder.name}</p>
+            <p className="text-sm text-center font-medium text-gray-900 truncate group-hover:text-yellow-700 transition-colors duration-200">{folder.name}</p>
           </div>
         ))}
         {files.map((file) => (
           <div
             key={file.id}
-            className={`p-4 border rounded-lg hover:shadow-md cursor-pointer ${
-              selectedFiles.has(file.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+            className={`p-4 border rounded-lg hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer group ${
+              selectedFiles.has(file.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
             }`}
             onClick={() => toggleFileSelection(file.id)}
             onContextMenu={(e) => handleContextMenu(e, file)}
           >
-            <div className={`p-3 rounded-lg w-fit mx-auto mb-2 ${categoryColors[file.category]}`}>
+            <div className={`p-3 rounded-lg w-fit mx-auto mb-2 group-hover:scale-110 transition-transform duration-200 ${categoryColors[file.category]}`}>
               {categoryIcons[file.category]}
             </div>
-            <p className="text-sm text-center font-medium text-gray-900 truncate">{file.original_name}</p>
+            <p className="text-sm text-center font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors duration-200">{file.original_name}</p>
             <p className="text-xs text-center text-gray-500 mt-1">{formatSize(file.size)}</p>
           </div>
         ))}
@@ -379,24 +379,23 @@ export default function FileManager() {
             </div>
 
             {/* 视图切换 */}
-            <div className="flex items-center border border-gray-300 rounded-lg">
+            <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
+                className={`p-2 transition-all duration-200 ease-out hover:bg-gray-100 ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
               >
                 <List className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
+                className={`p-2 transition-all duration-200 ease-out hover:bg-gray-100 ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
               >
                 <Grid className="w-4 h-4" />
               </button>
             </div>
 
             {/* 上传按钮 */}
-            <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
-              <Upload className="w-4 h-4" />
+            <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-md hover:-translate-y-px transition-all duration-200 ease-out cursor-pointer">
               上传文件
               <input
                 type="file"
@@ -433,7 +432,7 @@ export default function FileManager() {
 
       {/* 上传进度弹窗 */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-lg max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">

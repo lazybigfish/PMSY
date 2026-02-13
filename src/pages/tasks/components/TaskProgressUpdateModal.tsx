@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Upload, FileText, Trash2, Loader2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
@@ -20,14 +20,6 @@ interface TaskProgressUpdateModalProps {
   taskTitle: string;
 }
 
-const PROGRESS_OPTIONS = [
-  { value: 0, label: '0% - 未开始' },
-  { value: 25, label: '25% - 刚开始' },
-  { value: 50, label: '50% - 进行中' },
-  { value: 75, label: '75% - 即将完成' },
-  { value: 100, label: '100% - 已完成' }
-];
-
 export function TaskProgressUpdateModal({
   isOpen,
   onClose,
@@ -39,9 +31,68 @@ export function TaskProgressUpdateModal({
   const [content, setContent] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+
+  // 计算进度值
+  const calculateProgress = useCallback((clientX: number) => {
+    if (!progressBarRef.current) return progress;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percentage = Math.round((x / rect.width) * 100);
+    return Math.max(0, Math.min(100, percentage));
+  }, [progress]);
+
+  // 处理鼠标/触摸移动
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        const newProgress = calculateProgress(e.clientX);
+        setProgress(newProgress);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (isDragging) {
+        const newProgress = calculateProgress(e.touches[0].clientX);
+        setProgress(newProgress);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove);
+      document.addEventListener('touchend', handleTouchEnd);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isDragging, calculateProgress]);
 
   if (!isOpen) return null;
+
+  // 处理鼠标/触摸按下
+  const handleProgressBarMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const newProgress = calculateProgress(clientX);
+    setProgress(newProgress);
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -167,7 +218,7 @@ export function TaskProgressUpdateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-dark-100">
@@ -202,23 +253,46 @@ export function TaskProgressUpdateModal({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Progress Select */}
+          {/* Progress Slider */}
           <div>
-            <label className="block text-sm font-medium text-dark-700 mb-2">
+            <label className="block text-sm font-medium text-dark-700 mb-3">
               更新进度 <span className="text-red-500">*</span>
             </label>
-            <select
-              value={progress}
-              onChange={(e) => setProgress(Number(e.target.value))}
-              className="w-full"
-              disabled={isSubmitting}
-            >
-              {PROGRESS_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-4">
+              {/* Progress Bar Container */}
+              <div
+                ref={progressBarRef}
+                className="flex-1 h-3 bg-dark-200 rounded-full cursor-pointer relative select-none"
+                onMouseDown={handleProgressBarMouseDown}
+                onTouchStart={handleProgressBarMouseDown}
+              >
+                {/* Progress Fill */}
+                <div
+                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-primary-400 to-primary-500 rounded-full transition-all duration-75"
+                  style={{ width: `${progress}%` }}
+                />
+                {/* Progress Thumb */}
+                <div
+                  className={`absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow-md border-2 border-primary-500 cursor-grab transition-transform ${
+                    isDragging ? 'cursor-grabbing scale-110' : 'hover:scale-110'
+                  }`}
+                  style={{ left: `calc(${progress}% - 10px)` }}
+                />
+              </div>
+              {/* Progress Value Display */}
+              <div className="flex items-center gap-1 min-w-[60px]">
+                <span className="text-lg font-bold text-primary-600">{progress}</span>
+                <span className="text-sm text-dark-500">%</span>
+              </div>
+            </div>
+            {/* Progress Labels */}
+            <div className="flex justify-between mt-2 text-xs text-dark-400">
+              <span>0%</span>
+              <span>25%</span>
+              <span>50%</span>
+              <span>75%</span>
+              <span>100%</span>
+            </div>
           </div>
 
           {/* Content Textarea */}

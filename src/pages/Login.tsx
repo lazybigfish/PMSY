@@ -1,49 +1,42 @@
-
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContextNew';
 import { Loader2, Mail, Lock, ArrowRight, Sparkles, Zap, Shield, Users } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const { user, signIn } = useAuth();
 
   React.useEffect(() => {
-    if (session) {
+    if (user) {
       navigate('/');
     }
-  }, [session, navigate]);
+  }, [user, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    // Virtual Email Construction: username@pmsy.com
-    const virtualEmail = `${username}@pmsy.com`;
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: virtualEmail,
-      password,
-    });
-
-    if (error) {
+    try {
+      // Virtual Email Construction: username@pmsy.com
+      const virtualEmail = `${username}@pmsy.com`;
+      await signIn(virtualEmail, password);
+      navigate('/');
+    } catch (err: any) {
       // Improve error message for user
-      if (error.message.includes('Invalid login credentials')) {
+      if (err.message?.includes('Invalid login credentials') || err.message?.includes('邮箱或密码错误')) {
         setError('用户名或密码错误');
       } else {
-        setError(error.message);
+        setError(err.message || '登录失败');
       }
-    } else {
-      navigate('/');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const features = [

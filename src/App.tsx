@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContextNew';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -14,8 +14,10 @@ import SystemSettings from './pages/system/SystemSettings';
 import SupplierList from './pages/suppliers/SupplierList';
 import TaskList from './pages/tasks/TaskList';
 import TaskDetailPage from './pages/tasks/TaskDetailPage';
+import TaskCreatePage from './pages/tasks/TaskCreatePage';
 import AnalysisDashboard from './pages/analysis/AnalysisDashboard';
 import WaterModule from './pages/water/WaterModule';
+import ForumPostDetailPage from './pages/water/ForumPostDetailPage';
 import FileManager from './pages/files/FileManager';
 import StakeholderLayout from './pages/stakeholders/StakeholderLayout';
 import ClientList from './pages/stakeholders/ClientList';
@@ -38,6 +40,7 @@ function App() {
               <Route path="/projects/:projectId/reports/:reportId" element={<ReportEditor />} />
               
               <Route path="/tasks" element={<TaskList />} />
+              <Route path="/tasks/create" element={<TaskCreatePage />} />
               <Route path="/tasks/:id" element={<TaskDetailPage />} />
               
               {/* 相关方模块 */}
@@ -52,6 +55,7 @@ function App() {
               
               <Route path="/analysis" element={<AnalysisDashboard />} />
               <Route path="/water" element={<WaterModule />} />
+              <Route path="/water/forum/:id" element={<ForumPostDetailPage />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/system" element={<SystemSettings />} />
             </Route>

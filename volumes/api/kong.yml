@@ -175,26 +175,12 @@ services:
           allow:
             - admin
 
-  ## Studio Service
-  - name: studio
-    url: http://studio:3000
-    routes:
-      - name: studio-all
-        strip_path: false
-        paths:
-          - /
-    plugins:
-      - name: cors
-      - name: basic-auth
-        config:
-          hide_credentials: true
-
-  ## PMSY API Service
+  ## PMSY API Service (必须放在 Studio 之前，避免被 / 路径覆盖)
   - name: pmsy-api
     url: http://api:3001
     routes:
       - name: pmsy-api-all
-        strip_path: true
+        strip_path: false
         paths:
           - /api
     plugins:
@@ -208,3 +194,17 @@ services:
           allow:
             - admin
             - anon
+
+  ## Studio Service
+  - name: studio
+    url: http://studio:3000
+    routes:
+      - name: studio-all
+        strip_path: false
+        paths:
+          - /
+    plugins:
+      - name: cors
+      - name: basic-auth
+        config:
+          hide_credentials: true

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bell } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContextNew';
 import { Notification } from '../types';
 import * as Popover from '@radix-ui/react-popover';
 
@@ -14,23 +14,22 @@ export const Notifications = () => {
   useEffect(() => {
     if (user) {
       fetchNotifications();
-      // Optional: Set up real-time subscription here
-      const subscription = supabase
-        .channel('public:notifications')
-        .on('postgres_changes', { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'notifications', 
-          filter: `user_id=eq.${user.id}` 
-        }, (payload) => {
-          setNotifications(prev => [payload.new as Notification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-        })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(subscription);
-      };
+      // TODO: 实时订阅功能需要 WebSocket 支持，暂时禁用
+      // const subscription = supabase
+      //   .channel('public:notifications')
+      //   .on('postgres_changes', { 
+      //     event: 'INSERT', 
+      //     schema: 'public', 
+      //     table: 'notifications', 
+      //     filter: `user_id=eq.${user.id}` 
+      //   }, (payload) => {
+      //     setNotifications(prev => [payload.new as Notification, ...prev]);
+      //     setUnreadCount(prev => prev + 1);
+      //   })
+      //   .subscribe();
+      // return () => {
+      //   supabase.removeChannel(subscription);
+      // };
     }
   }, [user]);
 

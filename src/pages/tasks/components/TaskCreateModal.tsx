@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 import { Profile, Project, ProjectModule } from '../../../types';
+import { ModalForm } from '../../../components/Modal';
+import { DatePicker } from '../../../components/DatePicker';
 
 interface TaskCreateModalProps {
   isOpen: boolean;
@@ -19,6 +21,7 @@ export interface TaskFormData {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   is_public: boolean;
   due_date: string;
+  creator_id: string;
   assignee_ids: string[];
 }
 
@@ -38,11 +41,54 @@ export function TaskCreateModal({
     priority: 'medium',
     is_public: false,
     due_date: '',
+    creator_id: currentUserId || '',
     assignee_ids: currentUserId ? [currentUserId] : []
   });
   const [modules, setModules] = useState<ProjectModule[]>([]);
   const [loadingModules, setLoadingModules] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const buildModuleHierarchy = (modules: ProjectModule[]): ProjectModule[] => {
+    const moduleMap = new Map<string, ProjectModule>();
+    const rootModules: ProjectModule[] = [];
+    
+    modules.forEach(m => {
+      moduleMap.set(m.id, { ...m, children: [] });
+    });
+    
+    modules.forEach(m => {
+      const module = moduleMap.get(m.id)!;
+      if (m.parent_id && moduleMap.has(m.parent_id)) {
+        const parent = moduleMap.get(m.parent_id)!;
+        if (!parent.children) parent.children = [];
+        parent.children.push(module);
+      } else {
+        rootModules.push(module);
+      }
+    });
+    
+    return rootModules;
+  };
+
+  const renderModuleOptions = (modules: ProjectModule[], level: number = 0): JSX.Element[] => {
+    const options: JSX.Element[] = [];
+    
+    modules.forEach(m => {
+      const indent = '  '.repeat(level);
+      const prefix = level > 0 ? '└─ ' : '';
+      options.push(
+        <option key={m.id} value={m.id}>
+          {indent}{prefix}{m.name}
+        </option>
+      );
+      
+      if (m.children && m.children.length > 0) {
+        options.push(...renderModuleOptions(m.children, level + 1));
+      }
+    });
+    
+    return options;
+  };
 
   useEffect(() => {
     if (formData.project_id) {
@@ -77,7 +123,6 @@ export function TaskCreateModal({
     await onSubmit(formData);
     setSubmitting(false);
     
-    // Reset form
     setFormData({
       title: '',
       description: '',
@@ -86,6 +131,7 @@ export function TaskCreateModal({
       priority: 'medium',
       is_public: false,
       due_date: '',
+      creator_id: currentUserId || '',
       assignee_ids: currentUserId ? [currentUserId] : []
     });
   };
@@ -99,167 +145,169 @@ export function TaskCreateModal({
     }));
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold">创建新任务</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
-            <X className="w-5 h-5" />
-          </button>
+    <ModalForm
+      isOpen={isOpen}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      title="创建新任务"
+      maxWidth="2xl"
+      submitText="创建任务"
+      isSubmitting={submitting}
+      submitDisabled={!formData.title.trim() || !formData.creator_id || formData.assignee_ids.length === 0 || !formData.due_date}
+    >
+      <div className="space-y-4">
+        {/* Title */}
+        <div>
+          <label className="block text-sm font-medium text-dark-700 mb-1">
+            任务标题 <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            className="input w-full"
+            placeholder="输入任务标题"
+            required
+          />
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Title */}
+        {/* Project & Module */}
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              任务标题 <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-dark-700 mb-1">所属项目</label>
+            <select
+              value={formData.project_id}
+              onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
+              className="input w-full"
+            >
+              <option value="">选择项目</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">功能模块</label>
+            <select
+              value={formData.module_id}
+              onChange={(e) => setFormData({ ...formData, module_id: e.target.value })}
+              className="input w-full"
+              disabled={!formData.project_id || loadingModules}
+            >
+              <option value="">{loadingModules ? '加载中...' : '选择模块'}</option>
+              {renderModuleOptions(buildModuleHierarchy(modules))}
+            </select>
+          </div>
+        </div>
+
+        {/* Priority & Due Date */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">优先级</label>
+            <select
+              value={formData.priority}
+              onChange={(e) => setFormData({ ...formData, priority: e.target.value as TaskFormData['priority'] })}
+              className="input w-full"
+            >
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+              <option value="urgent">紧急</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">
+              截止日期 <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="输入任务标题"
+            <DatePicker
+              value={formData.due_date}
+              onChange={(date) => setFormData({ ...formData, due_date: date })}
+              placeholder="选择截止日期"
               required
             />
           </div>
+        </div>
 
-          {/* Project & Module */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">所属项目</label>
-              <select
-                value={formData.project_id}
-                onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2"
-              >
-                <option value="">选择项目</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">功能模块</label>
-              <select
-                value={formData.module_id}
-                onChange={(e) => setFormData({ ...formData, module_id: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2"
-                disabled={!formData.project_id || loadingModules}
-              >
-                <option value="">{loadingModules ? '加载中...' : '选择模块'}</option>
-                {modules.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+        {/* Description */}
+        <div>
+          <label className="block text-sm font-medium text-dark-700 mb-1">任务描述</label>
+          <textarea
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            rows={4}
+            className="input w-full resize-none"
+            placeholder="输入任务描述"
+          />
+        </div>
 
-          {/* Priority & Due Date */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">优先级</label>
-              <select
-                value={formData.priority}
-                onChange={(e) => setFormData({ ...formData, priority: e.target.value as TaskFormData['priority'] })}
-                className="w-full border rounded-lg px-3 py-2"
-              >
-                <option value="low">低</option>
-                <option value="medium">中</option>
-                <option value="high">高</option>
-                <option value="urgent">紧急</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">截止日期</label>
-              <input
-                type="date"
-                value={formData.due_date}
-                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2"
-              />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">任务描述</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={4}
-              className="w-full border rounded-lg px-3 py-2 resize-none"
-              placeholder="输入任务描述"
-            />
-          </div>
-
-          {/* Assignees */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">负责人</label>
-            <div className="flex flex-wrap gap-2">
-              {users.map(user => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => toggleAssignee(user.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors ${
-                    formData.assignee_ids.includes(user.id)
-                      ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
-                      : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:bg-gray-200'
-                  }`}
-                >
-                  <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-xs font-medium">
-                    {user.full_name?.charAt(0) || '?'}
-                  </div>
-                  {user.full_name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Visibility */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_public"
-              checked={formData.is_public}
-              onChange={(e) => setFormData({ ...formData, is_public: e.target.checked })}
-              className="w-4 h-4 text-indigo-600 rounded"
-            />
-            <label htmlFor="is_public" className="text-sm text-gray-700">
-              公开任务（所有项目成员可见）
-            </label>
-          </div>
-        </form>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+        {/* Creator */}
+        <div>
+          <label className="block text-sm font-medium text-dark-700 mb-2">
+            责任人 <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={formData.creator_id}
+            onChange={(e) => setFormData({ ...formData, creator_id: e.target.value })}
+            className="input w-full"
+            required
           >
-            取消
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!formData.title.trim() || submitting}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {submitting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4" />
-            )}
-            创建任务
-          </button>
+            <option value="">选择责任人</option>
+            {users.map(user => (
+              <option key={user.id} value={user.id}>
+                {user.full_name} {user.id === currentUserId ? '(我)' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-dark-500 mt-1">默认为当前登录用户，可更改</p>
+        </div>
+
+        {/* Assignees */}
+        <div>
+          <label className="block text-sm font-medium text-dark-700 mb-2">
+            处理人 <span className="text-red-500">*</span>
+            <span className="text-xs font-normal text-dark-500 ml-2">至少选择一人</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {users.map(user => (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => toggleAssignee(user.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  formData.assignee_ids.includes(user.id)
+                    ? 'bg-primary-100 text-primary-700 border-2 border-primary-500'
+                    : 'bg-dark-100 text-dark-700 border-2 border-transparent hover:bg-dark-200'
+                }`}
+              >
+                <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-xs font-medium">
+                  {user.full_name?.charAt(0) || '?'}
+                </div>
+                {user.full_name}
+                {user.id === currentUserId && <span className="text-xs opacity-70">(我)</span>}
+              </button>
+            ))}
+          </div>
+          {formData.assignee_ids.length === 0 && (
+            <p className="text-xs text-red-500 mt-1">请至少选择一名处理人</p>
+          )}
+          <p className="text-xs text-dark-500 mt-1">默认已添加当前用户作为处理人</p>
+        </div>
+
+        {/* Visibility */}
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="is_public"
+            checked={formData.is_public}
+            onChange={(e) => setFormData({ ...formData, is_public: e.target.checked })}
+            className="w-4 h-4 rounded border-dark-300 text-primary-600 focus:ring-primary-500"
+          />
+          <label htmlFor="is_public" className="text-sm text-dark-700">
+            公开任务（所有项目成员可见）
+          </label>
         </div>
       </div>
-    </div>
+    </ModalForm>
   );
 }

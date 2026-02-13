@@ -1,27 +1,28 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Loader2, MessageSquare, Filter } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { ForumPost, ForumReply, ForumCategory } from '../../types';
+import { ForumPost, ForumCategory } from '../../types';
 import { ForumPostList } from './components/ForumPostList';
-import { ForumPostDetail } from './components/ForumPostDetail';
+import { ModalForm } from '../../components/Modal';
+import { LikeButton } from '../../components/LikeButton';
 
-const categories: { key: ForumCategory; label: string; color: string }[] = [
-  { key: 'tech', label: '技术分享', color: 'bg-blue-100 text-blue-700' },
-  { key: 'experience', label: '项目经验', color: 'bg-green-100 text-green-700' },
-  { key: 'help', label: '问题求助', color: 'bg-orange-100 text-orange-700' },
-  { key: 'chat', label: '闲聊', color: 'bg-purple-100 text-purple-700' },
-  { key: 'other', label: '其他', color: 'bg-gray-100 text-gray-700' },
+const categories: { key: ForumCategory; label: string; color: string; bgColor: string; borderColor: string }[] = [
+  { key: 'tech', label: '技术分享', color: 'text-primary-700', bgColor: 'bg-primary-50', borderColor: 'border-primary-200' },
+  { key: 'experience', label: '项目经验', color: 'text-mint-700', bgColor: 'bg-mint-50', borderColor: 'border-mint-200' },
+  { key: 'help', label: '问题求助', color: 'text-sun-700', bgColor: 'bg-sun-50', borderColor: 'border-sun-200' },
+  { key: 'chat', label: '闲聊', color: 'text-violet-700', bgColor: 'bg-violet-50', borderColor: 'border-violet-200' },
+  { key: 'other', label: '其他', color: 'text-dark-700', bgColor: 'bg-dark-50', borderColor: 'border-dark-200' },
 ];
 
 export default function ForumTab() {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ForumCategory | 'all'>('all');
-  const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
-  const [replies, setReplies] = useState<ForumReply[]>([]);
 
   // Create post modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -72,11 +73,27 @@ export default function ForumTab() {
         usersData?.forEach(u => userMap.set(u.id, u));
       }
 
-      const postsWithUsers = (postsData || []).map(post => ({
-        ...post,
-        author: userMap.get(post.author_id),
-        last_reply_user: post.last_reply_by ? userMap.get(post.last_reply_by) : null
-      }));
+      // Fetch liked posts for current user
+      let likedPostIds = new Set<string>();
+      if (user) {
+        const { data: likesData } = await supabase
+          .from('forum_post_likes')
+          .select('post_id')
+          .eq('user_id', user.id);
+        likesData?.forEach(like => likedPostIds.add(like.post_id));
+      }
+
+      const postsWithUsers = (postsData || []).map(post => {
+        // 确保 like_count 是数字类型
+        const likeCount = typeof post.like_count === 'number' ? post.like_count : 0;
+        return {
+          ...post,
+          author: userMap.get(post.author_id),
+          last_reply_user: post.last_reply_by ? userMap.get(post.last_reply_by) : null,
+          is_liked: likedPostIds.has(post.id),
+          like_count: likeCount
+        };
+      });
 
       setPosts(postsWithUsers);
     } catch (error) {
@@ -86,42 +103,8 @@ export default function ForumTab() {
     }
   };
 
-  const loadReplies = async (postId: string) => {
-    try {
-      const { data: repliesData, error } = await supabase
-        .from('forum_replies')
-        .select('*')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
-      const authorIds = new Set<string>();
-      repliesData?.forEach(reply => {
-        if (reply.author_id) authorIds.add(reply.author_id);
-      });
-
-      const authorMap = new Map<string, { id: string; full_name: string; avatar_url?: string }>();
-      if (authorIds.size > 0) {
-        const { data: authorsData } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url')
-          .in('id', Array.from(authorIds));
-        authorsData?.forEach(a => authorMap.set(a.id, a));
-      }
-
-      const repliesWithAuthors = (repliesData || []).map(reply => ({
-        ...reply,
-        author: authorMap.get(reply.author_id)
-      }));
-
-      setReplies(repliesWithAuthors);
-    } catch (error) {
-      console.error('Error loading replies:', error);
-    }
-  };
-
-  const createPost = async () => {
+  const createPost = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!formTitle.trim() || !formContent.trim() || !user) {
       alert('请填写标题和内容');
       return;
@@ -131,7 +114,7 @@ export default function ForumTab() {
       setSubmitting(true);
       const now = new Date().toISOString();
 
-      const { error } = await supabase.from('forum_posts').insert({
+      const { data, error } = await supabase.from('forum_posts').insert({
         title: formTitle.trim(),
         content: { text: formContent.trim() },
         author_id: user.id,
@@ -142,7 +125,7 @@ export default function ForumTab() {
         reply_count: 0,
         last_reply_at: now,
         last_reply_by: user.id,
-      });
+      }).select().single();
 
       if (error) throw error;
 
@@ -150,35 +133,17 @@ export default function ForumTab() {
       setFormTitle('');
       setFormContent('');
       loadPosts();
+      
+      // 跳转到新创建的帖子详情页
+      if (data?.id) {
+        navigate(`/water/forum/${data.id}`);
+      }
     } catch (error) {
       console.error('Error creating post:', error);
       alert('发布失败');
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const submitReply = async (content: string) => {
-    if (!selectedPost || !user) return;
-
-    await supabase.from('forum_replies').insert({
-      post_id: selectedPost.id,
-      author_id: user.id,
-      content: { text: content }
-    });
-
-    const now = new Date().toISOString();
-    await supabase
-      .from('forum_posts')
-      .update({
-        reply_count: selectedPost.reply_count + 1,
-        last_reply_at: now,
-        last_reply_by: user.id
-      })
-      .eq('id', selectedPost.id);
-
-    loadReplies(selectedPost.id);
-    loadPosts();
   };
 
   const togglePin = async (post: ForumPost, e: React.MouseEvent) => {
@@ -204,169 +169,296 @@ export default function ForumTab() {
     loadPosts();
   };
 
-  const deleteReply = async (reply: ForumReply) => {
-    if (!selectedPost) return;
-    if (!confirm('确定要删除这条回复吗？')) return;
-
-    await supabase.from('forum_replies').delete().eq('id', reply.id);
-    await supabase
-      .from('forum_posts')
-      .update({ reply_count: selectedPost.reply_count - 1 })
-      .eq('id', selectedPost.id);
-
-    loadReplies(selectedPost.id);
-    loadPosts();
+  const openPostDetail = (post: ForumPost) => {
+    navigate(`/water/forum/${post.id}`);
   };
 
-  const openPostDetail = async (post: ForumPost) => {
-    setSelectedPost(post);
-    await loadReplies(post.id);
-    await supabase
-      .from('forum_posts')
-      .update({ view_count: post.view_count + 1 })
-      .eq('id', post.id);
+  const handleLike = async (postId: string) => {
+    if (!user) {
+      alert('请先登录');
+      return;
+    }
+
+    const post = posts.find(p => p.id === postId);
+    if (!post) {
+      console.log('Post not found:', postId);
+      return;
+    }
+
+    const currentLikeCount = typeof post.like_count === 'number' ? post.like_count : 0;
+    console.log('handleLike called:', { postId, currentLikeCount, is_liked: post.is_liked });
+
+    try {
+      if (post.is_liked) {
+        // Unlike - 只需删除点赞记录，触发器会自动更新 like_count
+        console.log('Unliking post:', postId);
+        const { error: deleteError } = await supabase
+          .from('forum_post_likes')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', user.id);
+        
+        if (deleteError) {
+          console.error('Error deleting like:', deleteError);
+          return;
+        }
+
+        console.log('Unlike successful, updating local state');
+        // Update local state - 乐观更新
+        setPosts(prev => {
+          const newPosts = prev.map(p => 
+            p.id === postId 
+              ? { 
+                  ...p, 
+                  is_liked: false, 
+                  like_count: Math.max(0, currentLikeCount - 1)
+                }
+              : p
+          );
+          console.log('Updated posts:', newPosts.find(p => p.id === postId));
+          return newPosts;
+        });
+      } else {
+        // Like - 只需插入点赞记录，触发器会自动更新 like_count
+        console.log('Liking post:', postId);
+        const { error: insertError } = await supabase
+          .from('forum_post_likes')
+          .insert({ post_id: postId, user_id: user.id });
+        
+        if (insertError) {
+          console.error('Error inserting like:', insertError);
+          return;
+        }
+
+        console.log('Like successful, updating local state');
+        // Update local state - 乐观更新
+        setPosts(prev => {
+          const newPosts = prev.map(p => 
+            p.id === postId 
+              ? { 
+                  ...p, 
+                  is_liked: true, 
+                  like_count: currentLikeCount + 1
+                }
+              : p
+          );
+          console.log('Updated posts:', newPosts.find(p => p.id === postId));
+          return newPosts;
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <div className="relative">
+          <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glow animate-pulse">
+            <MessageSquare className="w-8 h-8 text-white" />
+          </div>
+          <div className="absolute inset-0 w-16 h-16 rounded-2xl gradient-primary blur-xl opacity-50 animate-pulse"></div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Search and Create */}
-      <div className="flex gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="搜索帖子..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-          />
+    <div className="space-y-6 animate-fade-in">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-display font-bold text-dark-900">水底探宝</h2>
+          <p className="text-dark-500 mt-1 text-sm">分享经验、交流技术、互助答疑</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          className="btn-primary self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
           发布帖子
         </button>
       </div>
 
-      {/* Category Filter */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setSelectedCategory('all')}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium ${
-            selectedCategory === 'all'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          全部
-        </button>
-        {categories.map(cat => (
-          <button
-            key={cat.key}
-            onClick={() => setSelectedCategory(cat.key)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium ${
-              selectedCategory === cat.key
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
+      {/* Search and Filter Section */}
+      <div className="card p-4">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Search */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="搜索帖子标题或内容..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input w-full pl-10"
+            />
+          </div>
+          
+          {/* Category Filter */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Filter className="w-4 h-4 text-dark-400" />
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ease-out ${
+                selectedCategory === 'all'
+                  ? 'bg-primary-600 text-white shadow-md'
+                  : 'bg-dark-100 text-dark-700 hover:bg-dark-200 hover:scale-105'
+              }`}
+            >
+              全部
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat.key}
+                onClick={() => setSelectedCategory(cat.key)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ease-out ${
+                  selectedCategory === cat.key
+                    ? `${cat.bgColor} ${cat.color} ${cat.borderColor} border shadow-md`
+                    : 'bg-dark-100 text-dark-700 hover:bg-dark-200 hover:scale-105'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Post List */}
-      <ForumPostList
-        posts={posts}
-        isAdmin={isAdmin}
-        currentUserId={user?.id}
-        onSelectPost={openPostDetail}
-        onEditPost={() => {}}
-        onDeletePost={deletePost}
-        onTogglePin={togglePin}
-        onToggleEssence={toggleEssence}
-      />
+      <div className="space-y-4">
+        {posts.map((post) => {
+          const category = categories.find(c => c.key === post.category) || categories[4];
+          const isAuthor = post.author_id === user?.id;
 
-      {/* Post Detail Modal */}
-      {selectedPost && (
-        <ForumPostDetail
-          post={selectedPost}
-          replies={replies}
-          isAdmin={isAdmin}
-          currentUserId={user?.id}
-          onClose={() => setSelectedPost(null)}
-          onSubmitReply={submitReply}
-          onDeleteReply={deleteReply}
-        />
-      )}
+          return (
+            <div
+              key={post.id}
+              onClick={() => openPostDetail(post)}
+              className={`card p-5 cursor-pointer transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5 hover:border-primary-300 ${
+                post.is_pinned ? 'border-l-4 border-l-yellow-400 bg-gradient-to-r from-yellow-50/50 to-transparent' : ''
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                {/* Author Avatar */}
+                <div className="flex-shrink-0">
+                  {post.author?.avatar_url ? (
+                    <img
+                      src={post.author.avatar_url}
+                      alt={post.author.full_name}
+                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-dark-100"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
+                      <span className="text-white font-bold text-lg">
+                        {post.author?.full_name?.charAt(0) || '?'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  {/* Title Row */}
+                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${category.bgColor} ${category.color} ${category.borderColor}`}>
+                      {category.label}
+                    </span>
+                    {post.is_pinned && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-yellow-700 bg-yellow-100 rounded-md">
+                        置顶
+                      </span>
+                    )}
+                    {post.is_essence && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-orange-700 bg-orange-100 rounded-md">
+                        精华
+                      </span>
+                    )}
+                    <h3 className="font-semibold text-dark-900 text-base truncate">{post.title}</h3>
+                  </div>
+
+                  {/* Content Preview */}
+                  <p className="text-sm text-dark-600 mt-2 line-clamp-2 leading-relaxed">
+                    {typeof post.content === 'string' ? post.content : post.content?.text || ''}
+                  </p>
+
+                  {/* Meta Info */}
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="flex items-center gap-3 text-xs text-dark-500">
+                      <span className="font-medium text-dark-700">{post.author?.full_name || '未知用户'}</span>
+                      <span className="w-1 h-1 rounded-full bg-dark-300"></span>
+                      <span>{new Date(post.created_at).toLocaleDateString()}</span>
+                    </div>
+                    
+                    {/* Like Button */}
+                    <LikeButton
+                      isLiked={post.is_liked || false}
+                      likeCount={post.like_count || 0}
+                      onLike={() => handleLike(post.id)}
+                      size="sm"
+                      stopPropagation={true}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Create Post Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
-            <h2 className="text-xl font-bold mb-4">发布新帖子</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">分类</label>
-                <select
-                  value={formCategory}
-                  onChange={(e) => setFormCategory(e.target.value as ForumCategory)}
-                  className="w-full border rounded-lg px-3 py-2"
-                >
-                  {categories.map(cat => (
-                    <option key={cat.key} value={cat.key}>{cat.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">标题</label>
-                <input
-                  type="text"
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2"
-                  placeholder="请输入标题"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">内容</label>
-                <textarea
-                  value={formContent}
-                  onChange={(e) => setFormContent(e.target.value)}
-                  rows={6}
-                  className="w-full border rounded-lg px-3 py-2"
-                  placeholder="请输入内容"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={createPost}
-                disabled={!formTitle.trim() || !formContent.trim() || submitting}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : '发布'}
-              </button>
-            </div>
+      <ModalForm
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={createPost}
+        title="发布新帖子"
+        maxWidth="2xl"
+        submitText="发布"
+        isSubmitting={submitting}
+        submitDisabled={!formTitle.trim() || !formContent.trim()}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">分类</label>
+            <select
+              value={formCategory}
+              onChange={(e) => setFormCategory(e.target.value as ForumCategory)}
+              className="input w-full"
+            >
+              {categories.map(cat => (
+                <option key={cat.key} value={cat.key}>{cat.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">
+              标题 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formTitle}
+              onChange={(e) => setFormTitle(e.target.value)}
+              className="input w-full"
+              placeholder="请输入标题"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">
+              内容 <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={formContent}
+              onChange={(e) => setFormContent(e.target.value)}
+              rows={6}
+              className="input w-full resize-none"
+              placeholder="请输入内容"
+              required
+            />
           </div>
         </div>
-      )}
+      </ModalForm>
     </div>
   );
 }

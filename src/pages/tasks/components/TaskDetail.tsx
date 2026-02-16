@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { Task, Profile, Project, TaskComment, TaskProgressLog, TaskAttachment, TaskModule, ProjectModule } from '../../../types';
 import { X, Send, Clock, Calendar, Paperclip, Plus, Edit2 } from 'lucide-react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../context/AuthContextNew';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 
 interface TaskDetailProps {
@@ -17,6 +17,7 @@ interface TaskWithRelations extends Task {
   assignees?: { user_id: string; is_primary: boolean; user: Profile }[];
   creator?: Profile;
   owner?: Profile;
+  owner_id?: string;
   task_modules?: TaskModule[];
 }
 
@@ -63,49 +64,110 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
       // If 'owner_id' is just a column and the FK constraint name is not standard or not detected by PostgREST cache yet,
       // it might fail.
       // Let's revert to fetching owner separately to ensure stability if FK is tricky.
-      const { data: taskData, error: taskError } = await supabase.from('tasks').select(`
-          *,
-          project:projects(*),
-          assignees:task_assignees(user_id, is_primary, user:profiles(*)),
-          creator:created_by(*),
-          task_modules:task_modules(module_id, created_at, module:project_modules(*))
-      `).eq('id', taskId).single();
-
+      // 由于后端不支持 Supabase 风格的嵌套关联查询，改为分步获取数据
+      // 1. 先获取任务基本信息
+      const { data: taskData, error: taskError } = await api.db.from('tasks').select('*').eq('id', taskId).single();
       if (taskError) throw taskError;
-      
-      // Manually fetch owner if owner_id exists
-      let ownerData = null;
-      if (taskData.owner_id) {
-          const { data } = await supabase.from('profiles').select('*').eq('id', taskData.owner_id).single();
-          ownerData = data;
-      }
-      
-      const fullTaskData = { ...taskData, owner: ownerData };
-      setTask(fullTaskData);
-      
-      setSelectedModuleIds(taskData.task_modules?.map((tm: any) => tm.module_id) || []);
-      setNewProgress(null); 
 
-      // Fetch Related Data in Parallel
+      // 2. 获取关联数据
       const [
-          { data: commentsData },
-          { data: logsData },
-          { data: attachmentsData }
+        { data: projectData },
+        { data: assigneesData },
+        { data: creatorData },
+        { data: taskModulesData }
       ] = await Promise.all([
-        supabase.from('task_comments').select(`*, creator:created_by(*)`).eq('task_id', taskId).order('created_at', { ascending: true }),
-        supabase.from('task_progress_logs').select(`*, creator:created_by(*)`).eq('task_id', taskId).order('created_at', { ascending: false }),
-        supabase.from('task_attachments').select(`*, uploader:uploaded_by(*)`).eq('task_id', taskId).order('created_at', { ascending: false })
+        taskData.project_id ? api.db.from('projects').select('*').eq('id', taskData.project_id).single() : Promise.resolve({ data: null }),
+        api.db.from('task_assignees').select('user_id, is_primary').eq('task_id', taskId),
+        taskData.created_by ? api.db.from('profiles').select('*').eq('id', taskData.created_by).single() : Promise.resolve({ data: null }),
+        api.db.from('task_modules').select('module_id, created_at').eq('task_id', taskId)
       ]);
 
-      setComments(commentsData || []);
-      setLogs(logsData || []);
-      setAttachments(attachmentsData || []);
+      // 3. 获取处理人详情
+      let assigneesWithUser: any[] = [];
+      if (assigneesData && assigneesData.length > 0) {
+        const userIds = assigneesData.map(a => a.user_id);
+        const { data: usersData } = await api.db.from('profiles').select('*').in('id', userIds);
+        const usersMap = new Map(usersData?.map(u => [u.id, u]) || []);
+        assigneesWithUser = assigneesData.map(a => ({
+          ...a,
+          user: usersMap.get(a.user_id)
+        }));
+      }
+
+      // 4. 获取模块详情
+      let taskModulesWithModule: any[] = [];
+      if (taskModulesData && taskModulesData.length > 0) {
+        const moduleIds = taskModulesData.map(tm => tm.module_id);
+        const { data: modulesData } = await api.db.from('project_modules').select('*').in('id', moduleIds);
+        const modulesMap = new Map(modulesData?.map(m => [m.id, m]) || []);
+        taskModulesWithModule = taskModulesData.map(tm => ({
+          ...tm,
+          module: modulesMap.get(tm.module_id)
+        }));
+      }
+
+      // 5. 获取负责人信息
+      let ownerData = null;
+      if (taskData.owner_id) {
+        const { data } = await api.db.from('profiles').select('*').eq('id', taskData.owner_id).single();
+        ownerData = data;
+      }
+
+      // 6. 组装完整任务数据
+      const fullTaskData = {
+        ...taskData,
+        owner: ownerData,
+        project: projectData,
+        assignees: assigneesWithUser,
+        creator: creatorData,
+        task_modules: taskModulesWithModule
+      };
+      setTask(fullTaskData);
+
+      setSelectedModuleIds(taskModulesWithModule.map((tm: any) => tm.module_id) || []);
+      setNewProgress(null);
+
+      // Fetch Related Data in Parallel（不使用嵌入查询，后端不支持）
+      const [
+        { data: commentsData },
+        { data: logsData },
+        { data: attachmentsData }
+      ] = await Promise.all([
+        api.db.from('task_comments').select('*').eq('task_id', taskId).order('created_at', { ascending: true }),
+        api.db.from('task_progress_logs').select('*').eq('task_id', taskId).order('created_at', { ascending: false }),
+        api.db.from('task_attachments').select('*').eq('task_id', taskId).order('created_at', { ascending: false })
+      ]);
+
+      // 获取相关用户信息
+      const userIds = [...new Set([
+        ...(commentsData || []).map((c: any) => c.user_id).filter(Boolean),
+        ...(logsData || []).map((l: any) => l.user_id).filter(Boolean),
+        ...(attachmentsData || []).map((a: any) => a.uploaded_by).filter(Boolean)
+      ])];
+
+      let usersMap: Record<string, any> = {};
+      if (userIds.length > 0) {
+        const { data: usersData } = await api.db.from('profiles').select('*').in('id', userIds);
+        usersMap = (usersData || []).reduce((acc: Record<string, any>, user: any) => {
+          acc[user.id] = user;
+          return acc;
+        }, {});
+      }
+
+      // 映射字段名
+      const mappedComments = (commentsData || []).map((item: any) => ({ ...item, creator: usersMap[item.user_id] }));
+      const mappedLogs = (logsData || []).map((item: any) => ({ ...item, creator: usersMap[item.user_id] }));
+      const mappedAttachments = (attachmentsData || []).map((item: any) => ({ ...item, uploader: usersMap[item.uploaded_by] }));
+
+      setComments(mappedComments);
+      setLogs(mappedLogs);
+      setAttachments(mappedAttachments);
 
       // Fetch Metadata (Modules & Users) if needed
       if (taskData.project_id) {
           const [{ data: modules }, { data: usersData }] = await Promise.all([
-              supabase.from('project_modules').select('*').eq('project_id', taskData.project_id),
-              supabase.from('profiles').select('*')
+              api.db.from('project_modules').select('*').eq('project_id', taskData.project_id),
+              api.db.from('profiles').select('*')
           ]);
           setAvailableModules(modules || []);
           setAllUsers(usersData || []);
@@ -121,7 +183,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
   const handleAddAssignee = async (userId: string) => {
     if (!task) return;
     try {
-        const { error } = await supabase.from('task_assignees').insert({
+        const { error } = await api.db.from('task_assignees').insert({
             task_id: task.id,
             user_id: userId,
             is_primary: false
@@ -145,12 +207,20 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
     if (!confirm('确定要移除该处理人吗？')) return;
 
     try {
-        const { error } = await supabase
+        const { data: assignees } = await api.db
             .from('task_assignees')
-            .delete()
+            .select('*')
             .eq('task_id', task.id)
             .eq('user_id', userId);
-        if (error) throw error;
+        
+        if (assignees && assignees.length > 0) {
+            for (const assignee of assignees) {
+                await api.db
+                    .from('task_assignees')
+                    .delete()
+                    .eq('id', assignee.id);
+            }
+        }
         fetchTaskDetails();
     } catch (error) {
         console.error('Error removing assignee:', error);
@@ -162,7 +232,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
       if (!task) return;
       try {
           // Delete existing
-          await supabase.from('task_modules').delete().eq('task_id', task.id);
+          await api.db.from('task_modules').delete().eq('task_id', task.id);
           
           // Insert new
           if (selectedModuleIds.length > 0) {
@@ -171,14 +241,14 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                   module_id: mid,
                   created_by: user?.id
               }));
-              const { error } = await supabase.from('task_modules').insert(toInsert);
+              const { error } = await api.db.from('task_modules').insert(toInsert);
               if (error) throw error;
           }
 
           // Log
-          await supabase.from('task_progress_logs').insert({
+          await api.db.from('task_progress_logs').insert({
               task_id: task.id,
-              progress: task.status === 'done' ? 100 : 0, // Keep existing progress? ideally fetch it. 
+              progress: task.status === 'done' ? 100 : 0, // Keep existing progress? ideally fetch it.
               // Simplification: just log text
               description: `关联模块已更新`,
               created_by: user?.id
@@ -200,19 +270,19 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
     setTask({ ...task, status: newStatus as any });
 
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('tasks')
-        .update({ 
-          status: newStatus, 
-          completed_at: newStatus === 'done' ? new Date().toISOString() : null 
+        .update({
+          status: newStatus,
+          completed_at: newStatus === 'done' ? new Date().toISOString() : null
         })
         .eq('id', task.id);
 
       if (error) throw error;
-      
+
       // Auto log progress if done
       if (newStatus === 'done') {
-        await supabase.from('task_progress_logs').insert({
+        await api.db.from('task_progress_logs').insert({
           task_id: task.id,
           progress: 100,
           description: 'Task marked as completed',
@@ -233,7 +303,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
            }));
         
         if (notifications.length > 0) {
-            await supabase.from('notifications').insert(notifications);
+            await api.db.from('notifications').insert(notifications);
         }
       }
 
@@ -251,7 +321,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
   const handleAddComment = async () => {
     if (!task || !newComment.trim()) return;
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('task_comments')
         .insert({
           task_id: task.id,
@@ -270,7 +340,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
   const handleUpdateProgress = async () => {
     if (!task || newProgress === null) return;
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('task_progress_logs')
         .insert({
           task_id: task.id,
@@ -295,7 +365,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
     if (!fakeUrl || !task) return;
     
     try {
-        const { error } = await supabase.from('task_attachments').insert({
+        const { error } = await api.db.from('task_attachments').insert({
             task_id: task.id,
             file_name: `Attachment-${Date.now()}.txt`,
             file_url: fakeUrl,
@@ -315,7 +385,20 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(open) => !open && onClose()}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 bg-black/50 z-40" />
+        <DialogPrimitive.Overlay
+          className="fixed inset-0 z-40"
+          style={{
+            background: `radial-gradient(circle at center,
+              rgba(0,0,0,0.5) 0%,
+              rgba(0,0,0,0.35) 15%,
+              rgba(0,0,0,0.2) 30%,
+              rgba(0,0,0,0.05) 50%,
+              transparent 70%
+            )`,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+          }}
+        />
         <DialogPrimitive.Content className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl z-[100] overflow-y-auto p-0 flex flex-col animate-in slide-in-from-right duration-300">
           <DialogPrimitive.Title className="sr-only">任务详情</DialogPrimitive.Title>
           
@@ -331,9 +414,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                 </span>
                 <span className={`px-2 py-0.5 rounded text-xs font-medium border
                   ${task?.status === 'done' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                  {task?.status === 'done' ? '已完成' : 
+                  {task?.status === 'done' ? '已完成' :
                    task?.status === 'in_progress' ? '进行中' :
-                   task?.status === 'paused' ? '已暂停' :
                    task?.status === 'canceled' ? '已取消' : '未开始'}
                 </span>
                 {task?.is_public && (
@@ -624,17 +706,17 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                         comments.map((comment) => (
                           <div key={comment.id} className="flex gap-3">
                              <div className="flex-shrink-0">
-                                {comment.creator?.avatar_url ? (
-                                  <img src={comment.creator.avatar_url} className="w-8 h-8 rounded-full" />
+                                {comment.user?.avatar_url ? (
+                                  <img src={comment.user.avatar_url} className="w-8 h-8 rounded-full" />
                                 ) : (
                                   <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs">
-                                    {comment.creator?.full_name?.[0] || 'U'}
+                                    {comment.user?.full_name?.[0] || 'U'}
                                   </div>
                                 )}
                              </div>
                              <div className="flex-1 bg-gray-50 p-3 rounded-lg rounded-tl-none">
                                <div className="flex justify-between items-center mb-1">
-                                 <span className="text-sm font-semibold text-gray-900">{comment.creator?.full_name || '未知用户'}</span>
+                                 <span className="text-sm font-semibold text-gray-900">{comment.user?.full_name || '未知用户'}</span>
                                  <span className="text-xs text-gray-400">{new Date(comment.created_at).toLocaleString()}</span>
                                </div>
                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.content}</p>
@@ -671,11 +753,11 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                         <div className="absolute left-[-5px] top-0 w-2.5 h-2.5 rounded-full bg-indigo-400 border-2 border-white"></div>
                         <div className="text-xs text-gray-400 mb-1">{new Date(log.created_at).toLocaleString()}</div>
                         <div className="text-sm font-medium text-gray-900 mb-1">
-                          {log.creator?.full_name || 'System'} 更新进度至 <span className="text-indigo-600 font-bold">{log.progress}%</span>
+                          {log.user?.full_name || 'System'} 更新进度至 <span className="text-indigo-600 font-bold">{log.progress}%</span>
                         </div>
-                        {log.description && (
+                        {log.content && (
                           <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                            {log.description}
+                            {log.content}
                           </div>
                         )}
                       </div>

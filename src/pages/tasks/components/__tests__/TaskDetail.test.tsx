@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { TaskDetail } from '../TaskDetail';
-import { useAuth } from '../../../../context/AuthContext';
-import { supabase } from '../../../../lib/supabase';
+import { useAuth } from '../../../../context/AuthContextNew';
+import { api } from '../../../../lib/api';
 
 // Mock dependencies
 vi.mock('../../../../context/AuthContext');
-vi.mock('../../../../lib/supabase', () => ({
-  supabase: {
-    from: vi.fn(),
+vi.mock('../../../../lib/api', () => ({
+  api: {
+    db: {
+      from: vi.fn(),
+    },
   },
 }));
 
@@ -48,7 +50,7 @@ describe('TaskDetail Component', () => {
     const orderMock = vi.fn().mockResolvedValue({ data: [], error: null });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase.from as any).mockImplementation((table: string) => {
+    (api.db.from as any).mockImplementation((table: string) => {
       if (table === 'tasks') {
         return { 
             select: () => ({ 

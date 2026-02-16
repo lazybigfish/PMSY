@@ -21,6 +21,8 @@ import ForumPostDetailPage from './pages/water/ForumPostDetailPage';
 import FileManager from './pages/files/FileManager';
 import StakeholderLayout from './pages/stakeholders/StakeholderLayout';
 import ClientList from './pages/stakeholders/ClientList';
+import SupplierFormPage from './pages/stakeholders/SupplierFormPage';
+import ClientFormPage from './pages/stakeholders/ClientFormPage';
 
 function App() {
   return (
@@ -49,6 +51,14 @@ function App() {
                 <Route path="suppliers" element={<SupplierList />} />
                 <Route path="clients" element={<ClientList />} />
               </Route>
+              
+              {/* 供应商新增/编辑页面 */}
+              <Route path="/stakeholders/suppliers/new" element={<SupplierFormPage />} />
+              <Route path="/stakeholders/suppliers/:id/edit" element={<SupplierFormPage />} />
+              
+              {/* 客户新增/编辑页面 */}
+              <Route path="/stakeholders/clients/new" element={<ClientFormPage />} />
+              <Route path="/stakeholders/clients/:id/edit" element={<ClientFormPage />} />
               
               {/* 兼容旧路由 */}
               <Route path="/suppliers" element={<Navigate to="/stakeholders/suppliers" replace />} />

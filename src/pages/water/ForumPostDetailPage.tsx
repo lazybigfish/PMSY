@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2, Trash2, Pin, Star, MessageSquare, Eye, Clock } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { api } from '../../lib/api';
+import { useAuth } from '../../context/AuthContextNew';
 import { ForumPost, ForumReply, ForumCategory } from '../../types';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -41,7 +41,7 @@ export default function ForumPostDetailPage() {
       setLoading(true);
       
       // 加载帖子详情
-      const { data: postData, error: postError } = await supabase
+      const { data: postData, error: postError } = await api.db
         .from('forum_posts')
         .select('*')
         .eq('id', id)
@@ -52,7 +52,7 @@ export default function ForumPostDetailPage() {
       // 加载作者信息
       let postWithAuthor = postData;
       if (postData?.author_id) {
-        const { data: authorData } = await supabase
+        const { data: authorData } = await api.db
           .from('profiles')
           .select('id, full_name, avatar_url')
           .eq('id', postData.author_id)
@@ -63,7 +63,7 @@ export default function ForumPostDetailPage() {
       
       // 检查当前用户是否点赞
       if (user) {
-        const { data: likeData } = await supabase
+        const { data: likeData } = await api.db
           .from('forum_post_likes')
           .select('*')
           .eq('post_id', id)
@@ -77,7 +77,7 @@ export default function ForumPostDetailPage() {
       setPost(postWithAuthor);
       
       // 增加浏览量
-      await supabase
+      await api.db
         .from('forum_posts')
         .update({ view_count: (postData?.view_count || 0) + 1 })
         .eq('id', id);
@@ -93,7 +93,7 @@ export default function ForumPostDetailPage() {
 
   const loadReplies = async (postId: string) => {
     try {
-      const { data: repliesData, error } = await supabase
+      const { data: repliesData, error } = await api.db
         .from('forum_replies')
         .select('*')
         .eq('post_id', postId)
@@ -108,7 +108,7 @@ export default function ForumPostDetailPage() {
 
       const authorMap = new Map<string, { id: string; full_name: string; avatar_url?: string }>();
       if (authorIds.size > 0) {
-        const { data: authorsData } = await supabase
+        const { data: authorsData } = await api.db
           .from('profiles')
           .select('id, full_name, avatar_url')
           .in('id', Array.from(authorIds));
@@ -133,14 +133,14 @@ export default function ForumPostDetailPage() {
     try {
       setSubmitting(true);
       
-      await supabase.from('forum_replies').insert({
+      await api.db.from('forum_replies').insert({
         post_id: post.id,
         author_id: user.id,
         content: { text: replyContent.trim() }
       });
 
       const now = new Date().toISOString();
-      await supabase
+      await api.db
         .from('forum_posts')
         .update({
           reply_count: post.reply_count + 1,
@@ -166,8 +166,8 @@ export default function ForumPostDetailPage() {
     if (!confirm('确定要删除这条回复吗？')) return;
 
     try {
-      await supabase.from('forum_replies').delete().eq('id', reply.id);
-      await supabase
+      await api.db.from('forum_replies').delete().eq('id', reply.id);
+      await api.db
         .from('forum_posts')
         .update({ reply_count: Math.max(0, post.reply_count - 1) })
         .eq('id', post.id);
@@ -194,15 +194,19 @@ export default function ForumPostDetailPage() {
     try {
       if (post.is_liked) {
         // Unlike - 只需删除点赞记录，触发器会自动更新 like_count
-        const { error: deleteError } = await supabase
+        const { data: likes } = await api.db
           .from('forum_post_likes')
-          .delete()
+          .select('*')
           .eq('post_id', post.id)
           .eq('user_id', user.id);
         
-        if (deleteError) {
-          console.error('Error deleting like:', deleteError);
-          return;
+        if (likes && likes.length > 0) {
+          for (const like of likes) {
+            await api.db
+              .from('forum_post_likes')
+              .delete()
+              .eq('id', like.id);
+          }
         }
         
         // 乐观更新本地状态
@@ -213,7 +217,7 @@ export default function ForumPostDetailPage() {
         } : null);
       } else {
         // Like - 只需插入点赞记录，触发器会自动更新 like_count
-        const { error: insertError } = await supabase
+        const { error: insertError } = await api.db
           .from('forum_post_likes')
           .insert({ post_id: post.id, user_id: user.id });
         
@@ -337,7 +341,7 @@ export default function ForumPostDetailPage() {
 
         {/* 正文内容 */}
         <div className="prose prose-sm max-w-none text-dark-700 leading-relaxed whitespace-pre-wrap text-base mb-6">
-          {typeof post.content === 'string' ? post.content : post.content?.text || ''}
+          {typeof post.content === 'string' ? post.content : (post.content as any)?.text || ''}
         </div>
 
         {/* 点赞按钮 */}
@@ -404,7 +408,7 @@ export default function ForumPostDetailPage() {
                     </div>
                   </div>
                   <p className="text-sm text-dark-700 leading-relaxed whitespace-pre-wrap">
-                    {typeof reply.content === 'string' ? reply.content : reply.content?.text || ''}
+                    {typeof reply.content === 'string' ? reply.content : (reply.content as any)?.text || ''}
                   </p>
                 </div>
               </div>

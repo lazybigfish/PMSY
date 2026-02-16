@@ -1,9 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { Risk, Profile } from '../../../types';
 import { Loader2, Plus, AlertTriangle, X, History, User } from 'lucide-react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../context/AuthContextNew';
+import { Modal, ModalForm } from '../../../components/Modal';
 
 interface RiskWithRecords extends Omit<Risk, 'handling_records'> {
   handling_records: {
@@ -50,24 +51,39 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
   }, [projectId]);
 
   const fetchUsers = async () => {
-    const { data } = await supabase.from('profiles').select('*');
+    const { data } = await api.db.from('profiles').select('*');
     setUsers(data || []);
   };
 
   const fetchRisks = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('risks')
-        .select(`
-          *,
-          owner:profiles(id, full_name, email)
-        `)
+        .select('*')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setRisks(data || []);
+
+      // 获取风险负责人信息
+      const risksData = data || [];
+      if (risksData.length > 0) {
+        const ownerIds = risksData.map(r => r.owner_id).filter(Boolean);
+        if (ownerIds.length > 0) {
+          const { data: ownersData } = await api.db.from('profiles').select('id, full_name, email').in('id', ownerIds);
+          const ownersMap = new Map(ownersData?.map(o => [o.id, o]) || []);
+          const mappedRisks = risksData.map(r => ({
+            ...r,
+            owner: ownersMap.get(r.owner_id)
+          }));
+          setRisks(mappedRisks);
+        } else {
+          setRisks(risksData);
+        }
+      } else {
+        setRisks(risksData);
+      }
     } catch (error) {
       console.error('Error fetching risks:', error);
     } finally {
@@ -80,7 +96,7 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
     if (!user) return;
 
     try {
-      const { error } = await supabase.from('risks').insert([{
+      const { error } = await api.db.from('risks').insert([{
         project_id: projectId,
         ...newRisk,
         handling_records: []
@@ -125,7 +141,7 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
     }
 
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('risks')
         .update(updates)
         .eq('id', selectedRisk.id);
@@ -143,7 +159,7 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
 
   const updateRiskStatus = async (riskId: string, newStatus: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('risks')
         .update({ status: newStatus })
         .eq('id', riskId);
@@ -408,123 +424,97 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
       </div>
 
       {/* 风险详情弹窗 */}
-      {showDetailModal && selectedRisk && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]">
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <AlertTriangle className={`h-6 w-6 ${
-                  selectedRisk.level === 'high' ? 'text-red-500' :
-                  selectedRisk.level === 'medium' ? 'text-yellow-500' :
-                  'text-blue-500'
-                }`} />
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900">{selectedRisk.title}</h2>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${getLevelColor(selectedRisk.level)}`}>
-                      {getLevelLabel(selectedRisk.level)}风险
-                    </span>
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(selectedRisk.status)}`}>
-                      {getStatusLabel(selectedRisk.status)}
-                    </span>
+      <Modal
+        isOpen={showDetailModal && !!selectedRisk}
+        onClose={() => setShowDetailModal(false)}
+        title={selectedRisk?.title || '风险详情'}
+        maxWidth="3xl"
+      >
+        <div className="space-y-6">
+          {/* 风险详情 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">风险描述</h4>
+              <p className="text-sm text-gray-600">{selectedRisk?.description || '暂无描述'}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">影响分析</h4>
+              <p className="text-sm text-gray-600">{selectedRisk?.impact || '暂无影响分析'}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">应对措施</h4>
+              <p className="text-sm text-gray-600">{selectedRisk?.mitigation_plan || '暂无应对措施'}</p>
+            </div>
+          </div>
+
+          {/* 处置进展时间轴 */}
+          <div>
+            <h4 className="text-lg font-medium text-gray-900 mb-4">处置进展</h4>
+            
+            {/* 添加新记录 */}
+            {selectedRisk?.status !== 'closed' && (
+              <form onSubmit={handleAddRecord} className="bg-indigo-50 rounded-lg p-4 mb-4">
+                <h5 className="text-sm font-medium text-indigo-900 mb-3">添加处置记录</h5>
+                <div className="space-y-3">
+                  <textarea
+                    required
+                    rows={2}
+                    value={newRecord.content}
+                    onChange={(e) => setNewRecord({...newRecord, content: e.target.value})}
+                    placeholder="请输入处置内容..."
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                  />
+                  <div className="flex items-center space-x-3">
+                    <select
+                      value={newRecord.newStatus}
+                      onChange={(e) => setNewRecord({...newRecord, newStatus: e.target.value})}
+                      className="border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-sm"
+                    >
+                      <option value="">保持当前状态</option>
+                      <option value="handling">标记为处理中</option>
+                      <option value="closed">标记为已关闭</option>
+                    </select>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
+                    >
+                      添加记录
+                    </button>
                   </div>
                 </div>
-              </div>
-              <button 
-                onClick={() => setShowDetailModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
+              </form>
+            )}
 
-            <div className="p-6 space-y-6">
-              {/* 风险详情 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">风险描述</h4>
-                  <p className="text-sm text-gray-600">{selectedRisk.description || '暂无描述'}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">影响分析</h4>
-                  <p className="text-sm text-gray-600">{selectedRisk.impact || '暂无影响分析'}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">应对措施</h4>
-                  <p className="text-sm text-gray-600">{selectedRisk.mitigation_plan || '暂无应对措施'}</p>
-                </div>
-              </div>
-
-              {/* 处置进展时间轴 */}
-              <div>
-                <h4 className="text-lg font-medium text-gray-900 mb-4">处置进展</h4>
-                
-                {/* 添加新记录 */}
-                {selectedRisk.status !== 'closed' && (
-                  <form onSubmit={handleAddRecord} className="bg-indigo-50 rounded-lg p-4 mb-4">
-                    <h5 className="text-sm font-medium text-indigo-900 mb-3">添加处置记录</h5>
-                    <div className="space-y-3">
-                      <textarea
-                        required
-                        rows={2}
-                        value={newRecord.content}
-                        onChange={(e) => setNewRecord({...newRecord, content: e.target.value})}
-                        placeholder="请输入处置内容..."
-                        className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
-                      />
-                      <div className="flex items-center space-x-3">
-                        <select
-                          value={newRecord.newStatus}
-                          onChange={(e) => setNewRecord({...newRecord, newStatus: e.target.value})}
-                          className="border border-gray-300 rounded-md shadow-sm py-1.5 px-3 text-sm"
-                        >
-                          <option value="">保持当前状态</option>
-                          <option value="handling">标记为处理中</option>
-                          <option value="closed">标记为已关闭</option>
-                        </select>
-                        <button
-                          type="submit"
-                          className="px-4 py-1.5 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
-                        >
-                          添加记录
-                        </button>
+            {/* 历史记录 */}
+            <div className="space-y-3">
+              {selectedRisk?.handling_records && selectedRisk.handling_records.length > 0 ? (
+                [...selectedRisk.handling_records].reverse().map((record, idx) => (
+                  <div key={idx} className="flex space-x-3">
+                    <div className="flex-shrink-0">
+                      <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                        <User className="h-4 w-4 text-indigo-600" />
                       </div>
                     </div>
-                  </form>
-                )}
-
-                {/* 历史记录 */}
-                <div className="space-y-3">
-                  {selectedRisk.handling_records && selectedRisk.handling_records.length > 0 ? (
-                    [...selectedRisk.handling_records].reverse().map((record, idx) => (
-                      <div key={idx} className="flex space-x-3">
-                        <div className="flex-shrink-0">
-                          <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                            <User className="h-4 w-4 text-indigo-600" />
-                          </div>
-                        </div>
-                        <div className="flex-1 bg-gray-50 rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium text-gray-900">
-                              {users.find(u => u.id === record.handler_id)?.full_name || '未知用户'}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {new Date(record.date).toLocaleString()}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600">{record.content}</p>
-                        </div>
+                    <div className="flex-1 bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-900">
+                          {users.find(u => u.id === record.handler_id)?.full_name || '未知用户'}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(record.date).toLocaleString()}
+                        </span>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-center text-gray-500 py-4">暂无处置记录</p>
-                  )}
-                </div>
-              </div>
+                      <p className="text-sm text-gray-600">{record.content}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-gray-500 py-4">暂无处置记录</p>
+              )}
             </div>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

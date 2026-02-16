@@ -104,7 +104,7 @@ export function ForumPostList({
 
                 {/* Content Preview */}
                 <p className="text-sm text-dark-600 mt-2 line-clamp-2 leading-relaxed">
-                  {typeof post.content === 'string' ? post.content : post.content?.text || ''}
+                  {typeof post.content === 'string' ? post.content : (post.content as any)?.text || ''}
                 </p>
 
                 {/* Meta Info */}

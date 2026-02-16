@@ -3,7 +3,8 @@
 [![React](https://img.shields.io/badge/React-18.3.1-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.3.5-646CFF.svg)](https://vitejs.dev/)
-[![Supabase](https://img.shields.io/badge/Supabase-2.95.3-3ECF8E.svg)](https://supabase.io/)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg)](https://nodejs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791.svg)](https://www.postgresql.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4.17-38B2AC.svg)](https://tailwindcss.com/)
 
 PMSY 是一个功能完善的项目管理系统，专为工程项目管理设计，支持多项目管理、任务跟踪、供应商管理、里程碑管理等功能。
@@ -14,6 +15,7 @@ PMSY 是一个功能完善的项目管理系统，专为工程项目管理设计
 - **任务管理**: 任务分配、状态跟踪、优先级设置、截止日期管理
 - **里程碑管理**: 项目关键节点管理，支持版本控制
 - **供应商管理**: 供应商信息维护，付款计划跟踪
+- **客户管理**: 客户信息维护，联系人管理
 - **文件管理**: 项目文档上传、分类、版本管理
 - **报表系统**: 项目进度报表、统计图表导出
 - **权限控制**: 基于角色的权限管理（RBAC）
@@ -31,14 +33,13 @@ PMSY 是一个功能完善的项目管理系统，专为工程项目管理设计
 
 ### 后端技术栈
 - **API 服务**: Express.js (Node.js)
-- **数据库**: PostgreSQL (Supabase)
-- **认证**: Supabase Auth (GoTrue)
-- **实时**: Supabase Realtime
-- **存储**: Supabase Storage
+- **数据库**: PostgreSQL 15
+- **缓存**: Redis 7
+- **文件存储**: MinIO
+- **认证**: JWT (jsonwebtoken)
 
 ### 部署架构
 - **容器化**: Docker + Docker Compose
-- **网关**: Kong API Gateway
 - **反向代理**: Nginx
 - **支持环境**: 本地开发、服务器部署、离线部署
 
@@ -59,43 +60,33 @@ PMSY/
 │   ├── types/                  # TypeScript 类型
 │   └── App.tsx                 # 应用入口
 │
-├── api/                        # 后端 API
-│   ├── routes/                 # API 路由
-│   ├── lib/                    # 后端工具库
-│   ├── app.ts                  # Express 应用
-│   └── server.ts               # 服务器入口
+├── api-new/                    # 后端 API
+│   ├── src/                    # API 源码
+│   │   ├── routes/             # API 路由
+│   │   ├── middleware/         # 中间件
+│   │   └── index.ts            # 应用入口
+│   ├── database/               # 数据库相关
+│   │   ├── migrations/         # 数据库迁移
+│   │   └── seeds/              # 种子数据
+│   └── package.json            # API 依赖配置
 │
 ├── config/                     # 配置文件
 │   ├── docker/                 # Docker 配置
-│   │   ├── docker-compose.yml
-│   │   └── Dockerfile.api
+│   │   └── docker-compose.yml
 │   ├── nginx/                  # Nginx 配置
 │   │   └── nginx.conf
 │   └── env/                    # 环境变量模板
 │       ├── .env.example
-│       ├── .env.production
-│       └── .env.supabase
+│       └── .env.production.example
 │
 ├── deploy/                     # 部署相关
 │   ├── fresh-install/          # 全新部署
 │   ├── update/                 # 更新部署
-│   ├── scripts/                # 部署脚本
-│   ├── config/                 # 部署配置
-│   └── docs/                   # 部署文档
-│
-├── docs/                       # 项目文档
-│   ├── DEPLOY.md               # 部署指南
-│   ├── DEPLOY_CHECKLIST.md     # 部署检查清单
-│   └── DATABASE_DIFF_REPORT.md # 数据库差异报告
+│   └── scripts/                # 部署脚本
 │
 ├── scripts/                    # 开发脚本
 │   ├── dev/                    # 开发辅助脚本
 │   └── db/                     # 数据库脚本
-│
-├── supabase/                   # Supabase 配置
-│   ├── migrations/             # 数据库迁移
-│   ├── functions/              # Edge Functions
-│   └── volumes/                # 数据卷配置
 │
 ├── tests/                      # 测试文件
 ├── public/                     # 静态资源
@@ -107,7 +98,7 @@ PMSY/
 ### 环境要求
 - Node.js 18+
 - npm 9+ 或 yarn 1.22+
-- Docker & Docker Compose (可选，用于本地 Supabase)
+- Docker & Docker Compose (用于本地开发)
 
 ### 1. 克隆项目
 
@@ -119,7 +110,11 @@ cd PMSY
 ### 2. 安装依赖
 
 ```bash
+# 前端依赖
 npm install
+
+# 后端依赖
+cd api-new && npm install && cd ..
 ```
 
 ### 3. 配置环境变量
@@ -127,23 +122,32 @@ npm install
 ```bash
 # 复制开发环境配置
 cp config/env/.env.example .env
+cp config/env/.env.example api-new/.env
 
 # 编辑配置
 vim .env
 ```
 
-### 4. 启动开发服务器
+### 4. 启动本地服务
 
 ```bash
-# 同时启动前端和后端
-npm run dev
+# 启动数据库服务
+cd config/docker && docker-compose up -d postgres redis minio && cd ../..
 
-# 或分别启动
-npm run client:dev    # 前端
-npm run server:dev    # 后端
+# 运行数据库迁移
+cd api-new && npm run db:migrate && npm run db:seed && cd ..
+
+# 启动开发服务器
+npm run dev
 ```
 
 访问 http://localhost:5173 查看应用
+
+**默认登录信息：**
+- 用户名：`admin`
+- 密码：`Willyou@2026`
+
+> 注意：登录时使用**用户名**而非邮箱
 
 ## 📦 部署指南
 
@@ -181,7 +185,7 @@ npm run server:dev    # 后端
 # 然后将生成的离线包上传到目标服务器
 ```
 
-详细部署说明请参考 [docs/DEPLOY.md](docs/DEPLOY.md)
+详细部署说明请参考 [deploy/README.md](deploy/README.md)
 
 ## 🔧 配置说明
 
@@ -191,20 +195,33 @@ npm run server:dev    # 后端
 |------|------|----------|
 | `.env` | 开发环境 | 本地开发 |
 | `config/env/.env.production` | 生产环境 | 服务器部署 |
-| `config/env/.env.supabase` | 完整配置 | 服务器部署参考 |
+| `config/env/.env.example` | 开发环境模板 | 参考 |
 
 ### 关键配置项
 
 ```bash
-# Supabase 配置
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+# 数据库配置
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=pmsy
+DB_PASSWORD=your_secure_password
+DB_NAME=pmsy
 
-# 服务器配置（生产环境）
-API_EXTERNAL_URL=http://your-server-ip:8000
-SITE_URL=http://your-server-ip
-POSTGRES_PASSWORD=your-secure-password
-JWT_SECRET=your-jwt-secret
+# Redis 配置
+REDIS_URL=redis://localhost:6379
+
+# MinIO 配置
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=your_secure_secret
+
+# JWT 配置
+JWT_SECRET=your_jwt_secret_key
+JWT_EXPIRES_IN=7d
+
+# API 配置
+API_URL=http://localhost:3001
+PORT=3001
 ```
 
 ## 🧪 测试
@@ -243,11 +260,11 @@ npm run lint
 
 1. **数据库连接失败**
    ```bash
-   # 检查 Supabase 服务状态
-   docker-compose ps
+   # 检查数据库服务状态
+   cd config/docker && docker-compose ps postgres
    
    # 查看数据库日志
-   docker-compose logs db
+   docker-compose logs postgres
    ```
 
 2. **前端构建失败**
@@ -259,14 +276,13 @@ npm run lint
    ```
 
 3. **部署失败**
-   请参考 [docs/DEPLOY_CHECKLIST.md](docs/DEPLOY_CHECKLIST.md)
+   请参考 [deploy/README.md](deploy/README.md)
 
 ## 📚 文档
 
-- [部署指南](docs/DEPLOY.md) - 详细部署说明
-- [部署检查清单](docs/DEPLOY_CHECKLIST.md) - 部署前检查项
-- [API 文档](api/README.md) - 后端 API 说明
-- [数据库文档](supabase/migrations/README.md) - 数据库迁移说明
+- [部署指南](deploy/README.md) - 详细部署说明
+- [全新部署](deploy/fresh-install/README.md) - 全新部署说明
+- [更新部署](deploy/update/README.md) - 更新部署说明
 
 ## 🤝 贡献指南
 

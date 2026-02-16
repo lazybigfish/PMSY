@@ -1,7 +1,23 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { Session, User } from '@supabase/supabase-js';
-import { Profile } from '../types';
+import { authService, userService } from '../services';
+import type { Profile } from '../types';
+
+// User 类型定义
+interface User {
+  id: string;
+  email: string;
+  user_metadata?: {
+    full_name?: string;
+  };
+}
+
+// 简化的 Session 类型
+interface Session {
+  user: User;
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+}
 
 interface AuthContextType {
   session: Session | null;
@@ -23,41 +39,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
+    // 获取当前会话
+    const initSession = async () => {
+      try {
+        const currentUser = await authService.getCurrentUser();
+        if (currentUser) {
+          // 构造 session 对象
+          const token = localStorage.getItem('access_token') || '';
+          setSession({
+            user: currentUser as User,
+            access_token: token,
+            refresh_token: '',
+            expires_at: Date.now() + 3600000,
+          });
+          setUser(currentUser as User);
+          await fetchProfile(currentUser.id);
+        } else {
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error getting session:', err);
         setLoading(false);
       }
-    });
+    };
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setProfile(null);
-        setLoading(false);
+    initSession();
+
+    // 监听认证状态变化（轮询方式）
+    const interval = setInterval(async () => {
+      const currentUser = await authService.getCurrentUser();
+      if (currentUser?.id !== user?.id) {
+        if (currentUser) {
+          const token = localStorage.getItem('access_token') || '';
+          setSession({
+            user: currentUser as User,
+            access_token: token,
+            refresh_token: '',
+            expires_at: Date.now() + 3600000,
+          });
+          setUser(currentUser as User);
+          await fetchProfile(currentUser.id);
+        } else {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
       }
-    });
+    }, 5000);
 
-    return () => subscription.unsubscribe();
+    return () => clearInterval(interval);
   }, []);
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      const profileData = await userService.getUserById(userId);
 
-      if (error) {
+      if (!profileData) {
         if (retryCount < 3) {
           setTimeout(() => {
             setRetryCount(prev => prev + 1);
@@ -67,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         setError('无法加载用户信息');
       } else {
-        setProfile(data);
+        setProfile(profileData);
         setError(null);
       }
     } catch (error) {
@@ -79,7 +117,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await authService.logout();
+    setSession(null);
+    setUser(null);
+    setProfile(null);
   };
 
   return (

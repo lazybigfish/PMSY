@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { Loader2, Globe, RefreshCw } from 'lucide-react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../context/AuthContextNew';
 
 export default function HotNewsConfig() {
   const { profile } = useAuth();
@@ -20,7 +20,7 @@ export default function HotNewsConfig() {
 
   const fetchConfig = async () => {
     try {
-      const { data } = await supabase
+      const { data } = await api.db
         .from('system_configs')
         .select('key, value')
         .in('key', ['hot_topic_keywords', 'hot_news_fetch_limit']);
@@ -45,20 +45,23 @@ export default function HotNewsConfig() {
     try {
       const normalizedLimit = Math.max(5, Math.floor(fetchLimit || 0));
 
-      const { error } = await supabase
-        .from('system_configs')
-        .upsert([
-          {
-            key: 'hot_topic_keywords',
-            value: keywords,
-            description: '首页热点新闻抓取关键词，用逗号分隔'
-          },
-          {
-            key: 'hot_news_fetch_limit',
-            value: String(normalizedLimit),
-            description: '每日热点抓取条数（最少 5）'
-          }
-        ]);
+      // 先删除旧配置
+      await api.db.from('system_configs').delete().eq('key', 'hot_topic_keywords');
+      await api.db.from('system_configs').delete().eq('key', 'hot_news_fetch_limit');
+
+      // 插入新配置
+      const { error } = await api.db.from('system_configs').insert([
+        {
+          key: 'hot_topic_keywords',
+          value: keywords,
+          description: '首页热点新闻抓取关键词，用逗号分隔'
+        },
+        {
+          key: 'hot_news_fetch_limit',
+          value: String(normalizedLimit),
+          description: '每日热点抓取条数（最少 5）'
+        }
+      ]);
 
       if (error) throw error;
       alert('配置已保存');
@@ -73,9 +76,7 @@ export default function HotNewsConfig() {
   const handleManualFetch = async () => {
     setFetchingNews(true);
     try {
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        const token = sessionData.session?.access_token;
+        const token = localStorage.getItem('access_token');
         if (!token) throw new Error('未登录或登录状态已失效');
 
         const resp = await fetch('/api/news/fetch-hot', {

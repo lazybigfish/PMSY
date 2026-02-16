@@ -97,7 +97,7 @@ const Dashboard = () => {
   const fetchCommentCounts = async (newsIds: string[]) => {
     if (newsIds.length === 0) return {} as Record<string, number>;
     try {
-      const data = await api.db
+      const { data } = await api.db
         .from('news_comments')
         .select('news_id')
         .in('news_id', newsIds);
@@ -117,17 +117,22 @@ const Dashboard = () => {
   const fetchCommentsForNews = async (newsId: string) => {
     setCommentsLoading(true);
     try {
-      const data = await api.db
+      const { data } = await api.db
         .from('news_comments')
-        .select('id, content, created_at, user_id, user:profiles(id, full_name, username)')
+        .select('id, content, created_at, user_id, profiles(id, full_name, username)')
         .eq('news_id', newsId)
         .order('created_at', { ascending: true });
 
-      setComments((data || []) as unknown as NewsComment[]);
+      // 将返回数据中的 profiles 字段映射为 user 字段
+      const mappedData = (data || []).map((item: any) => ({
+        ...item,
+        user: item.profiles
+      }));
+      setComments(mappedData as unknown as NewsComment[]);
     } catch (error) {
       console.error('Error fetching comments:', error);
       try {
-        const fallbackData = await api.db
+        const { data: fallbackData } = await api.db
           .from('news_comments')
           .select('id, content, created_at, user_id')
           .eq('news_id', newsId)
@@ -186,36 +191,36 @@ const Dashboard = () => {
       setLoading(true);
       
       // 1. Fetch Projects & Calculate Stats
-      const projects = await api.db.from('projects').select('*');
-      
+      const { data: projects } = await api.db.from('projects').select('*');
+
       const totalProjects = projects?.length || 0;
       const activeProjects = projects?.filter((p: any) => p.status === 'in_progress').length || 0;
       const completedProjects = projects?.filter((p: any) => p.status === 'completed').length || 0;
-      
+
       // Calculate total budget
       const totalBudget = projects
         ?.filter((p: any) => p.manager_id === user?.id)
-        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
+        .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0;
 
       // 2. Fetch My Tasks
-      const tasks = await api.db
+      const { data: tasks } = await api.db
         .from('tasks')
         .select('*')
         .eq('assigned_to', user?.id)
         .neq('status', 'done')
         .order('due_date', { ascending: true });
-        
+
       const myTaskList = tasks || [];
       setMyTasks(myTaskList.slice(0, 6));
-      
+
       // Calculate Stats from tasks
       const highPriorityCount = myTaskList.filter((t: any) => t.priority === 'high').length;
-      
+
       // Task Center aligned stats
-      const tasksForStats = await api.db
+      const { data: tasksForStats } = await api.db
         .from('tasks')
         .select('id, status, due_date');
-        
+
       const taskTotal = tasksForStats?.length || 0;
       const overdueCount = (tasksForStats || []).filter((t: { due_date?: string; status?: string }) => {
         if (!t.due_date || t.status === 'done' || t.status === 'canceled') return false;
@@ -228,7 +233,7 @@ const Dashboard = () => {
       // 3. Fetch Risks - 使用 count 方法
       let riskCount = 0;
       try {
-        const risks = await api.db
+        const { data: risks } = await api.db
           .from('risks')
           .select('id')
           .eq('status', 'open');
@@ -238,12 +243,12 @@ const Dashboard = () => {
       }
 
       // 4. Fetch Hot News
-      const newsData = await api.db
+      const { data: newsData } = await api.db
         .from('hot_news')
         .select('*')
         .order('published_at', { ascending: false })
         .limit(HOT_NEWS_DISPLAY_LIMIT);
-        
+
       if (newsData) {
         setHotNews(newsData);
         const counts = await fetchCommentCounts(newsData.map((n: any) => n.id));

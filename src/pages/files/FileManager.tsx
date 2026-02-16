@@ -23,8 +23,9 @@ import {
 } from 'lucide-react';
 import { fileService } from '../../services/fileService';
 import { FileRecord, Folder as FolderType, FileCategory, FileUploadProgress } from '../../types/file';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContextNew';
 import { format } from 'date-fns';
+import { Modal } from '../../components/Modal';
 
 const categoryIcons: Record<FileCategory, React.ReactNode> = {
   document: <FileText className="w-5 h-5" />,
@@ -71,15 +72,15 @@ export default function FileManager() {
           search: searchQuery,
         }),
         fileService.getFolders(currentFolder),
-        user ? fileService.getStorageQuota(user.id) : Promise.resolve({ total_quota: 0, used_quota: 0 }),
+        user ? fileService.getStorageQuota() : Promise.resolve({ total: 0, used: 0 }),
       ]);
 
       setFiles(filesResult.files);
       setFolders(foldersResult);
       setQuota({
-        total: quotaResult.total_quota,
-        used: quotaResult.used_quota,
-        available: quotaResult.total_quota - quotaResult.used_quota,
+        total: quotaResult.total,
+        used: quotaResult.used,
+        available: quotaResult.total - quotaResult.used,
       });
     } catch (error) {
       console.error('Error loading data:', error);
@@ -100,13 +101,26 @@ export default function FileManager() {
     setShowUploadModal(true);
 
     try {
-      await fileService.uploadMultipleFiles(
-        Array.from(files),
-        currentFolder,
-        (progress) => {
-          setUploadProgress(progress);
-        }
-      );
+      const fileArray = Array.from(files);
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        await fileService.uploadFile(
+          file,
+          currentFolder,
+          (progress) => {
+            setUploadProgress(prev => {
+              const newProgress = [...prev];
+              newProgress[i] = {
+                fileId: file.name,
+                fileName: file.name,
+                progress: progress.progress,
+                status: progress.progress === 100 ? 'completed' : 'uploading',
+              };
+              return newProgress;
+            });
+          }
+        );
+      }
 
       // 刷新文件列表
       await loadData();
@@ -431,57 +445,47 @@ export default function FileManager() {
       </div>
 
       {/* 上传进度弹窗 */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">上传进度</h3>
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="p-1 hover:bg-gray-100 rounded"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                {uploadProgress.map((progress, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-700 truncate">
-                          {progress.fileName}
-                        </span>
-                        {progress.status === 'completed' && (
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                        )}
-                        {progress.status === 'error' && (
-                          <AlertCircle className="w-4 h-4 text-red-500" />
-                        )}
-                      </div>
-                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all ${
-                            progress.status === 'error'
-                              ? 'bg-red-500'
-                              : progress.status === 'completed'
-                              ? 'bg-green-500'
-                              : 'bg-blue-500'
-                          }`}
-                          style={{ width: `${progress.progress}%` }}
-                        />
-                      </div>
-                      {progress.error && (
-                        <p className="text-xs text-red-500 mt-1">{progress.error}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
+      <Modal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        title="上传进度"
+        maxWidth="md"
+      >
+        <div className="space-y-3 max-h-80 overflow-y-auto">
+          {uploadProgress.map((progress, index) => (
+            <div key={index} className="flex items-center gap-3">
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-gray-700 truncate">
+                    {progress.fileName}
+                  </span>
+                  {progress.status === 'completed' && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                  {progress.status === 'error' && (
+                    <AlertCircle className="w-4 h-4 text-red-500" />
+                  )}
+                </div>
+                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${
+                      progress.status === 'error'
+                        ? 'bg-red-500'
+                        : progress.status === 'completed'
+                        ? 'bg-green-500'
+                        : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${progress.progress}%` }}
+                  />
+                </div>
+                {progress.error && (
+                  <p className="text-xs text-red-500 mt-1">{progress.error}</p>
+                )}
               </div>
             </div>
-          </div>
+          ))}
         </div>
-      )}
+      </Modal>
 
       {/* 右键菜单 */}
       {contextMenu && (

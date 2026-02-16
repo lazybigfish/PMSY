@@ -28,13 +28,6 @@ export function VersionSelector({
     <div className="bg-white border rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-medium text-gray-900">版本管理</h3>
-        <button
-          onClick={onCreateVersion}
-          className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-800"
-        >
-          <Plus className="w-4 h-4" />
-          新建版本
-        </button>
       </div>
 
       <div className="space-y-2">

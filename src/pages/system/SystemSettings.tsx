@@ -7,7 +7,7 @@ import RoleManagement from './tabs/RoleManagement';
 import MilestoneTemplates from './tabs/MilestoneTemplates';
 import GeneralConfig from './tabs/GeneralConfig';
 import HotNewsConfig from './tabs/HotNewsConfig';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContextNew';
 
 const SystemSettings = () => {
   const { profile } = useAuth();

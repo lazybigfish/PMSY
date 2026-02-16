@@ -46,6 +46,57 @@ async function request<T>(
 }
 
 /**
+ * PostgREST 响应类型
+ */
+interface PostgrestResponse<T> {
+  data: T | null;
+  error: any;
+}
+
+/**
+ * PostgREST 过滤器构建器
+ */
+interface PostgrestFilterBuilder<T = any> {
+  eq: (column: string, value: any) => PostgrestFilterBuilder<T>;
+  neq: (column: string, value: any) => PostgrestFilterBuilder<T>;
+  gt: (column: string, value: any) => PostgrestFilterBuilder<T>;
+  gte: (column: string, value: any) => PostgrestFilterBuilder<T>;
+  lt: (column: string, value: any) => PostgrestFilterBuilder<T>;
+  lte: (column: string, value: any) => PostgrestFilterBuilder<T>;
+  like: (column: string, pattern: string) => PostgrestFilterBuilder<T>;
+  ilike: (column: string, pattern: string) => PostgrestFilterBuilder<T>;
+  in: (column: string, values: any[]) => PostgrestFilterBuilder<T>;
+  is: (column: string, value: any) => PostgrestFilterBuilder<T>;
+  not: (column: string, operator: string, value: any) => PostgrestFilterBuilder<T>;
+  order: (column: string, options?: { ascending?: boolean }) => PostgrestTransformBuilder<T>;
+  limit: (count: number) => Promise<PostgrestResponse<T[]>>;
+  single: () => Promise<PostgrestResponse<T>>;
+  range: (from: number, to: number) => Promise<PostgrestResponse<T[]>>;
+  then: (onFulfilled?: (value: PostgrestResponse<T[]>) => any, onRejected?: (reason: any) => any) => Promise<any>;
+}
+
+/**
+ * PostgREST 转换构建器
+ */
+interface PostgrestTransformBuilder<T = any> {
+  eq: (column: string, value: any) => PostgrestTransformBuilder<T>;
+  neq: (column: string, value: any) => PostgrestTransformBuilder<T>;
+  gt: (column: string, value: any) => PostgrestTransformBuilder<T>;
+  gte: (column: string, value: any) => PostgrestTransformBuilder<T>;
+  lt: (column: string, value: any) => PostgrestTransformBuilder<T>;
+  lte: (column: string, value: any) => PostgrestTransformBuilder<T>;
+  like: (column: string, pattern: string) => PostgrestTransformBuilder<T>;
+  ilike: (column: string, pattern: string) => PostgrestTransformBuilder<T>;
+  in: (column: string, values: any[]) => PostgrestTransformBuilder<T>;
+  is: (column: string, value: any) => PostgrestTransformBuilder<T>;
+  not: (column: string, operator: string, value: any) => PostgrestTransformBuilder<T>;
+  limit: (count: number) => Promise<PostgrestResponse<T[]>>;
+  single: () => Promise<PostgrestResponse<T>>;
+  range: (from: number, to: number) => Promise<PostgrestResponse<T[]>>;
+  then: (onFulfilled?: (value: PostgrestResponse<T[]>) => any, onRejected?: (reason: any) => any) => Promise<any>;
+}
+
+/**
  * Auth API
  */
 export const auth = {
@@ -64,8 +115,11 @@ export const auth = {
         email: string;
         user_metadata: {
           full_name: string | null;
+          username: string | null;
           role: string;
           avatar_url: string | null;
+          department: string | null;
+          position: string | null;
         };
         created_at: string;
       };
@@ -108,8 +162,11 @@ export const auth = {
       email: string;
       user_metadata: {
         full_name: string | null;
+        username: string | null;
         role: string;
         avatar_url: string | null;
+        department: string | null;
+        position: string | null;
       };
       created_at: string;
       updated_at: string;
@@ -150,122 +207,276 @@ export const db = {
   /**
    * 查询数据
    */
-  from: (table: string) => {
-    const buildQuery = (columns: string, filters: Record<string, any> = {}, orderColumn?: string, orderAsc?: boolean, limitCount?: number) => {
+  from: <T = any>(table: string): {
+    select: (columns?: string) => PostgrestFilterBuilder<T>;
+    insert: (data: any | any[]) => Promise<PostgrestResponse<T[]>>;
+    update: (data: any) => { eq: (column: string, value: any) => Promise<PostgrestResponse<T[]>> };
+    delete: () => { eq: (column: string, value: any) => Promise<PostgrestResponse<null>> };
+  } => {
+    const buildQuery = (
+      columns: string,
+      filters: Record<string, any> = {},
+      orderColumn?: string,
+      orderAsc?: boolean,
+      limitCount?: number,
+      rangeFrom?: number,
+      rangeTo?: number
+    ): Promise<PostgrestResponse<T[]>> => {
       const params = new URLSearchParams();
       params.append('select', columns);
-      
+
       Object.entries(filters).forEach(([key, value]) => {
         params.append(key, value);
       });
-      
+
       if (orderColumn) {
         params.append('order', `${orderColumn}.${orderAsc !== false ? 'asc' : 'desc'}`);
       }
-      
+
       if (limitCount) {
         params.append('limit', limitCount.toString());
       }
-      
-      return request<any[]>(`/rest/v1/${table}?${params.toString()}`);
+
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+
+      if (rangeFrom !== undefined && rangeTo !== undefined) {
+        headers['Range'] = `${rangeFrom}-${rangeTo}`;
+        headers['Prefer'] = 'count=exact';
+      }
+
+      const token = getAccessToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      return fetch(`${API_BASE_URL}/rest/v1/${table}?${params.toString()}`, {
+        headers,
+      }).then(async (response) => {
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ message: '请求失败' }));
+          return { data: null, error };
+        }
+        const data = await response.json();
+        return { data, error: null };
+      }).catch((error) => ({ data: null, error }));
+    };
+
+    const createFilterBuilder = (columns: string, filters: Record<string, any> = {}): PostgrestFilterBuilder<T> => {
+      const builder: PostgrestFilterBuilder<T> = {
+        eq: (column: string, value: any) => {
+          filters[`eq.${column}`] = value;
+          return builder;
+        },
+        neq: (column: string, value: any) => {
+          filters[`neq.${column}`] = value;
+          return builder;
+        },
+        gt: (column: string, value: any) => {
+          filters[`gt.${column}`] = value;
+          return builder;
+        },
+        gte: (column: string, value: any) => {
+          filters[`gte.${column}`] = value;
+          return builder;
+        },
+        lt: (column: string, value: any) => {
+          filters[`lt.${column}`] = value;
+          return builder;
+        },
+        lte: (column: string, value: any) => {
+          filters[`lte.${column}`] = value;
+          return builder;
+        },
+        like: (column: string, pattern: string) => {
+          filters[`like.${column}`] = pattern;
+          return builder;
+        },
+        ilike: (column: string, pattern: string) => {
+          filters[`ilike.${column}`] = pattern;
+          return builder;
+        },
+        in: (column: string, values: any[]) => {
+          filters[`in.${column}`] = values.join(',');
+          return builder;
+        },
+        is: (column: string, value: any) => {
+          filters[`is.${column}`] = value;
+          return builder;
+        },
+        not: (column: string, operator: string, value: any) => {
+          filters[`not.${column}`] = `${operator}.${value}`;
+          return builder;
+        },
+        order: (column: string, options?: { ascending?: boolean }) => {
+          return createTransformBuilder(columns, filters, column, options?.ascending !== false);
+        },
+        limit: (count: number) => buildQuery(columns, filters, undefined, undefined, count),
+        single: () => buildQuery(columns, filters).then(r => ({ data: r.data?.[0] || null, error: r.error })),
+        range: (from: number, to: number) => buildQuery(columns, filters, undefined, undefined, undefined, from, to),
+        then: (onFulfilled?: any, onRejected?: any) => buildQuery(columns, filters).then(onFulfilled, onRejected),
+      };
+      return builder;
+    };
+
+    const createTransformBuilder = (
+      columns: string,
+      filters: Record<string, any> = {},
+      orderColumn?: string,
+      orderAsc?: boolean
+    ): PostgrestTransformBuilder<T> => {
+      const builder: PostgrestTransformBuilder<T> = {
+        eq: (column: string, value: any) => {
+          filters[`eq.${column}`] = value;
+          return builder;
+        },
+        neq: (column: string, value: any) => {
+          filters[`neq.${column}`] = value;
+          return builder;
+        },
+        gt: (column: string, value: any) => {
+          filters[`gt.${column}`] = value;
+          return builder;
+        },
+        gte: (column: string, value: any) => {
+          filters[`gte.${column}`] = value;
+          return builder;
+        },
+        lt: (column: string, value: any) => {
+          filters[`lt.${column}`] = value;
+          return builder;
+        },
+        lte: (column: string, value: any) => {
+          filters[`lte.${column}`] = value;
+          return builder;
+        },
+        like: (column: string, pattern: string) => {
+          filters[`like.${column}`] = pattern;
+          return builder;
+        },
+        ilike: (column: string, pattern: string) => {
+          filters[`ilike.${column}`] = pattern;
+          return builder;
+        },
+        in: (column: string, values: any[]) => {
+          filters[`in.${column}`] = values.join(',');
+          return builder;
+        },
+        is: (column: string, value: any) => {
+          filters[`is.${column}`] = value;
+          return builder;
+        },
+        not: (column: string, operator: string, value: any) => {
+          filters[`not.${column}`] = `${operator}.${value}`;
+          return builder;
+        },
+        limit: (count: number) => buildQuery(columns, filters, orderColumn, orderAsc, count),
+        single: () => buildQuery(columns, filters, orderColumn, orderAsc).then(r => ({ data: r.data?.[0] || null, error: r.error })),
+        range: (from: number, to: number) => buildQuery(columns, filters, orderColumn, orderAsc, undefined, from, to),
+        then: (onFulfilled?: any, onRejected?: any) => buildQuery(columns, filters, orderColumn, orderAsc).then(onFulfilled, onRejected),
+      };
+      return builder;
     };
 
     return {
-      select: (columns: string = '*') => {
-        const filters: Record<string, any> = {};
-        
-        const chainable = {
-          eq: (column: string, value: any) => {
-            filters[`eq.${column}`] = value;
-            return chainable;
-          },
-          neq: (column: string, value: any) => {
-            filters[`neq.${column}`] = value;
-            return chainable;
-          },
-          gt: (column: string, value: any) => {
-            filters[`gt.${column}`] = value;
-            return chainable;
-          },
-          gte: (column: string, value: any) => {
-            filters[`gte.${column}`] = value;
-            return chainable;
-          },
-          lt: (column: string, value: any) => {
-            filters[`lt.${column}`] = value;
-            return chainable;
-          },
-          lte: (column: string, value: any) => {
-            filters[`lte.${column}`] = value;
-            return chainable;
-          },
-          like: (column: string, pattern: string) => {
-            filters[`like.${column}`] = pattern;
-            return chainable;
-          },
-          ilike: (column: string, pattern: string) => {
-            filters[`ilike.${column}`] = pattern;
-            return chainable;
-          },
-          in: (column: string, values: any[]) => {
-            filters[`in.${column}`] = values.join(',');
-            return chainable;
-          },
-          is: (column: string, value: any) => {
-            filters[`is.${column}`] = value;
-            return chainable;
-          },
-          order: (column: string, options?: { ascending?: boolean }) => {
-            return {
-              limit: (count: number) => {
-                return buildQuery(columns, filters, column, options?.ascending !== false, count);
-              },
-              then: (onFulfilled?: (value: any) => any, onRejected?: (reason: any) => any) => {
-                return buildQuery(columns, filters, column, options?.ascending !== false).then(onFulfilled, onRejected);
-              }
-            };
-          },
-          limit: (count: number) => {
-            return buildQuery(columns, filters, undefined, undefined, count);
-          },
-          single: () => {
-            return buildQuery(columns, filters).then(r => r[0] || null);
-          },
-          then: (onFulfilled?: (value: any) => any, onRejected?: (reason: any) => any) => {
-            return buildQuery(columns, filters).then(onFulfilled, onRejected);
-          }
-        };
-        
-        return chainable;
-      },
-      insert: (data: any | any[]) =>
-        request<any[]>(`/rest/v1/${table}`, {
+      select: (columns: string = '*') => createFilterBuilder(columns),
+      insert: (data: any | any[]): Promise<PostgrestResponse<T[]>> =>
+        request<T[]>(`/rest/v1/${table}`, {
           method: 'POST',
           body: JSON.stringify(data),
+        }).then(data => ({ data, error: null })).catch(error => {
+          console.error(`[API] Insert error to ${table}:`, error);
+          throw error;
         }),
       update: (data: any) => ({
-        eq: (column: string, value: any) =>
-          request<any[]>(`/rest/v1/${table}?eq.${column}=${value}`, {
+        eq: (column: string, value: any): Promise<PostgrestResponse<T[]>> =>
+          request<T[]>(`/rest/v1/${table}?eq.${column}=${value}`, {
             method: 'PATCH',
             body: JSON.stringify(data),
+          }).then(data => ({ data, error: null })).catch(error => {
+            console.error(`[API] Update error to ${table}:`, error);
+            throw error;
           }),
       }),
       delete: () => ({
-        eq: (column: string, value: any) =>
+        eq: (column: string, value: any): Promise<PostgrestResponse<null>> =>
           request(`/rest/v1/${table}?eq.${column}=${value}`, {
             method: 'DELETE',
+          }).then(() => ({ data: null, error: null })).catch(error => {
+            console.error(`[API] Delete error from ${table}:`, error);
+            throw error;
           }),
       }),
     };
   },
+
+  /**
+   * 调用 PostgreSQL 函数/RPC
+   */
+  rpc: <T = any>(fn: string, params?: Record<string, any>): Promise<PostgrestResponse<T>> => {
+    const token = getAccessToken();
+    return fetch(`${API_BASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(params || {}),
+    }).then(async (response) => {
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'RPC 调用失败' }));
+        return { data: null, error };
+      }
+      // RPC 可能返回空响应
+      if (response.status === 204) {
+        return { data: null, error: null };
+      }
+      const data = await response.json();
+      return { data, error: null };
+    }).catch((error) => ({ data: null, error }));
+  },
 };
+
+/**
+ * Storage Bucket 类型
+ */
+interface StorageBucket {
+  id: string;
+  name: string;
+  owner: string;
+  created_at: string;
+  updated_at: string;
+  public: boolean;
+}
 
 /**
  * Storage API
  */
 export const storage = {
+  /**
+   * 列出所有存储桶
+   */
+  listBuckets: (): Promise<{ data: StorageBucket[] | null; error: any }> => {
+    const token = getAccessToken();
+    return fetch(`${API_BASE_URL}/storage/v1/bucket`, {
+      headers: {
+        'Accept': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    }).then(async (response) => {
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: '获取存储桶列表失败' }));
+        return { data: null, error };
+      }
+      const data = await response.json();
+      return { data, error: null };
+    }).catch((error) => ({ data: null, error }));
+  },
+
   from: (bucket: string) => ({
-    upload: async (path: string, file: File) => {
+    upload: async (path: string, file: File): Promise<{ data: { path: string } | null; error: any }> => {
       const formData = new FormData();
       formData.append('file', file);
 
@@ -280,27 +491,31 @@ export const storage = {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ message: '上传失败' }));
-        throw new Error(error.message);
+        return { data: null, error };
       }
 
-      return response.json();
+      const data = await response.json();
+      return { data: { path: data?.Key || path }, error: null };
     },
 
-    download: (path: string) =>
+    download: (path: string): Promise<Blob> =>
       request<Blob>(`/storage/v1/object/${bucket}/${path}`, {
         headers: {
           'Accept': '*/*',
         },
       }),
 
-    getPublicUrl: (path: string) =>
-      `${API_BASE_URL}/storage/v1/object/public/${bucket}/${path}`,
+    getPublicUrl: (path: string): { data: { publicUrl: string } } => ({
+      data: {
+        publicUrl: `${API_BASE_URL}/storage/v1/object/public/${bucket}/${path}`
+      }
+    }),
 
-    remove: (paths: string[]) =>
+    remove: (paths: string[]): Promise<{ data: any; error: any }> =>
       request(`/storage/v1/object/delete/${bucket}`, {
         method: 'POST',
         body: JSON.stringify({ prefixes: paths }),
-      }),
+      }).then(data => ({ data, error: null })).catch(error => ({ data: null, error })),
   }),
 };
 
@@ -314,7 +529,7 @@ export const api = {
   request,
 };
 
-// 为了兼容 supabase.ts 的导入，提供 apiClient
+// API 客户端
 // 使用 axios 风格的 API 调用方式
 export const apiClient = {
   get: async (endpoint: string, options?: { params?: any }) => {
@@ -331,15 +546,22 @@ export const apiClient = {
         'Authorization': `Bearer ${getAccessToken() || ''}`,
       },
     }).then(r => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) {
+        // 404 视为空数据
+        if (r.status === 404) {
+          return [];
+        }
+        throw new Error(`HTTP ${r.status}`);
+      }
       return r.json();
     });
   },
   post: async (endpoint: string, data?: any, options?: any) => {
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${getAccessToken() || ''}`,
+      ...options?.headers, // 合并传入的 headers
     };
-    
+
     let body: BodyInit | undefined;
     if (data instanceof FormData) {
       body = data;
@@ -347,7 +569,7 @@ export const apiClient = {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify(data);
     }
-    
+
     return fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers,

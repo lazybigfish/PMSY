@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { Plus, Trash2, Edit2, FileText } from 'lucide-react';
+import { ModalForm } from '../../../components/Modal';
 
 interface ReportTemplate {
   id: string;
@@ -23,7 +24,7 @@ export default function ReportTemplates() {
 
   const fetchTemplates = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('report_templates')
         .select('*')
         .order('created_at', { ascending: false });
@@ -41,7 +42,7 @@ export default function ReportTemplates() {
     if (!confirm('确定要删除这个模板吗？')) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('report_templates')
         .delete()
         .eq('id', id);
@@ -59,7 +60,7 @@ export default function ReportTemplates() {
       const configJson = currentTemplate.config ? JSON.parse(currentTemplate.config) : {};
       
       if (isEditing && currentTemplate.id) {
-        const { error } = await supabase
+        const { error } = await api.db
           .from('report_templates')
           .update({
             name: currentTemplate.name,
@@ -69,7 +70,7 @@ export default function ReportTemplates() {
           .eq('id', currentTemplate.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { error } = await api.db
           .from('report_templates')
           .insert([{
             name: currentTemplate.name,
@@ -171,68 +172,51 @@ export default function ReportTemplates() {
       )}
 
       {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
-          <div className="bg-white rounded-lg max-w-lg w-full p-6">
-            <h2 className="text-xl font-bold mb-4">
-              {isEditing ? '编辑模板' : '新增模板'}
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">模板名称</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  value={currentTemplate.name || ''}
-                  onChange={e => setCurrentTemplate({...currentTemplate, name: e.target.value})}
-                />
-              </div>
+      <ModalForm
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleSubmit}
+        title={isEditing ? '编辑模板' : '新增模板'}
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">模板名称</label>
+            <input
+              type="text"
+              required
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+              value={currentTemplate.name || ''}
+              onChange={e => setCurrentTemplate({...currentTemplate, name: e.target.value})}
+            />
+          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">配置 (JSON)</label>
-                <textarea
-                  required
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                  rows={8}
-                  value={currentTemplate.config || ''}
-                  onChange={e => setCurrentTemplate({...currentTemplate, config: e.target.value})}
-                />
-                <p className="text-xs text-gray-500 mt-1">请输入有效的 JSON 格式配置。</p>
-              </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">配置 (JSON)</label>
+            <textarea
+              required
+              className="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-sm focus:ring-indigo-500 focus:border-indigo-500"
+              rows={8}
+              value={currentTemplate.config || ''}
+              onChange={e => setCurrentTemplate({...currentTemplate, config: e.target.value})}
+            />
+            <p className="text-xs text-gray-500 mt-1">请输入有效的 JSON 格式配置。</p>
+          </div>
 
-              <div className="flex items-center">
-                <input
-                  id="is_active"
-                  type="checkbox"
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  checked={currentTemplate.is_active}
-                  onChange={e => setCurrentTemplate({...currentTemplate, is_active: e.target.checked})}
-                />
-                <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
-                  启用此模板
-                </label>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                >
-                  保存
-                </button>
-              </div>
-            </form>
+          <div className="flex items-center">
+            <input
+              id="is_active"
+              type="checkbox"
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              checked={currentTemplate.is_active}
+              onChange={e => setCurrentTemplate({...currentTemplate, is_active: e.target.checked})}
+            />
+            <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
+              启用此模板
+            </label>
           </div>
         </div>
-      )}
+      </ModalForm>
     </div>
   );
 }

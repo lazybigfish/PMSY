@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Loader2, MessageSquare, Filter } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { api } from '../../lib/api';
+import { useAuth } from '../../context/AuthContextNew';
 import { ForumPost, ForumCategory } from '../../types';
 import { ForumPostList } from './components/ForumPostList';
 import { ModalForm } from '../../components/Modal';
@@ -40,33 +40,38 @@ export default function ForumTab() {
   const loadPosts = async () => {
     try {
       setLoading(true);
-      let query = supabase
+      let query = api.db
         .from('forum_posts')
-        .select('*')
-        .order('is_pinned', { ascending: false })
-        .order('last_reply_at', { ascending: false });
+        .select('*');
 
       if (selectedCategory !== 'all') {
         query = query.eq('category', selectedCategory);
       }
 
-      if (searchQuery) {
-        query = query.or(`title.ilike.%${searchQuery}%,content->>text.ilike.%${searchQuery}%`);
-      }
-
       const { data: postsData, error } = await query;
       if (error) throw error;
 
+      // 搜索过滤 - 在内存中进行
+      let filteredPosts = postsData || [];
+      if (searchQuery) {
+        const searchLower = searchQuery.toLowerCase();
+        filteredPosts = filteredPosts.filter(
+          (post: any) =>
+            post.title?.toLowerCase().includes(searchLower) ||
+            post.content?.text?.toLowerCase().includes(searchLower)
+        );
+      }
+
       // Fetch user info
       const userIds = new Set<string>();
-      postsData?.forEach(post => {
+      filteredPosts?.forEach((post: any) => {
         if (post.author_id) userIds.add(post.author_id);
         if (post.last_reply_by) userIds.add(post.last_reply_by);
       });
 
       const userMap = new Map<string, { id: string; full_name: string; avatar_url?: string }>();
       if (userIds.size > 0) {
-        const { data: usersData } = await supabase
+        const { data: usersData } = await api.db
           .from('profiles')
           .select('id, full_name, avatar_url')
           .in('id', Array.from(userIds));
@@ -76,14 +81,14 @@ export default function ForumTab() {
       // Fetch liked posts for current user
       let likedPostIds = new Set<string>();
       if (user) {
-        const { data: likesData } = await supabase
+        const { data: likesData } = await api.db
           .from('forum_post_likes')
           .select('post_id')
           .eq('user_id', user.id);
         likesData?.forEach(like => likedPostIds.add(like.post_id));
       }
 
-      const postsWithUsers = (postsData || []).map(post => {
+      const postsWithUsers = (filteredPosts || []).map((post: any) => {
         // 确保 like_count 是数字类型
         const likeCount = typeof post.like_count === 'number' ? post.like_count : 0;
         return {
@@ -114,7 +119,7 @@ export default function ForumTab() {
       setSubmitting(true);
       const now = new Date().toISOString();
 
-      const { data, error } = await supabase.from('forum_posts').insert({
+      const { data: newPostData } = await api.db.from('forum_posts').insert({
         title: formTitle.trim(),
         content: { text: formContent.trim() },
         author_id: user.id,
@@ -125,9 +130,7 @@ export default function ForumTab() {
         reply_count: 0,
         last_reply_at: now,
         last_reply_by: user.id,
-      }).select().single();
-
-      if (error) throw error;
+      });
 
       setShowCreateModal(false);
       setFormTitle('');
@@ -135,8 +138,8 @@ export default function ForumTab() {
       loadPosts();
       
       // 跳转到新创建的帖子详情页
-      if (data?.id) {
-        navigate(`/water/forum/${data.id}`);
+      if (newPostData?.[0]?.id) {
+        navigate(`/water/forum/${newPostData[0].id}`);
       }
     } catch (error) {
       console.error('Error creating post:', error);
@@ -149,14 +152,14 @@ export default function ForumTab() {
   const togglePin = async (post: ForumPost, e: React.MouseEvent) => {
     e.stopPropagation();
     const newPinned = !post.is_pinned;
-    await supabase.from('forum_posts').update({ is_pinned: newPinned }).eq('id', post.id);
+    await api.db.from('forum_posts').update({ is_pinned: newPinned }).eq('id', post.id);
     loadPosts();
   };
 
   const toggleEssence = async (post: ForumPost, e: React.MouseEvent) => {
     e.stopPropagation();
     const newEssence = !post.is_essence;
-    await supabase.from('forum_posts').update({ is_essence: newEssence }).eq('id', post.id);
+    await api.db.from('forum_posts').update({ is_essence: newEssence }).eq('id', post.id);
     loadPosts();
   };
 
@@ -164,8 +167,8 @@ export default function ForumTab() {
     e.stopPropagation();
     if (!confirm(`确定要删除帖子「${post.title}」吗？`)) return;
 
-    await supabase.from('forum_replies').delete().eq('post_id', post.id);
-    await supabase.from('forum_posts').delete().eq('id', post.id);
+    await api.db.from('forum_replies').delete().eq('post_id', post.id);
+    await api.db.from('forum_posts').delete().eq('id', post.id);
     loadPosts();
   };
 
@@ -192,15 +195,19 @@ export default function ForumTab() {
       if (post.is_liked) {
         // Unlike - 只需删除点赞记录，触发器会自动更新 like_count
         console.log('Unliking post:', postId);
-        const { error: deleteError } = await supabase
+        const { data: likes } = await api.db
           .from('forum_post_likes')
-          .delete()
+          .select('*')
           .eq('post_id', postId)
           .eq('user_id', user.id);
         
-        if (deleteError) {
-          console.error('Error deleting like:', deleteError);
-          return;
+        if (likes && likes.length > 0) {
+          for (const like of likes) {
+            await api.db
+              .from('forum_post_likes')
+              .delete()
+              .eq('id', like.id);
+          }
         }
 
         console.log('Unlike successful, updating local state');
@@ -221,7 +228,7 @@ export default function ForumTab() {
       } else {
         // Like - 只需插入点赞记录，触发器会自动更新 like_count
         console.log('Liking post:', postId);
-        const { error: insertError } = await supabase
+        const { error: insertError } = await api.db
           .from('forum_post_likes')
           .insert({ post_id: postId, user_id: user.id });
         
@@ -380,7 +387,7 @@ export default function ForumTab() {
 
                   {/* Content Preview */}
                   <p className="text-sm text-dark-600 mt-2 line-clamp-2 leading-relaxed">
-                    {typeof post.content === 'string' ? post.content : post.content?.text || ''}
+                    {typeof post.content === 'string' ? post.content : (post.content as any)?.text || ''}
                   </p>
 
                   {/* Meta Info */}

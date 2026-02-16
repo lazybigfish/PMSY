@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { AIProvider, AIRole } from '../../../types';
 import { Loader2, Trash2 } from 'lucide-react';
 
@@ -20,8 +20,8 @@ const AIConfig = () => {
   const fetchConfig = async () => {
     try {
       setLoading(true);
-      const { data: providersData } = await supabase.from('ai_providers').select('*');
-      const { data: rolesData } = await supabase.from('ai_roles').select('*');
+      const { data: providersData } = await api.db.from('ai_providers').select('*');
+      const { data: rolesData } = await api.db.from('ai_roles').select('*');
       setProviders(providersData || []);
       setRoles(rolesData || []);
     } catch (error) {
@@ -33,7 +33,7 @@ const AIConfig = () => {
 
   const handleAddProvider = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('ai_providers').insert([newProvider]);
+    const { error } = await api.db.from('ai_providers').insert([newProvider]);
     if (!error) {
       setNewProvider({ name: '', api_endpoint: '', api_key: '', model: '' });
       fetchConfig();
@@ -42,7 +42,7 @@ const AIConfig = () => {
 
   const handleAddRole = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('ai_roles').insert([newRole]);
+    const { error } = await api.db.from('ai_roles').insert([newRole]);
     if (!error) {
       setNewRole({ name: '', description: '', system_prompt: '' });
       fetchConfig();
@@ -51,13 +51,13 @@ const AIConfig = () => {
 
   const handleDeleteProvider = async (id: string) => {
     if (!confirm('确认删除？')) return;
-    await supabase.from('ai_providers').delete().eq('id', id);
+    await api.db.from('ai_providers').delete().eq('id', id);
     fetchConfig();
   };
 
   const handleDeleteRole = async (id: string) => {
     if (!confirm('确认删除？')) return;
-    await supabase.from('ai_roles').delete().eq('id', id);
+    await api.db.from('ai_roles').delete().eq('id', id);
     fetchConfig();
   };
 

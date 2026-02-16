@@ -1,13 +1,9 @@
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { roleService } from '../../../services';
+import type { AppRole } from '../../../types';
 import { Shield, Plus, Edit2, Trash2, X, Check, Loader2 } from 'lucide-react';
-
-interface AppRole {
-  key: string;
-  name: string;
-  description: string;
-}
+import { ModalForm } from '../../../components/Modal';
 
 const MODULES = [
   { key: 'dashboard', name: '工作台', description: '项目概览、统计信息、快捷入口' },
@@ -41,26 +37,12 @@ export default function RoleManagement() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Roles
-      const { data: rolesData, error: rolesError } = await supabase.from('app_roles').select('*').order('name');
-      
-      if (rolesError) {
-        console.warn('Error fetching roles (tables might be missing):', rolesError);
-        // Fallback mock data if table missing
-        if (rolesError.code === '42P01') { // undefined_table
-             alert('错误: 数据库表尚未创建。请联系管理员运行迁移脚本 "20260210200000_add_role_permissions.sql"');
-        }
-      } else {
-        setRoles(rolesData || []);
-      }
+      // 1. Fetch Roles using roleService
+      const rolesData = await roleService.getRoles();
+      setRoles(rolesData);
 
-      // 2. Fetch User Counts
-      const { data: profiles } = await supabase.from('profiles').select('role');
-      const counts: Record<string, number> = {};
-      profiles?.forEach((p: { role?: string | null }) => {
-        const r = p.role || 'unknown';
-        counts[r] = (counts[r] || 0) + 1;
-      });
+      // 2. Fetch User Counts using roleService
+      const counts = await roleService.getRoleCounts();
       setRoleCounts(counts);
 
     } catch (err) {
@@ -74,15 +56,9 @@ export default function RoleManagement() {
     setCurrentRole(role);
     setFormData({ key: role.key, name: role.name, description: role.description || '' });
     
-    // Fetch permissions for this role
-    const { data } = await supabase
-      .from('role_permissions')
-      .select('module_key')
-      .eq('role_key', role.key);
-      
-    const perms = new Set<string>();
-    data?.forEach((p: { module_key: string }) => perms.add(p.module_key));
-    setSelectedPermissions(perms);
+    // Fetch permissions for this role using roleService
+    const permissions = await roleService.getRolePermissions(role.key);
+    setSelectedPermissions(new Set(permissions));
     
     setIsModalOpen(true);
   };
@@ -102,29 +78,24 @@ export default function RoleManagement() {
 
     setSaving(true);
     try {
-      // 1. Upsert Role
-      const { error: roleError } = await supabase.from('app_roles').upsert({
-        key: formData.key,
-        name: formData.name,
-        description: formData.description
-      });
-
-      if (roleError) throw roleError;
-
-      // 2. Update Permissions
-      // First delete existing
-      await supabase.from('role_permissions').delete().eq('role_key', formData.key);
-      
-      // Then insert new
-      const permsToInsert = Array.from(selectedPermissions).map(mKey => ({
-        role_key: formData.key,
-        module_key: mKey
-      }));
-      
-      if (permsToInsert.length > 0) {
-        const { error: permError } = await supabase.from('role_permissions').insert(permsToInsert);
-        if (permError) throw permError;
+      // 1. Create or Update Role
+      if (currentRole) {
+        // Update existing role
+        await roleService.updateRole(formData.key, {
+          name: formData.name,
+          description: formData.description,
+        });
+      } else {
+        // Create new role
+        await roleService.createRole({
+          key: formData.key,
+          name: formData.name,
+          description: formData.description,
+        });
       }
+
+      // 2. Save Role Permissions
+      await roleService.saveRolePermissions(formData.key, Array.from(selectedPermissions));
 
       alert('保存成功');
       setIsModalOpen(false);
@@ -198,112 +169,90 @@ export default function RoleManagement() {
       )}
 
       {/* Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
-          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">{currentRole ? '编辑角色权限' : '新增角色'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-6 h-6" />
-              </button>
+      <ModalForm
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleSave}
+        title={currentRole ? '编辑角色权限' : '新增角色'}
+        maxWidth="2xl"
+        isSubmitting={saving}
+      >
+        <div className="space-y-6 max-h-[70vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">角色标识 (Key)</label>
+              <input
+                type="text"
+                disabled={!!currentRole}
+                className={`w-full border border-gray-300 rounded-md px-3 py-2 ${currentRole ? 'bg-gray-100' : ''}`}
+                placeholder="例如: manager"
+                value={formData.key}
+                onChange={e => setFormData({...formData, key: e.target.value})}
+              />
+              <p className="text-xs text-gray-500 mt-1">系统内部使用的唯一标识，创建后不可修改</p>
             </div>
-
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">角色标识 (Key)</label>
-                  <input
-                    type="text"
-                    disabled={!!currentRole} // Cannot change key when editing
-                    className={`w-full border border-gray-300 rounded-md px-3 py-2 ${currentRole ? 'bg-gray-100' : ''}`}
-                    placeholder="例如: manager"
-                    value={formData.key}
-                    onChange={e => setFormData({...formData, key: e.target.value})}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">系统内部使用的唯一标识，创建后不可修改</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">角色名称</label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="例如: 项目经理"
-                    value={formData.name}
-                    onChange={e => setFormData({...formData, name: e.target.value})}
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
-                <textarea
-                  className="w-full border border-gray-300 rounded-md px-3 py-2"
-                  rows={2}
-                  value={formData.description}
-                  onChange={e => setFormData({...formData, description: e.target.value})}
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-gray-900">模块访问权限</h4>
-                  <div className="text-xs text-gray-500">
-                    已选择 {selectedPermissions.size} / {MODULES.length} 个模块
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {MODULES.map(module => (
-                    <div 
-                      key={module.key}
-                      onClick={() => togglePermission(module.key)}
-                      className={`
-                        flex items-start p-3 rounded-lg border cursor-pointer transition-colors
-                        ${selectedPermissions.has(module.key) 
-                          ? 'border-indigo-500 bg-indigo-50' 
-                          : 'border-gray-200 hover:border-gray-300 bg-white'}
-                      `}
-                    >
-                      <div className={`
-                        w-5 h-5 rounded border flex items-center justify-center mr-3 mt-0.5 flex-shrink-0
-                        ${selectedPermissions.has(module.key)
-                          ? 'bg-indigo-600 border-indigo-600 text-white'
-                          : 'border-gray-300 bg-white'}
-                      `}>
-                        {selectedPermissions.has(module.key) && <Check className="w-3 h-3" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium text-gray-900 block">{module.name}</span>
-                        <span className="text-xs text-gray-500 block mt-0.5">{module.description}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500 mt-3">
-                  提示：勾选模块后，该角色的用户将在导航栏中看到并访问这些模块
-                </p>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-100">
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  disabled={saving}
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleSave}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex items-center"
-                  disabled={saving}
-                >
-                  {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  保存配置
-                </button>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">角色名称</label>
+              <input
+                type="text"
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                placeholder="例如: 项目经理"
+                value={formData.name}
+                onChange={e => setFormData({...formData, name: e.target.value})}
+              />
             </div>
           </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+            <textarea
+              className="w-full border border-gray-300 rounded-md px-3 py-2"
+              rows={2}
+              value={formData.description}
+              onChange={e => setFormData({...formData, description: e.target.value})}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-medium text-gray-900">模块访问权限</h4>
+              <div className="text-xs text-gray-500">
+                已选择 {selectedPermissions.size} / {MODULES.length} 个模块
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {MODULES.map(module => (
+                <div 
+                  key={module.key}
+                  onClick={() => togglePermission(module.key)}
+                  className={`
+                    flex items-start p-3 rounded-lg border cursor-pointer transition-colors
+                    ${selectedPermissions.has(module.key) 
+                      ? 'border-indigo-500 bg-indigo-50' 
+                      : 'border-gray-200 hover:border-gray-300 bg-white'}
+                  `}
+                >
+                  <div className={`
+                    w-5 h-5 rounded border flex items-center justify-center mr-3 mt-0.5 flex-shrink-0
+                    ${selectedPermissions.has(module.key)
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'border-gray-300 bg-white'}
+                  `}>
+                    {selectedPermissions.has(module.key) && <Check className="w-3 h-3" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-gray-900 block">{module.name}</span>
+                    <span className="text-xs text-gray-500 block mt-0.5">{module.description}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-3">
+              提示：勾选模块后，该角色的用户将在导航栏中看到并访问这些模块
+            </p>
+          </div>
         </div>
-      )}
+      </ModalForm>
     </div>
   );
 }

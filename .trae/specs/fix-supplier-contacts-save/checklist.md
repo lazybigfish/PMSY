@@ -1,0 +1,6 @@
+- [x] supplier_contacts 表包含所有必要字段（created_by, updated_by）
+- [x] SupplierFormPage.tsx 联系人保存逻辑正确处理错误
+- [x] ClientFormPage.tsx 联系人保存逻辑正确处理错误
+- [x] 新增供应商时联系人信息能正确保存
+- [x] 新增客户时联系人信息能正确保存
+- [x] 保存失败时显示具体错误信息

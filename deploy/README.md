@@ -8,9 +8,18 @@ deploy/
 ├── fresh-install/           # 🆕 全新部署目录
 │   ├── README.md           # 全新部署说明
 │   └── deploy.sh           # 全新部署脚本
-└── update/                 # 🔄 更新部署目录
-    ├── README.md          # 更新部署说明
-    └── deploy.sh          # 更新部署脚本
+├── update/                 # 🔄 更新部署目录
+│   ├── README.md          # 更新部署说明
+│   └── deploy.sh          # 更新部署脚本
+├── scripts/                # 📜 辅助脚本
+│   ├── create-admin-user.sh
+│   ├── generate-jwt-keys.sh
+│   └── ...
+├── config/                 # ⚙️ 部署配置
+│   └── nginx.conf
+└── docs/                   # 📚 部署文档
+    ├── DEPLOY_GUIDE.md
+    └── DEPLOY_TROUBLESHOOTING.md
 ```
 
 ## 快速选择
@@ -32,16 +41,15 @@ deploy/
 - 🔄 重新初始化数据库
 - 🆕 创建全新环境
 
-**使用场景**:
-- 新服务器首次安装
-- 完全重新部署（清空数据）
-- 从其他系统迁移
+**支持三种部署模式**:
+1. **在线部署** - 服务器可连接 Docker Hub
+2. **半离线部署** - 服务器无法连接 Docker Hub
+3. **完全离线部署** - 生成离线部署包
 
 **使用方法**:
 ```bash
-# 在服务器上执行
-cd /opt/pmsy
-sudo ./deploy.sh
+# 在开发机执行
+./deploy/fresh-install/deploy.sh
 ```
 
 详见: [fresh-install/README.md](fresh-install/README.md)
@@ -74,6 +82,20 @@ sudo ./deploy.sh
 
 ---
 
+## 系统架构
+
+PMSY 使用以下服务：
+
+| 服务 | 说明 | 端口 |
+|------|------|------|
+| PostgreSQL | 数据库 | 5432 |
+| Redis | 缓存 | 6379 |
+| MinIO | 文件存储 | 9000/9001 |
+| API | 后端服务 | 3001 |
+| Nginx | 前端服务 | 80/443 |
+
+---
+
 ## 对比表
 
 | 特性 | fresh-install | update |
@@ -81,8 +103,8 @@ sudo ./deploy.sh
 | **数据保留** | ❌ 清空所有数据 | ✅ 保留所有数据 |
 | **数据库** | 🔄 重新初始化 | 💾 保留现有 |
 | **用户数据** | ❌ 删除 | ✅ 保留 |
-| **执行位置** | 服务器 | 开发机 |
-| **执行时间** | 5-10 分钟 | 1-2 分钟 |
+| **执行位置** | 开发机 | 开发机 |
+| **执行时间** | 5-15 分钟 | 1-2 分钟 |
 | **风险等级** | 🔴 高 | 🟢 低 |
 | **适用场景** | 新安装/重装 | 日常更新 |
 
@@ -110,7 +132,7 @@ sudo ./deploy.sh
 │   🆕 全新部署           │  │   🔄 更新部署           │
 │                         │  │                         │
 │ 1. 清空现有数据         │  │ 1. 保留现有数据         │
-│ 2. 初始化数据库         │  │ 2. 构建前端             │
+│ 2. 初始化数据库         │  │ 2. 构建前端和后端       │
 │ 3. 启动所有服务         │  │ 3. 复制到服务器         │
 │                         │  │ 4. 重启服务             │
 │ 风险: 🔴 高             │  │ 风险: 🟢 低             │
@@ -141,7 +163,7 @@ sudo ./deploy.sh
 ### ✅ 使用 update 前建议确认
 
 - [ ] 代码已提交到版本控制
-- [ ] `.env.production` 配置正确
+- [ ] `config/env/.env.production` 配置正确
 - [ ] 已备份数据（建议）
 - [ ] 了解更新内容
 - [ ] 已阅读 [update/README.md](update/README.md)
@@ -160,16 +182,13 @@ sudo ./deploy.sh
 
 **A:** 是的！`fresh-install` 会清空所有数据，包括：
 - PostgreSQL 数据库
+- Redis 缓存
+- MinIO 文件存储
 - 所有用户数据
-- 所有配置文件
 
 ### Q: 使用 update 会删除我的数据吗？
 
 **A:** 不会！`update` 只更新代码，保留所有数据。
-
-### Q: 我可以从 update 切换到 fresh-install 吗？
-
-**A:** 可以，但要清楚 `fresh-install` 会清空数据。
 
 ### Q: 部署失败了怎么办？
 
@@ -183,6 +202,6 @@ sudo ./deploy.sh
 
 ## 相关文档
 
-- [项目部署文档](../docs/DEPLOY.md) - 详细部署指南
-- [环境配置说明](../config/env/.env.supabase) - 生产环境配置示例
+- [部署指南](docs/DEPLOY_GUIDE.md) - 详细部署指南
+- [生产环境配置](../config/env/.env.production.example) - 生产环境配置示例
 - [开发环境配置](../config/env/.env.example) - 开发环境配置示例

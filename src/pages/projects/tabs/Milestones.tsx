@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { Flag, Plus, Search, Download, Archive } from 'lucide-react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../context/AuthContextNew';
 import { MilestoneSidebar } from '../components/MilestoneSidebar';
 import { MilestoneTaskList } from '../components/MilestoneTaskList';
+import { ModalForm } from '../../../components/Modal';
 import JSZip from 'jszip';
 
 interface Milestone {
@@ -73,28 +74,39 @@ export default function Milestones({ projectId }: MilestonesProps) {
   const fetchMilestones = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('project_milestones')
-        .select('*, milestone_tasks(id, is_completed)')
+        .select('*')
         .eq('project_id', projectId)
         .order('phase_order', { ascending: true });
 
       if (error) throw error;
-      
-      const milestonesData = (data || []).map((m: { milestone_tasks?: { is_completed: boolean }[] } & Milestone) => {
-        const tasks = m.milestone_tasks || [];
-        const total = tasks.length;
-        const completed = tasks.filter((t) => t.is_completed).length;
-        const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-        return { ...m, progress };
-      });
 
-      setMilestones(milestonesData);
-      
+      const milestonesData = (data || []) as Milestone[];
+
+      // 获取每个里程碑的任务统计
+      const milestonesWithProgress = await Promise.all(
+        milestonesData.map(async (m) => {
+          const { data: tasksData } = await api.db
+            .from('milestone_tasks')
+            .select('id, is_completed')
+            .eq('milestone_id', m.id);
+
+          const tasks = tasksData || [];
+          const total = tasks.length;
+          const completed = tasks.filter((t: { is_completed: boolean }) => t.is_completed).length;
+          const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+          return { ...m, progress };
+        })
+      );
+
+      setMilestones(milestonesWithProgress);
+
       // Auto-select first milestone
-      const inProgress = milestonesData.find((m: Milestone) => m.status === 'in_progress');
-      const firstPending = milestonesData.find((m: Milestone) => m.status === 'pending');
-      const selected = inProgress || firstPending || milestonesData[0];
+      const inProgress = milestonesWithProgress.find((m: Milestone) => m.status === 'in_progress');
+      const firstPending = milestonesWithProgress.find((m: Milestone) => m.status === 'pending');
+      const selected = inProgress || firstPending || milestonesWithProgress[0];
       if (selected) {
         setSelectedMilestoneId(selected.id);
         fetchMilestoneTasks(selected.id);
@@ -107,7 +119,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
   };
 
   const fetchMilestoneTasks = async (milestoneId: string) => {
-    const { data } = await supabase
+    const { data } = await api.db
       .from('milestone_tasks')
       .select('*')
       .eq('milestone_id', milestoneId)
@@ -132,7 +144,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
 
     try {
       // 更新当前阶段状态
-      const { error } = await supabase
+      const { error } = await api.db
         .from('project_milestones')
         .update({ status })
         .eq('id', id);
@@ -145,7 +157,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
         if (currentMilestone) {
           const nextMilestone = milestones.find(m => m.phase_order === currentMilestone.phase_order + 1);
           if (nextMilestone && nextMilestone.status === 'pending') {
-            await supabase
+            await api.db
               .from('project_milestones')
               .update({ status: 'in_progress' })
               .eq('id', nextMilestone.id);
@@ -172,7 +184,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
         completed_by: newStatus ? user?.id : null
       };
 
-      const { error } = await supabase
+      const { error } = await api.db
         .from('milestone_tasks')
         .update(updates)
         .eq('id', task.id);
@@ -216,15 +228,15 @@ export default function Milestones({ projectId }: MilestonesProps) {
       const fileName = `${task.id}_${Date.now()}.${fileExt}`;
       const filePath = `milestone-attachments/${fileName}`;
 
-      // Upload file to Supabase Storage
-      const { error: uploadError } = await supabase.storage
+      // Upload file to Storage
+      const { error: uploadError } = await api.storage
         .from('project-documents')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      const { data: { publicUrl } } = api.storage
         .from('project-documents')
         .getPublicUrl(filePath);
 
@@ -237,7 +249,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
       };
       const docs = [...(task.output_documents || []), newDoc];
       
-      const { error: updateError } = await supabase
+      const { error: updateError } = await api.db
         .from('milestone_tasks')
         .update({ output_documents: docs })
         .eq('id', task.id);
@@ -259,7 +271,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
     const docs = [...(task.output_documents || [])];
     docs.splice(docIndex, 1);
     
-    await supabase
+    await api.db
       .from('milestone_tasks')
       .update({ output_documents: docs })
       .eq('id', task.id);
@@ -270,7 +282,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
   const handleDeleteTask = async (task: MilestoneTask) => {
     if (!confirm(`确定要删除任务"${task.name}"吗？`)) return;
 
-    await supabase.from('milestone_tasks').delete().eq('id', task.id);
+    await api.db.from('milestone_tasks').delete().eq('id', task.id);
     fetchMilestoneTasks(task.milestone_id);
     fetchMilestones();
   };
@@ -279,7 +291,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
     e.stopPropagation();
     if (!confirm(`确定要删除阶段"${milestone.name}"吗？`)) return;
 
-    await supabase.from('project_milestones').delete().eq('id', milestone.id);
+    await api.db.from('project_milestones').delete().eq('id', milestone.id);
     fetchMilestones();
   };
 
@@ -307,7 +319,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
     }
 
     // 插入新阶段
-    const { error: insertError } = await supabase
+    const { error: insertError } = await api.db
       .from('project_milestones')
       .insert({
         project_id: projectId,
@@ -333,7 +345,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
   };
 
   const reorderMilestones = async () => {
-    const { data: allMilestones } = await supabase
+    const { data: allMilestones } = await api.db
       .from('project_milestones')
       .select('id, phase_order')
       .eq('project_id', projectId)
@@ -342,7 +354,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
     if (allMilestones && allMilestones.length > 0) {
       // 使用 Promise.all 并行更新
       const updatePromises = allMilestones.map((milestone, index) =>
-        supabase
+        api.db
           .from('project_milestones')
           .update({ phase_order: index + 1 })
           .eq('id', milestone.id)
@@ -355,7 +367,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
     e.preventDefault();
     if (!newTaskForm.name || !selectedMilestoneId) return;
 
-    await supabase.from('milestone_tasks').insert({
+    await api.db.from('milestone_tasks').insert({
       milestone_id: selectedMilestoneId,
       name: newTaskForm.name,
       description: newTaskForm.description,
@@ -665,210 +677,181 @@ export default function Milestones({ projectId }: MilestonesProps) {
       </div>
 
       {/* Add Milestone Modal */}
-      {showAddMilestoneModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">新增阶段</h3>
-            <form onSubmit={handleAddMilestone} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">阶段名称</label>
-                <input
-                  type="text"
-                  required
-                  value={newMilestoneForm.name}
-                  onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, name: e.target.value })}
-                  className="mt-1 block w-full border rounded-md py-2 px-3"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">描述</label>
-                <textarea
-                  value={newMilestoneForm.description}
-                  onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, description: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full border rounded-md py-2 px-3"
-                />
-              </div>
-              {milestones.length > 0 && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">插入位置</label>
-                    <select
-                      value={newMilestoneForm.targetMilestoneId}
-                      onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, targetMilestoneId: e.target.value })}
-                      className="block w-full border rounded-md py-2 px-3"
-                    >
-                      <option value="">-- 选择参考阶段 --</option>
-                      {milestones.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} (顺序: {m.phase_order})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {newMilestoneForm.targetMilestoneId && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">放置位置</label>
-                      <div className="flex space-x-4">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="insertPosition"
-                            value="before"
-                            checked={newMilestoneForm.insertPosition === 'before'}
-                            onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, insertPosition: e.target.value })}
-                            className="h-4 w-4 text-indigo-600"
-                          />
-                          <span className="ml-2 text-sm">在选定阶段之前</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="insertPosition"
-                            value="after"
-                            checked={newMilestoneForm.insertPosition === 'after'}
-                            onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, insertPosition: e.target.value })}
-                            className="h-4 w-4 text-indigo-600"
-                          />
-                          <span className="ml-2 text-sm">在选定阶段之后</span>
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAddMilestoneModal(false)}
-                  className="px-4 py-2 border rounded-md text-sm"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm"
-                >
-                  确认添加
-                </button>
-              </div>
-            </form>
+      <ModalForm
+        isOpen={showAddMilestoneModal}
+        onClose={() => setShowAddMilestoneModal(false)}
+        onSubmit={handleAddMilestone}
+        title="新增阶段"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">阶段名称</label>
+            <input
+              type="text"
+              required
+              value={newMilestoneForm.name}
+              onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, name: e.target.value })}
+              className="mt-1 block w-full border rounded-md py-2 px-3"
+            />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">描述</label>
+            <textarea
+              value={newMilestoneForm.description}
+              onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, description: e.target.value })}
+              rows={3}
+              className="mt-1 block w-full border rounded-md py-2 px-3"
+            />
+          </div>
+          {milestones.length > 0 && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">插入位置</label>
+                <select
+                  value={newMilestoneForm.targetMilestoneId}
+                  onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, targetMilestoneId: e.target.value })}
+                  className="block w-full border rounded-md py-2 px-3"
+                >
+                  <option value="">-- 选择参考阶段 --</option>
+                  {milestones.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} (顺序: {m.phase_order})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {newMilestoneForm.targetMilestoneId && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">放置位置</label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="insertPosition"
+                        value="before"
+                        checked={newMilestoneForm.insertPosition === 'before'}
+                        onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, insertPosition: e.target.value })}
+                        className="h-4 w-4 text-indigo-600"
+                      />
+                      <span className="ml-2 text-sm">在选定阶段之前</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="insertPosition"
+                        value="after"
+                        checked={newMilestoneForm.insertPosition === 'after'}
+                        onChange={(e) => setNewMilestoneForm({ ...newMilestoneForm, insertPosition: e.target.value })}
+                        className="h-4 w-4 text-indigo-600"
+                      />
+                      <span className="ml-2 text-sm">在选定阶段之后</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </ModalForm>
 
       {/* Add Task Modal */}
-      {showAddTaskModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">新增任务</h3>
-            <form onSubmit={handleAddTask} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">任务名称</label>
-                <input
-                  type="text"
-                  required
-                  value={newTaskForm.name}
-                  onChange={(e) => setNewTaskForm({ ...newTaskForm, name: e.target.value })}
-                  className="mt-1 block w-full border rounded-md py-2 px-3"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">描述</label>
-                <textarea
-                  value={newTaskForm.description}
-                  onChange={(e) => setNewTaskForm({ ...newTaskForm, description: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full border rounded-md py-2 px-3"
-                />
-              </div>
-              <div className="flex items-center">
-                <input
-                  id="is_required"
-                  type="checkbox"
-                  checked={newTaskForm.is_required}
-                  onChange={(e) => setNewTaskForm({ ...newTaskForm, is_required: e.target.checked })}
-                  className="h-4 w-4 rounded"
-                />
-                <label htmlFor="is_required" className="ml-2 text-sm">必须完成</label>
-              </div>
+      <ModalForm
+        isOpen={showAddTaskModal}
+        onClose={() => setShowAddTaskModal(false)}
+        onSubmit={handleAddTask}
+        title="新增任务"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">任务名称</label>
+            <input
+              type="text"
+              required
+              value={newTaskForm.name}
+              onChange={(e) => setNewTaskForm({ ...newTaskForm, name: e.target.value })}
+              className="mt-1 block w-full border rounded-md py-2 px-3"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">描述</label>
+            <textarea
+              value={newTaskForm.description}
+              onChange={(e) => setNewTaskForm({ ...newTaskForm, description: e.target.value })}
+              rows={3}
+              className="mt-1 block w-full border rounded-md py-2 px-3"
+            />
+          </div>
+          <div className="flex items-center">
+            <input
+              id="is_required"
+              type="checkbox"
+              checked={newTaskForm.is_required}
+              onChange={(e) => setNewTaskForm({ ...newTaskForm, is_required: e.target.checked })}
+              className="h-4 w-4 rounded"
+            />
+            <label htmlFor="is_required" className="ml-2 text-sm">必须完成</label>
+          </div>
 
-              {/* 输出物编辑 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">输出物</label>
-                <div className="space-y-2">
-                  {newTaskForm.output_documents.map((doc, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={doc.name}
-                        onChange={(e) => {
-                          const newDocs = [...newTaskForm.output_documents];
-                          newDocs[index].name = e.target.value;
-                          setNewTaskForm({ ...newTaskForm, output_documents: newDocs });
-                        }}
-                        placeholder="文档名称"
-                        className="flex-1 border rounded-md py-1 px-2 text-sm"
-                      />
-                      <label className="flex items-center text-sm">
-                        <input
-                          type="checkbox"
-                          checked={doc.required}
-                          onChange={(e) => {
-                            const newDocs = [...newTaskForm.output_documents];
-                            newDocs[index].required = e.target.checked;
-                            setNewTaskForm({ ...newTaskForm, output_documents: newDocs });
-                          }}
-                          className="h-4 w-4 rounded mr-1"
-                        />
-                        必需
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newDocs = newTaskForm.output_documents.filter((_, i) => i !== index);
-                          setNewTaskForm({ ...newTaskForm, output_documents: newDocs });
-                        }}
-                        className="text-red-500 hover:text-red-700 text-sm"
-                      >
-                        删除
-                      </button>
-                    </div>
-                  ))}
+          {/* 输出物编辑 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">输出物</label>
+            <div className="space-y-2">
+              {newTaskForm.output_documents.map((doc, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={doc.name}
+                    onChange={(e) => {
+                      const newDocs = [...newTaskForm.output_documents];
+                      newDocs[index].name = e.target.value;
+                      setNewTaskForm({ ...newTaskForm, output_documents: newDocs });
+                    }}
+                    placeholder="文档名称"
+                    className="flex-1 border rounded-md py-1 px-2 text-sm"
+                  />
+                  <label className="flex items-center text-sm">
+                    <input
+                      type="checkbox"
+                      checked={doc.required}
+                      onChange={(e) => {
+                        const newDocs = [...newTaskForm.output_documents];
+                        newDocs[index].required = e.target.checked;
+                        setNewTaskForm({ ...newTaskForm, output_documents: newDocs });
+                      }}
+                      className="h-4 w-4 rounded mr-1"
+                    />
+                    必需
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
-                      setNewTaskForm({
-                        ...newTaskForm,
-                        output_documents: [...newTaskForm.output_documents, { name: '', required: true }]
-                      });
+                      const newDocs = newTaskForm.output_documents.filter((_, i) => i !== index);
+                      setNewTaskForm({ ...newTaskForm, output_documents: newDocs });
                     }}
-                    className="text-indigo-600 hover:text-indigo-800 text-sm"
+                    className="text-red-500 hover:text-red-700 text-sm"
                   >
-                    + 添加输出物
+                    删除
                   </button>
                 </div>
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAddTaskModal(false)}
-                  className="px-4 py-2 border rounded-md text-sm"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm"
-                >
-                  确认添加
-                </button>
-              </div>
-            </form>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setNewTaskForm({
+                    ...newTaskForm,
+                    output_documents: [...newTaskForm.output_documents, { name: '', required: true }]
+                  });
+                }}
+                className="text-indigo-600 hover:text-indigo-800 text-sm"
+              >
+                + 添加输出物
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </ModalForm>
     </div>
   );
 }

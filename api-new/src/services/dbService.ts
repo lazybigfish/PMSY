@@ -187,13 +187,21 @@ export async function findById(table: string, id: string, select?: string): Prom
 /**
  * 插入数据
  * @param table - 表名
- * @param data - 插入数据
+ * @param data - 插入数据（单个对象或数组）
  * @param select - 返回字段
- * @returns 插入的数据
+ * @returns 插入的数据数组（兼容Supabase格式）
  */
-export async function insert(table: string, data: Record<string, any>, select?: string): Promise<any> {
-  const [result] = await db(table).insert(data).returning(select ? select.split(',').map(f => f.trim()) : '*');
-  return result;
+export async function insert(table: string, data: Record<string, any> | Record<string, any>[], select?: string): Promise<any[]> {
+  const isArray = Array.isArray(data);
+  const result = await db(table).insert(data).returning(select ? select.split(',').map(f => f.trim()) : '*');
+  
+  // Knex 的 returning 在 PostgreSQL 下总是返回数组
+  // 但为了确保兼容性，统一处理为数组
+  if (Array.isArray(result)) {
+    return result;
+  }
+  // 如果结果是单个对象，包装成数组
+  return result ? [result] : [];
 }
 
 /**

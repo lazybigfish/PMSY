@@ -57,3 +57,15 @@ CREATE TABLE IF NOT EXISTS task_progress_attachments (
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_task_progress_attachments_progress_log_id ON task_progress_attachments(progress_log_id);
 CREATE INDEX IF NOT EXISTS idx_task_progress_attachments_uploaded_by ON task_progress_attachments(uploaded_by);
+
+-- 为 tasks 表添加 start_date 字段（如果不存在）
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'tasks' AND column_name = 'start_date'
+    ) THEN
+        ALTER TABLE tasks ADD COLUMN start_date TIMESTAMPTZ;
+        CREATE INDEX IF NOT EXISTS idx_tasks_start_date ON tasks(start_date);
+    END IF;
+END $$;

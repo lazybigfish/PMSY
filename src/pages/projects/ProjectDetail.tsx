@@ -44,31 +44,33 @@ const ProjectDetail = () => {
   const fetchProjectDetails = async () => {
     try {
       setLoading(true);
-      
-      const projectData = await api.db
+
+      const { data: project, error: projectError } = await api.db
         .from('projects')
         .select('*')
         .eq('id', id)
         .single();
 
-      if (!projectData) {
+      if (projectError || !project) {
         setPermissionsLoaded(true);
         return;
       }
 
       // 获取项目经理信息
       let managerData = null;
-      if (projectData.manager_id) {
-        const managerResult = await api.db
+      if (project.manager_id) {
+        const { data: manager, error: managerError } = await api.db
           .from('profiles')
           .select('id, full_name, email')
-          .eq('id', projectData.manager_id)
+          .eq('id', project.manager_id)
           .single();
-        managerData = managerResult;
+        if (!managerError && manager) {
+          managerData = manager;
+        }
       }
 
       const projectWithManager = {
-        ...projectData,
+        ...project,
         manager: managerData
       };
 
@@ -77,19 +79,19 @@ const ProjectDetail = () => {
 
       // Check permissions
       if (user) {
-        const isCreator = projectData.manager_id === user.id;
+        const isCreator = project.manager_id === user.id;
         const isAdmin = profile?.role === 'admin';
-        
-        const memberData = await api.db
+
+        const { data: member, error: memberError } = await api.db
           .from('project_members')
           .select('role')
           .eq('project_id', id)
           .eq('user_id', user.id)
           .single();
-            
-        const isManager = memberData?.role === 'manager';
-        const isMember = !!memberData;
-        
+
+        const isManager = !memberError && member?.role === 'manager';
+        const isMember = !memberError && !!member;
+
         setCanEdit(isCreator || isAdmin || isManager);
         setCanViewAll(isCreator || isAdmin || isManager || isMember);
       }
@@ -120,20 +122,20 @@ const ProjectDetail = () => {
         .eq('id', id);
 
       if (selectedClientId) {
-        const existing = await api.db
+        const { data: existing } = await api.db
           .from('project_clients')
           .select('id')
           .eq('project_id', id)
           .single();
 
-        if (existing) {
+        if (existing?.data) {
           await api.db
             .from('project_clients')
             .update({
               client_id: selectedClientId,
               contract_amount: editForm.amount || 0
             })
-            .eq('id', existing.id);
+            .eq('id', existing.data.id);
         } else {
           await api.db
             .from('project_clients')

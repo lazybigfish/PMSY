@@ -1,9 +1,9 @@
-
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { taskService, userService, projectService } from '../../../services';
+import { api } from '../../../lib/api';
 import { Project, Profile, Client } from '../../../types';
 import { Plus, Trash2, Mail, Phone, Loader2, CheckSquare, AlertOctagon, Flag, Layers, Activity, ChevronDown } from 'lucide-react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../context/AuthContextNew';
 
 interface ProjectOverviewProps {
   projectId: string;
@@ -67,7 +67,7 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
 
   const fetchClients = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('clients')
         .select('*')
         .eq('status', 'active')
@@ -82,19 +82,26 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
 
   const fetchProjectClient = async () => {
     try {
-      const { data, error } = await supabase
+      // 先获取 project_clients 记录
+      const { data: projectClientData, error: pcError } = await api.db
         .from('project_clients')
-        .select(`
-          *,
-          client:clients(*)
-        `)
+        .select('*')
         .eq('project_id', projectId)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-      if (data) {
-        setProjectClient(data);
-        setSelectedClient(data.client);
+      if (pcError && pcError.code !== 'PGRST116') throw pcError; // PGRST116 = no rows
+      if (projectClientData) {
+        // 再获取关联的 client 信息
+        const { data: clientData, error: clientError } = await api.db
+          .from('clients')
+          .select('*')
+          .eq('id', projectClientData.client_id)
+          .single();
+
+        if (!clientError && clientData) {
+          setProjectClient(projectClientData);
+          setSelectedClient(clientData);
+        }
       }
     } catch (error) {
       console.error('Error fetching project client:', error);
@@ -110,36 +117,34 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
 
   const fetchHealthScore = async () => {
     try {
-        const { data: risks } = await supabase
-            .from('risks')
-            .select('level, status')
-            .eq('project_id', projectId);
+      // 使用 projectService 获取项目风险
+      const risks = await projectService.getProjectRisks(projectId);
         
-        let score = 100;
-        if (risks && risks.length > 0) {
-            const activeRisks = risks.filter((r: any) => r.status !== 'closed');
-            if (activeRisks.length > 0) {
-                const deductions = activeRisks.reduce((total: number, risk: any) => {
-                    switch (risk.level) {
-                        case 'high': return total + 20;
-                        case 'medium': return total + 10;
-                        case 'low': return total + 5;
-                        default: return total;
-                    }
-                }, 0);
-                score = Math.max(0, 100 - deductions);
+      let score = 100;
+      if (risks && risks.length > 0) {
+        const activeRisks = risks.filter((r: any) => r.status !== 'closed');
+        if (activeRisks.length > 0) {
+          const deductions = activeRisks.reduce((total: number, risk: any) => {
+            switch (risk.level) {
+              case 'high': return total + 20;
+              case 'medium': return total + 10;
+              case 'low': return total + 5;
+              default: return total;
             }
+          }, 0);
+          score = Math.max(0, 100 - deductions);
         }
-        setHealthScore(score);
+      }
+      setHealthScore(score);
     } catch (error) {
-        console.error('Error fetching health score:', error);
+      console.error('Error fetching health score:', error);
     }
   };
 
   const fetchSupplierInfo = async () => {
     try {
       // 查询项目关联的供应商
-      const { data: suppliers, error } = await supabase
+      const { data: suppliers, error } = await api.db
         .from('project_suppliers')
         .select('id, contract_amount')
         .eq('project_id', projectId);
@@ -154,11 +159,11 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
         const supplierIds = suppliers.map(s => s.id);
 
         // 计算合同金额总和
-        const totalContract = suppliers?.reduce((sum, s) => sum + (s.contract_amount || 0), 0) || 0;
+        const totalContract = suppliers?.reduce((sum, s) => sum + (Number(s.contract_amount) || 0), 0) || 0;
         setContractAmount(totalContract);
 
         // 查询已支付金额总和（从 supplier_payment_plans 表中筛选 status = 'paid' 的记录）
-        const { data: payments, error: paymentError } = await supabase
+        const { data: payments, error: paymentError } = await api.db
           .from('supplier_payment_plans')
           .select('amount')
           .in('project_supplier_id', supplierIds)
@@ -166,7 +171,7 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
 
         if (paymentError) throw paymentError;
 
-        const totalPaid = payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+        const totalPaid = payments?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
         setPaidAmount(totalPaid);
       } else {
         setContractAmount(0);
@@ -179,53 +184,45 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
 
   const fetchStats = async () => {
     try {
-        // Tasks
-        const { count: tasksTotal } = await supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
-        const { count: tasksCompleted } = await supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('project_id', projectId).eq('status', 'done');
+      // Tasks - 使用 taskService
+      const tasks = await taskService.getTasksByProject(projectId);
+      const tasksTotal = tasks?.length || 0;
+      const tasksCompleted = tasks?.filter(t => t.status === 'completed').length || 0;
 
-        // Risks
-        const { count: risksTotal } = await supabase.from('risks').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
-        const { count: risksClosed } = await supabase.from('risks').select('*', { count: 'exact', head: true }).eq('project_id', projectId).eq('status', 'closed');
+      // Risks - 使用 projectService
+      const risks = await projectService.getProjectRisks(projectId);
+      const risksTotal = risks?.length || 0;
+      const risksClosed = risks?.filter((r: any) => r.status === 'closed').length || 0;
 
-        // Milestones
-        const { count: milestonesTotal } = await supabase.from('project_milestones').select('*', { count: 'exact', head: true }).eq('project_id', projectId);
-        const { count: milestonesCompleted } = await supabase.from('project_milestones').select('*', { count: 'exact', head: true }).eq('project_id', projectId).eq('status', 'completed');
+      // Milestones - 使用 projectService
+      const milestones = await projectService.getProjectMilestones(projectId);
+      const milestonesTotal = milestones?.length || 0;
+      const milestonesCompleted = milestones?.filter((m: any) => m.status === 'completed').length || 0;
 
-        // Modules - 获取所有模块的 progress 字段计算平均值
-        const { data: modulesData } = await supabase
-            .from('project_modules')
-            .select('progress, status')
-            .eq('project_id', projectId);
+      // Modules - 使用 projectService
+      const modulesData = await projectService.getProjectModules(projectId);
 
-        const modulesTotal = modulesData?.length || 0;
-        const modulesCompleted = modulesData?.filter(m => m.status === 'completed').length || 0;
-        // 计算所有模块的完成度平均值（基于 progress 字段）
-        const totalProgress = modulesData?.reduce((sum, m) => sum + (m.progress || 0), 0) || 0;
-        const moduleProgressAvg = modulesTotal > 0 ? Math.round(totalProgress / modulesTotal) : 0;
+      const modulesTotal = modulesData?.length || 0;
+      const modulesCompleted = modulesData?.filter(m => m.status === 'completed').length || 0;
+      // 计算所有模块的完成度平均值（基于 progress 字段）
+      const totalProgress = modulesData?.reduce((sum, m) => sum + (Number(m.progress) || 0), 0) || 0;
+      const moduleProgressAvg = modulesTotal > 0 ? Math.round(totalProgress / modulesTotal) : 0;
 
-        setStats({
-            tasks: { completed: tasksCompleted || 0, total: tasksTotal || 0 },
-            risks: { closed: risksClosed || 0, total: risksTotal || 0 },
-            milestones: { completed: milestonesCompleted || 0, total: milestonesTotal || 0 },
-            modules: { completed: moduleProgressAvg, total: 100 } // 使用平均进度作为 completed，100 作为 total
-        });
+      setStats({
+        tasks: { completed: tasksCompleted || 0, total: tasksTotal || 0 },
+        risks: { closed: risksClosed || 0, total: risksTotal || 0 },
+        milestones: { completed: milestonesCompleted || 0, total: milestonesTotal || 0 },
+        modules: { completed: moduleProgressAvg, total: 100 } // 使用平均进度作为 completed，100 作为 total
+      });
     } catch (error) {
-        console.error('Error fetching stats:', error);
+      console.error('Error fetching stats:', error);
     }
   };
 
   const fetchProjectData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          manager:profiles(id, full_name, email)
-        `)
-        .eq('id', projectId)
-        .single();
-
-      if (error) throw error;
+      const data = await projectService.getProjectById(projectId);
+      if (!data) throw new Error('Project not found');
       setLocalProject(data);
     } catch (error) {
       console.error('Error fetching project:', error);
@@ -238,22 +235,30 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
     try {
       setLoadingMembers(true);
       
-      const { data, error } = await supabase
+      const { data: membersData, error: membersError } = await api.db
         .from('project_members')
-        .select(`
-          id,
-          role,
-          user:profiles(*)
-        `)
+        .select('id, role, user_id')
         .eq('project_id', projectId);
 
-      if (error) throw error;
+      if (membersError) throw membersError;
 
-      const formattedMembers: ProjectMember[] = data.map((item: any) => ({
-        ...item.user,
-        member_role: item.role,
-        member_id: item.id
-      }));
+      // 获取每个成员的用户信息
+      const formattedMembers: ProjectMember[] = [];
+      for (const member of membersData || []) {
+        const { data: userData, error: userError } = await api.db
+          .from('profiles')
+          .select('*')
+          .eq('id', member.user_id)
+          .single();
+
+        if (!userError && userData) {
+          formattedMembers.push({
+            ...userData,
+            member_role: member.role,
+            member_id: member.id
+          });
+        }
+      }
 
       setMembers(formattedMembers);
     } catch (error) {
@@ -265,8 +270,7 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
 
   const fetchAllUsers = async () => {
     try {
-      const { data, error } = await supabase.from('profiles').select('*');
-      if (error) throw error;
+      const data = await userService.getUsers();
       
       const existingIds = new Set(members.map(m => m.id));
       setAllUsers(data?.filter(u => !existingIds.has(u.id)) || []);
@@ -282,27 +286,18 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
     }
     
     try {
-      const { error } = await supabase.from('project_members').insert({
-        project_id: projectId,
-        user_id: selectedUserId,
-        role: selectedRole
-      });
-
-      if (error) {
-        if (error.message.includes('duplicate')) {
-          alert('该用户已经是项目成员');
-        } else {
-          alert('添加成员失败: ' + error.message);
-        }
-        return;
-      }
+      await projectService.addProjectMember(projectId, selectedUserId, selectedRole);
 
       setShowAddMember(false);
       setSelectedUserId('');
       fetchMembers();
     } catch (error: any) {
       console.error('Error adding member:', error);
-      alert('添加成员失败: ' + (error?.message || '未知错误'));
+      if (error.message?.includes('duplicate')) {
+        alert('该用户已经是项目成员');
+      } else {
+        alert('添加成员失败: ' + (error?.message || '未知错误'));
+      }
     }
   };
 
@@ -310,8 +305,7 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
     if (!confirm('确认移除该成员？')) return;
 
     try {
-      const { error } = await supabase.from('project_members').delete().eq('id', memberId);
-      if (error) throw error;
+      await projectService.removeProjectMember(memberId);
       fetchMembers();
     } catch (error) {
       console.error('Error removing member:', error);

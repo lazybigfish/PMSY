@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import Login from './Login';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { vi } from 'vitest';
 
 // Mock the AuthContext
@@ -38,40 +38,34 @@ describe('Login Component', () => {
     expect(passwordInput).toHaveValue('password123');
   });
 
-  it('calls supabase signInWithPassword on form submission', async () => {
-    // Mock the supabase function
-    const signInMock = vi.fn().mockResolvedValue({ data: {}, error: null });
+  it('calls api auth signIn on form submission', async () => {
+    // Mock the api function
+    const signInMock = vi.fn().mockResolvedValue({ access_token: 'token', user: { id: '1', email: 'test@example.com' } });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase.auth.signInWithPassword as any) = signInMock;
+    (api.auth.signIn as any) = signInMock;
 
     renderWithRouter(<Login />);
-    
+
     fireEvent.change(screen.getByPlaceholderText('邮箱地址'), { target: { value: 'test@example.com' } });
     fireEvent.change(screen.getByPlaceholderText('密码'), { target: { value: 'password123' } });
-    
+
     fireEvent.click(screen.getByRole('button', { name: /登录/i }));
 
     await waitFor(() => {
-      expect(signInMock).toHaveBeenCalledWith({
-        email: 'test@example.com',
-        password: 'password123',
-      });
+      expect(signInMock).toHaveBeenCalledWith('test@example.com', 'password123');
     });
   });
 
   it('shows error message on failed login', async () => {
-    const signInMock = vi.fn().mockResolvedValue({
-      data: {},
-      error: { message: 'Invalid credentials' }
-    });
+    const signInMock = vi.fn().mockRejectedValue(new Error('Invalid credentials'));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase.auth.signInWithPassword as any) = signInMock;
+    (api.auth.signIn as any) = signInMock;
 
     renderWithRouter(<Login />);
-    
+
     fireEvent.change(screen.getByPlaceholderText('邮箱地址'), { target: { value: 'test@example.com' } });
     fireEvent.change(screen.getByPlaceholderText('密码'), { target: { value: 'wrongpassword' } });
-    
+
     fireEvent.click(screen.getByRole('button', { name: /登录/i }));
 
     await waitFor(() => {

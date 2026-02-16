@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Flag, Users, User, FolderOpen, Box, FileText, Globe } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { projectService, userService, taskService } from '../../services';
+import { api } from '../../lib/api';
+import { useAuth } from '../../context/AuthContextNew';
 import { Profile, Project, ProjectModule } from '../../types';
 import { DatePicker } from '../../components/DatePicker';
 
@@ -56,8 +57,8 @@ export default function TaskCreatePage() {
 
   const fetchProjects = async () => {
     try {
-      const { data } = await supabase.from('projects').select('*');
-      setProjects(data || []);
+      const data = await projectService.getProjects();
+      setProjects(data.projects || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
@@ -67,7 +68,7 @@ export default function TaskCreatePage() {
 
   const fetchUsers = async () => {
     try {
-      const { data } = await supabase.from('profiles').select('*');
+      const data = await userService.getUsers();
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -77,10 +78,7 @@ export default function TaskCreatePage() {
   const fetchModules = async (projectId: string) => {
     setLoadingModules(true);
     try {
-      const { data } = await supabase
-        .from('project_modules')
-        .select('*')
-        .eq('project_id', projectId);
+      const data = await projectService.getProjectModules(projectId);
       setModules(data || []);
     } catch (error) {
       console.error('Error fetching modules:', error);
@@ -133,51 +131,32 @@ export default function TaskCreatePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title.trim() || !user) return;
+    if (!formData.title.trim() || !formData.project_id || !user) return;
 
     setSubmitting(true);
     try {
-      const { data: task, error } = await supabase
-        .from('tasks')
-        .insert({
-          title: formData.title,
-          description: formData.description,
-          project_id: formData.project_id || null,
-          priority: formData.priority,
-          is_public: formData.is_public,
-          due_date: formData.due_date || null,
-          created_by: formData.creator_id,
-          owner_id: formData.creator_id,
-          status: 'todo'
-        })
-        .select()
-        .single();
+      // 排序处理人，责任人排在第一位
+      const creatorId = formData.creator_id;
+      const sortedAssigneeIds = [...formData.assignee_ids].sort((a, b) => {
+        if (a === creatorId) return -1;
+        if (b === creatorId) return 1;
+        return 0;
+      });
 
-      if (error) throw error;
-
-      if (formData.module_id && task) {
-        await supabase.from('task_modules').insert({
-          task_id: task.id,
-          module_id: formData.module_id,
-          created_by: user.id
-        });
-      }
-
-      if (formData.assignee_ids.length > 0 && task) {
-        const creatorId = formData.creator_id;
-        const sortedAssigneeIds = [...formData.assignee_ids].sort((a, b) => {
-          if (a === creatorId) return -1;
-          if (b === creatorId) return 1;
-          return 0;
-        });
-
-        const assigneesToInsert = sortedAssigneeIds.map((userId, index) => ({
-          task_id: task.id,
-          user_id: userId,
-          is_primary: index === 0
-        }));
-        await supabase.from('task_assignees').insert(assigneesToInsert);
-      }
+      // 使用 taskService 创建任务（包含处理人）
+      const task = await taskService.createTask({
+        title: formData.title,
+        description: formData.description,
+        project_id: formData.project_id,
+        priority: formData.priority,
+        is_public: formData.is_public,
+        due_date: formData.due_date || null,
+        created_by: formData.creator_id,
+        owner_id: formData.creator_id,
+        status: 'todo',
+        assignee_ids: sortedAssigneeIds,
+        module_ids: formData.module_id ? [formData.module_id] : undefined
+      });
 
       navigate(`/tasks/${task.id}`);
     } catch (error) {
@@ -225,7 +204,7 @@ export default function TaskCreatePage() {
     );
   }
 
-  const isValid = formData.title.trim() && formData.creator_id && formData.assignee_ids.length > 0 && formData.due_date;
+  const isValid = formData.title.trim() && formData.project_id && formData.creator_id && formData.assignee_ids.length > 0 && formData.due_date;
 
   return (
     <div className="max-w-6xl mx-auto animate-fade-in">
@@ -272,13 +251,16 @@ export default function TaskCreatePage() {
               </h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-dark-700 mb-2">所属项目</label>
+                  <label className="block text-sm font-medium text-dark-700 mb-2">
+                    所属项目 <span className="text-red-500">*</span>
+                  </label>
                   <select
                     value={formData.project_id}
                     onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
                     className="input w-full"
+                    required
                   >
-                    <option value="">选择项目（可选）</option>
+                    <option value="">选择项目</option>
                     {projects.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}

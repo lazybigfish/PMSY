@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { ProjectSupplier, Supplier, ProjectModule } from '../../../types';
 import { Plus, FileText, X, ChevronRight, ChevronDown } from 'lucide-react';
 import { FileUploadButton } from '../../../components/FileUploadButton';
 import { SupplierDetailModal } from '../components/SupplierDetailModal';
+import { ModalForm } from '../../../components/Modal';
 
 // 模块树形选择组件
 interface ModuleTreeSelectProps {
@@ -197,7 +198,7 @@ export default function Suppliers({ projectId }: SuppliersProps) {
 
   const fetchProjectAmount = async () => {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await api.db
             .from('projects')
             .select('amount')
             .eq('id', projectId)
@@ -213,26 +214,33 @@ export default function Suppliers({ projectId }: SuppliersProps) {
     setLoading(true);
     try {
       // Fetch Project Suppliers
-      const { data: suppliersData, error: suppliersError } = await supabase
+      const { data: suppliersData, error: suppliersError } = await api.db
         .from('project_suppliers')
         .select(`
           *,
-          supplier:suppliers(*),
-          payments:supplier_payments(amount)
+          suppliers(*),
+          supplier_payments(amount)
         `)
         .eq('project_id', projectId);
 
       if (suppliersError) throw suppliersError;
 
+      // 将返回数据中的字段映射为组件期望的格式
+      const mappedSuppliersData = (suppliersData || []).map((item: any) => ({
+        ...item,
+        supplier: item.suppliers,
+        payments: item.supplier_payments
+      }));
+
       // Fetch Project Modules
-      const { data: modulesData, error: modulesError } = await supabase
+      const { data: modulesData, error: modulesError } = await api.db
         .from('project_modules')
         .select('*')
         .eq('project_id', projectId);
       
       if (modulesError) throw modulesError;
 
-      setProjectSuppliers(suppliersData || []);
+      setProjectSuppliers(mappedSuppliersData);
       setProjectModules(modulesData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -244,7 +252,7 @@ export default function Suppliers({ projectId }: SuppliersProps) {
   const fetchAvailableSuppliers = async () => {
     try {
       const existingIds = projectSuppliers.map(ps => ps.supplier_id);
-      let query = supabase.from('suppliers').select('*').eq('status', 'active');
+      let query = api.db.from('suppliers').select('*').eq('status', 'active');
       
       if (existingIds.length > 0) {
         query = query.not('id', 'in', `(${existingIds.join(',')})`);
@@ -268,7 +276,7 @@ export default function Suppliers({ projectId }: SuppliersProps) {
     }
 
     // 2. Check if total contract amount of all suppliers exceeds project amount
-    const currentTotalContractAmount = projectSuppliers.reduce((sum, ps) => sum + (ps.contract_amount || 0), 0);
+    const currentTotalContractAmount = projectSuppliers.reduce((sum, ps) => sum + (Number(ps.contract_amount) || 0), 0);
     const newTotal = currentTotalContractAmount + addForm.contract_amount;
     
     if (newTotal > projectAmount) {
@@ -277,7 +285,7 @@ export default function Suppliers({ projectId }: SuppliersProps) {
     }
 
     try {
-      const { error } = await supabase.from('project_suppliers').insert({
+      const { error } = await api.db.from('project_suppliers').insert({
         project_id: projectId,
         supplier_id: selectedSupplierId,
         contract_amount: addForm.contract_amount,
@@ -302,7 +310,7 @@ export default function Suppliers({ projectId }: SuppliersProps) {
   const handleRemoveSupplier = async (id: string) => {
     if (!confirm('确定要移除该供应商吗？这将同时删除相关的验收和付款记录。')) return;
     try {
-      const { error } = await supabase.from('project_suppliers').delete().eq('id', id);
+      const { error } = await api.db.from('project_suppliers').delete().eq('id', id);
       if (error) throw error;
       setProjectSuppliers(prev => prev.filter(p => p.id !== id));
     } catch (error) {
@@ -371,7 +379,7 @@ export default function Suppliers({ projectId }: SuppliersProps) {
                     ¥{ps.contract_amount?.toLocaleString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ¥{ps.payments?.reduce((sum, p) => sum + (p.amount || 0), 0).toLocaleString()}
+                    ¥{ps.payments?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0).toLocaleString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -410,111 +418,100 @@ export default function Suppliers({ projectId }: SuppliersProps) {
       )}
 
       {/* Add Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
-          <div className="bg-white rounded-lg max-w-lg w-full p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">关联新供应商</h3>
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">选择供应商</label>
-                <select
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                  value={selectedSupplierId}
-                  onChange={(e) => setSelectedSupplierId(e.target.value)}
-                >
-                  <option value="">请选择...</option>
-                  {availableSuppliers.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">负责功能模块</label>
-                <ModuleTreeSelect
-                  modules={projectModules}
-                  selectedIds={selectedModuleIds}
-                  onChange={setSelectedModuleIds}
-                />
-              </div>
+      <ModalForm
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleAddSupplier();
+        }}
+        title="关联新供应商"
+        maxWidth="lg"
+      >
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">选择供应商</label>
+            <select
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              value={selectedSupplierId}
+              onChange={(e) => setSelectedSupplierId(e.target.value)}
+            >
+              <option value="">请选择...</option>
+              {availableSuppliers.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">负责功能模块</label>
+            <ModuleTreeSelect
+              modules={projectModules}
+              selectedIds={selectedModuleIds}
+              onChange={setSelectedModuleIds}
+            />
+          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">合同金额</label>
-                <div className="mt-1 relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">¥</span>
-                  </div>
-                  <input
-                    type="number"
-                    className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
-                    placeholder="0.00"
-                    value={addForm.contract_amount}
-                    onChange={(e) => setAddForm({ ...addForm, contract_amount: parseFloat(e.target.value) })}
-                  />
-                </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">合同金额</label>
+            <div className="mt-1 relative rounded-md shadow-sm">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <span className="text-gray-500 sm:text-sm">¥</span>
               </div>
-
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">合同文件</label>
-                  <div className="mt-1 flex items-center gap-2">
-                    {addForm.contract_file_url ? (
-                      <div className="flex-1 flex items-center gap-2 p-2 bg-gray-50 rounded border">
-                        <FileText size={16} className="text-gray-400" />
-                        <span className="text-sm text-gray-600 truncate flex-1">
-                          {addForm.contract_file_url.split('/').pop()}
-                        </span>
-                        <button
-                          onClick={() => setAddForm({...addForm, contract_file_url: ''})}
-                          className="p-1 text-gray-400 hover:text-red-600"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ) : (
-                      <FileUploadButton
-                        onUploadComplete={(files) => {
-                          if (files.length > 0) {
-                            setAddForm({...addForm, contract_file_url: files[0].url || ''});
-                          }
-                        }}
-                        onUploadError={(error) => alert(error)}
-                        buttonText="上传合同"
-                        multiple={false}
-                        context={{ projectId, moduleType: 'supplier_contract' }}
-                      />
-                    )}
-                  </div>
-                  {addForm.contract_file_url && (
-                    <a 
-                      href={addForm.contract_file_url} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="text-xs text-indigo-600 hover:underline mt-1 inline-block"
-                    >
-                      查看文件
-                    </a>
-                  )}
-              </div>
-
-            </div>
-            <div className="mt-6 flex justify-end space-x-3">
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleAddSupplier}
-                disabled={!selectedSupplierId}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
-              >
-                确认关联
-              </button>
+              <input
+                type="number"
+                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
+                placeholder="0.00"
+                value={addForm.contract_amount}
+                onChange={(e) => setAddForm({ ...addForm, contract_amount: parseFloat(e.target.value) })}
+              />
             </div>
           </div>
+
+          <div>
+              <label className="block text-sm font-medium text-gray-700">合同文件</label>
+              <div className="mt-1 flex items-center gap-2">
+                {addForm.contract_file_url ? (
+                  <div className="flex-1 flex items-center gap-2 p-2 bg-gray-50 rounded border">
+                    <FileText size={16} className="text-gray-400" />
+                    <span className="text-sm text-gray-600 truncate flex-1">
+                      {addForm.contract_file_url.split('/').pop()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAddForm({...addForm, contract_file_url: ''})}
+                      className="p-1 text-gray-400 hover:text-red-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <FileUploadButton
+                    onUploadComplete={(files) => {
+                      if (files.length > 0) {
+                        setAddForm({...addForm, contract_file_url: files[0].url || ''});
+                      }
+                    }}
+                    onUploadError={(error) => alert(error)}
+                    buttonText="上传合同"
+                    multiple={false}
+                    context={{ projectId, moduleType: 'supplier_contract' }}
+                  />
+                )}
+              </div>
+              {addForm.contract_file_url && (
+                <a 
+                  href={addForm.contract_file_url} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="text-xs text-indigo-600 hover:underline mt-1 inline-block"
+                >
+                  查看文件
+                </a>
+              )}
+          </div>
         </div>
-      )}
+      </ModalForm>
 
       {selectedProjectSupplier && (
          <SupplierDetailModal 

@@ -1,0 +1,148 @@
+### 批量插入功能测试脚本
+### 使用 REST Client 插件运行，或使用 curl 命令
+
+### 前置条件：需要先登录获取 token
+### 1. 登录获取 token
+# @name login
+POST http://localhost:3001/auth/v1/token?grant_type=password
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "admin123"
+}
+
+### 提取 token (在 VS Code REST Client 中会自动处理)
+@token = {{login.response.body.access_token}}
+
+### ============================================
+### 测试1: 批量插入角色权限 (role_permissions)
+### ============================================
+POST http://localhost:3001/rest/v1/role_permissions
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+[
+  {
+    "role_key": "test_role",
+    "module_key": "dashboard"
+  },
+  {
+    "role_key": "test_role",
+    "module_key": "projects"
+  },
+  {
+    "role_key": "test_role",
+    "module_key": "tasks"
+  }
+]
+
+### 验证插入结果
+GET http://localhost:3001/rest/v1/role_permissions?eq.role_key=test_role
+Authorization: Bearer {{token}}
+
+### 清理测试数据
+DELETE http://localhost:3001/rest/v1/role_permissions?eq.role_key=test_role
+Authorization: Bearer {{token}}
+
+### ============================================
+### 测试2: 批量插入任务分配人 (task_assignees)
+### ============================================
+
+### 先创建一个测试任务
+# @name createTask
+POST http://localhost:3001/rest/v1/tasks
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "title": "批量插入测试任务",
+  "description": "用于测试批量插入功能",
+  "project_id": "test-project-id",
+  "status": "pending",
+  "priority": "medium"
+}
+
+@taskId = {{createTask.response.body.id}}
+
+### 批量插入任务分配人
+POST http://localhost:3001/rest/v1/task_assignees
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+[
+  {
+    "task_id": "{{taskId}}",
+    "user_id": "user1",
+    "is_primary": true
+  },
+  {
+    "task_id": "{{taskId}}",
+    "user_id": "user2",
+    "is_primary": false
+  },
+  {
+    "task_id": "{{taskId}}",
+    "user_id": "user3",
+    "is_primary": false
+  }
+]
+
+### 验证插入结果
+GET http://localhost:3001/rest/v1/task_assignees?eq.task_id={{taskId}}
+Authorization: Bearer {{token}}
+
+### 清理测试数据
+DELETE http://localhost:3001/rest/v1/task_assignees?eq.task_id={{taskId}}
+Authorization: Bearer {{token}}
+
+DELETE http://localhost:3001/rest/v1/tasks?id=eq.{{taskId}}
+Authorization: Bearer {{token}}
+
+### ============================================
+### 测试3: 批量插入任务模块关联 (task_modules)
+### ============================================
+
+### 使用上面创建的任务ID
+POST http://localhost:3001/rest/v1/task_modules
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+[
+  {
+    "task_id": "{{taskId}}",
+    "module_id": "module1"
+  },
+  {
+    "task_id": "{{taskId}}",
+    "module_id": "module2"
+  },
+  {
+    "task_id": "{{taskId}}",
+    "module_id": "module3"
+  }
+]
+
+### 验证插入结果
+GET http://localhost:3001/rest/v1/task_modules?eq.task_id={{taskId}}
+Authorization: Bearer {{token}}
+
+### ============================================
+### 测试4: 单条插入仍然正常工作
+### ============================================
+POST http://localhost:3001/rest/v1/role_permissions
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "role_key": "single_test_role",
+  "module_key": "dashboard"
+}
+
+### 验证
+GET http://localhost:3001/rest/v1/role_permissions?eq.role_key=single_test_role
+Authorization: Bearer {{token}}
+
+### 清理
+DELETE http://localhost:3001/rest/v1/role_permissions?eq.role_key=single_test_role
+Authorization: Bearer {{token}}

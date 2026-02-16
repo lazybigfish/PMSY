@@ -35,15 +35,16 @@ CREATE TRIGGER update_profiles_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
--- 插入默认管理员用户（密码: admin123）
--- 密码哈希使用 bcrypt 生成，salt rounds = 10
--- 生成命令: node -e "const bcrypt = require('bcrypt'); console.log(bcrypt.hashSync('admin123', 10));"
+-- 插入默认管理员用户
+-- 注意：实际密码通过 seed 脚本设置，此处仅创建占位记录
+-- 默认用户名: admin，密码: Willyou@2026
+-- 登录时使用用户名（username）而非邮箱
 INSERT INTO profiles (id, email, username, password_hash, full_name, role, is_active, email_confirmed_at)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'admin@pmsy.com',
     'admin',
-    '$2b$10$X7oMyJxQ8X8X8X8X8X8X8O',  -- 占位符，需要在应用启动时通过脚本生成真实密码
+    '$2b$10$placeholder',  -- 占位符，真实密码通过 seed 脚本生成
     '系统管理员',
     'admin',
     true,

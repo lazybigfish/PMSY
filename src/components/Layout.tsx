@@ -60,7 +60,7 @@ const Layout = () => {
         }
 
         // 使用新的 API 获取权限
-        const data = await api.db
+        const { data } = await api.db
           .from('role_permissions')
           .select('module_key')
           .eq('role_key', profile.role);

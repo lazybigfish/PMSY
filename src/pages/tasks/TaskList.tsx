@@ -4,15 +4,8 @@ import { Plus, LayoutGrid, List, Calendar, User, Users, AlertCircle, CheckCircle
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { Task, Profile, Project } from '../../types';
-import { TaskTable } from './components/TaskTable';
+import { TaskTable, TaskWithDetails } from './components/TaskTable';
 import TaskFilterBar, { TaskFilterState } from './components/TaskFilterBar';
-
-interface TaskWithDetails extends Task {
-  project?: Project;
-  creator?: Profile;
-  assignees?: { user_id: string; is_primary: boolean; user: Profile }[];
-  assignee_profiles?: Profile[];
-}
 
 export default function TaskList() {
   const { user } = useAuth();
@@ -75,13 +68,13 @@ export default function TaskList() {
         .select('*');
 
       const projectMap = new Map<string, Project>();
-      projectsData?.forEach((p: Project) => projectMap.set(p.id, p));
+      (projectsData?.data || []).forEach((p: Project) => projectMap.set(p.id, p));
 
       const profileMap = new Map<string, Profile>();
-      profilesData?.forEach((p: Profile) => profileMap.set(p.id, p));
+      (profilesData?.data || []).forEach((p: Profile) => profileMap.set(p.id, p));
 
       const assigneesByTask: Record<string, { user_id: string; is_primary: boolean; user: Profile }[]> = {};
-      assigneesData?.forEach((a: { task_id: string; user_id: string; is_primary: boolean }) => {
+      (assigneesData?.data || []).forEach((a: { task_id: string; user_id: string; is_primary: boolean }) => {
         if (!assigneesByTask[a.task_id]) assigneesByTask[a.task_id] = [];
         const userProfile = profileMap.get(a.user_id);
         if (userProfile) {
@@ -93,7 +86,7 @@ export default function TaskList() {
         }
       });
 
-      const tasksWithProfiles = (tasksData || []).map((task: any) => ({
+      const tasksWithProfiles = (tasksData?.data || []).map((task: any) => ({
         ...task,
         project: projectMap.get(task.project_id),
         creator: profileMap.get(task.created_by),
@@ -111,7 +104,7 @@ export default function TaskList() {
 
   const fetchUsers = async () => {
     try {
-      const data = await api.db.from('profiles').select('*');
+      const { data } = await api.db.from('profiles').select('*');
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -120,7 +113,7 @@ export default function TaskList() {
 
   const fetchProjects = async () => {
     try {
-      const data = await api.db.from('projects').select('*');
+      const { data } = await api.db.from('projects').select('*');
       setProjects(data || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
@@ -236,8 +229,83 @@ export default function TaskList() {
     };
   }, [tasks, user?.id]);
 
+  // 任务完成趋势图数据
+  const dateRange = useMemo(() => {
+    const dates: Date[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 14; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      dates.push(date);
+    }
+    return dates;
+  }, []);
+
+  const dailyCompletedData = useMemo(() => {
+    return dateRange.map(date => {
+      const nextDay = new Date(date);
+      nextDay.setDate(date.getDate() + 1);
+
+      return tasks.filter(task => {
+        if (task.status !== 'done' || !task.completed_at) return false;
+        const completedAt = new Date(task.completed_at);
+        return completedAt >= date && completedAt < nextDay;
+      }).length;
+    });
+  }, [tasks, dateRange]);
+
+  const trendDataPoints = useMemo(() => {
+    const maxValue = Math.max(...dailyCompletedData, 1);
+    const minValue = Math.min(...dailyCompletedData);
+    const range = maxValue - minValue || 1;
+
+    return dailyCompletedData.map((value, index) => {
+      const x = (index / 14) * 100;
+      const y = 20 + ((value - minValue) / range) * 60;
+      return { x, y, value, date: dateRange[index] };
+    });
+  }, [dailyCompletedData, dateRange]);
+
+  const smoothPath = useMemo(() => {
+    if (trendDataPoints.length < 2) return '';
+
+    const points = trendDataPoints.map(p => ({
+      x: (p.x / 100) * 1000,
+      y: 100 - p.y
+    }));
+
+    let path = `M ${points[0].x} ${points[0].y}`;
+
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const cpx1 = prev.x + (curr.x - prev.x) / 2;
+      const cpy1 = prev.y;
+      const cpx2 = prev.x + (curr.x - prev.x) / 2;
+      const cpy2 = curr.y;
+      path += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${curr.x} ${curr.y}`;
+    }
+
+    return path;
+  }, [trendDataPoints]);
+
+  const areaPath = useMemo(() => {
+    if (trendDataPoints.length < 2) return '';
+    const points = trendDataPoints.map(p => ({
+      x: (p.x / 100) * 1000,
+      y: 100 - p.y
+    }));
+    return `${smoothPath} L ${points[points.length - 1].x} 100 L ${points[0].x} 100 Z`;
+  }, [trendDataPoints, smoothPath]);
+
+  const formatDate = (date: Date) => {
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+  };
+
   const handleCreateTask = () => {
-    navigate('/tasks/new');
+    navigate('/tasks/create');
   };
 
   const handleSort = (field: typeof sortBy) => {
@@ -381,11 +449,76 @@ export default function TaskList() {
         </button>
       </div>
 
+      {/* 任务完成趋势图 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-dark-100">
+        <h3 className="text-sm font-medium text-dark-700 mb-4">近15天任务完成趋势</h3>
+        <div className="relative h-40">
+          {/* SVG 曲线图 */}
+          <svg className="w-full h-full" viewBox="0 0 1000 100" preserveAspectRatio="none">
+            {/* 渐变定义 */}
+            <defs>
+              <linearGradient id="trendGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="100%" stopColor="#8b5cf6" />
+              </linearGradient>
+              <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.05" />
+              </linearGradient>
+            </defs>
+            {/* 填充区域 */}
+            {areaPath && (
+              <path d={areaPath} fill="url(#areaGradient)" />
+            )}
+            {/* 曲线 */}
+            {smoothPath && (
+              <path d={smoothPath} fill="none" stroke="url(#trendGradient)" strokeWidth="3" />
+            )}
+          </svg>
+
+          {/* 节点和数值 */}
+          {trendDataPoints.map((point, index) => (
+            <div
+              key={index}
+              className="absolute flex flex-col items-center"
+              style={{ left: `${point.x}%`, bottom: `${point.y}%`, transform: 'translateX(-50%)' }}
+            >
+              {/* 数值 */}
+              <span className="text-xs font-semibold text-dark-700 mb-1">
+                {point.value}
+              </span>
+              {/* 节点 */}
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  index === 14 ? 'bg-primary-500' : 'bg-dark-300'
+                }`}
+              />
+            </div>
+          ))}
+
+          {/* 横线 */}
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-dark-200" />
+
+          {/* 日期标签 */}
+          <div className="absolute bottom-2 left-0 right-0 flex justify-between px-2">
+            {dateRange.map((date, index) => (
+              <span
+                key={index}
+                className={`text-xs ${index === 14 ? 'text-primary-600 font-medium' : 'text-dark-400'}`}
+              >
+                {index === 14 ? '今天' : formatDate(date)}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <TaskFilterBar
         filters={filters}
         onFilterChange={setFilters}
         projects={projects}
-        users={users}
+        isAdmin={isAdmin}
+        currentUserId={user?.id}
       />
 
       <div className="card overflow-hidden">
@@ -416,8 +549,40 @@ export default function TaskList() {
           sortOrder={sortOrder}
           onSort={handleSort}
           selectedTasks={selectedTasks}
-          onSelectionChange={setSelectedTasks}
-          onRefresh={fetchTasks}
+          onSelectTask={(taskId, isSelected) => {
+            const newSelected = new Set(selectedTasks);
+            if (isSelected) {
+              newSelected.add(taskId);
+            } else {
+              newSelected.delete(taskId);
+            }
+            setSelectedTasks(newSelected);
+          }}
+          onSelectAll={(isSelected) => {
+            if (isSelected) {
+              setSelectedTasks(new Set(filteredTasks.map(t => t.id)));
+            } else {
+              setSelectedTasks(new Set());
+            }
+          }}
+          onUpdateStatus={async (taskId, status) => {
+            try {
+              await api.db.from('tasks').update({ status }).eq('id', taskId);
+              fetchTasks();
+            } catch (error) {
+              console.error('Error updating task status:', error);
+            }
+          }}
+          onDeleteTask={async (taskId) => {
+            if (confirm('确定要删除这个任务吗？')) {
+              try {
+                await api.db.from('tasks').delete().eq('id', taskId);
+                fetchTasks();
+              } catch (error) {
+                console.error('Error deleting task:', error);
+              }
+            }
+          }}
         />
       </div>
     </div>

@@ -1,12 +1,75 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { projectService } from '../../services';
+import { api } from '../../lib/api';
+import { useAuth } from '../../context/AuthContextNew';
 import { Loader2, Plus } from 'lucide-react';
 import { Client } from '../../types';
 
-// Milestone Templates Definition
+const numberToChinese = (num: number): string => {
+  if (num === 0) return '零元整';
+  
+  const chineseNums = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
+  const chineseUnits = ['', '拾', '佰', '仟'];
+  const chineseBigUnits = ['', '万', '亿', '兆'];
+  
+  const integerPart = Math.floor(num);
+  const decimalPart = Math.round((num - integerPart) * 100);
+  
+  let result = '';
+  
+  if (integerPart > 0) {
+    const unitGroups: number[] = [];
+    let temp = integerPart;
+    while (temp > 0) {
+      unitGroups.push(temp % 10000);
+      temp = Math.floor(temp / 10000);
+    }
+    
+    for (let i = unitGroups.length - 1; i >= 0; i--) {
+      const group = unitGroups[i];
+      if (group === 0) continue;
+      
+      let groupStr = '';
+      const digits = [Math.floor(group / 1000), Math.floor((group % 1000) / 100), Math.floor((group % 100) / 10), group % 10];
+      
+      let lastZero = false;
+      for (let j = 0; j < 4; j++) {
+        const digit = digits[j];
+        if (digit === 0) {
+          lastZero = true;
+        } else {
+          if (lastZero && result.length > 0) {
+            groupStr += '零';
+          }
+          groupStr += chineseNums[digit] + chineseUnits[3 - j];
+          lastZero = false;
+        }
+      }
+      
+      result += groupStr + chineseBigUnits[i];
+    }
+    
+    result += '元';
+  }
+  
+  if (decimalPart === 0) {
+    result += '整';
+  } else {
+    const jiao = Math.floor(decimalPart / 10);
+    const fen = decimalPart % 10;
+    
+    if (jiao > 0) {
+      result += chineseNums[jiao] + '角';
+    }
+    if (fen > 0) {
+      result += chineseNums[fen] + '分';
+    }
+  }
+  
+  return result;
+};
+
 const MILESTONE_TEMPLATES = [
   {
     name: '进场前阶段',
@@ -78,6 +141,21 @@ const MILESTONE_TEMPLATES = [
   },
 ];
 
+interface MilestoneTemplate {
+  id?: string;
+  name: string;
+  phase_order: number;
+  description?: string;
+  tasks: {
+    id?: string;
+    name: string;
+    description: string;
+    is_required: boolean;
+    output_documents: any[];
+    sort_order?: number;
+  }[];
+}
+
 const ProjectCreate = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -85,6 +163,8 @@ const ProjectCreate = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [showClientSelect, setShowClientSelect] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [milestoneTemplates, setMilestoneTemplates] = useState<MilestoneTemplate[]>([]);
+  const [templateVersion, setTemplateVersion] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: '',
     customer_name: '',
@@ -95,11 +175,12 @@ const ProjectCreate = () => {
 
   useEffect(() => {
     fetchClients();
+    fetchMilestoneTemplates();
   }, []);
 
   const fetchClients = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('clients')
         .select('*')
         .eq('status', 'active')
@@ -109,6 +190,28 @@ const ProjectCreate = () => {
       setClients(data || []);
     } catch (error) {
       console.error('Error fetching clients:', error);
+    }
+  };
+
+  const fetchMilestoneTemplates = async () => {
+    try {
+      const response = await fetch('/rest/v1/milestone-templates/active', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('获取里程碑模板失败');
+      }
+
+      const data = await response.json();
+      setMilestoneTemplates(data.milestones || []);
+      setTemplateVersion(data.version);
+    } catch (error) {
+      console.error('Error fetching milestone templates:', error);
+      // 如果获取失败，使用硬编码的模板作为后备
+      setMilestoneTemplates(MILESTONE_TEMPLATES);
     }
   };
 
@@ -124,35 +227,26 @@ const ProjectCreate = () => {
 
     setLoading(true);
     try {
-      // 1. Create Project
-      const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .insert([
-          {
-            name: formData.name,
-            customer_name: formData.customer_name,
-            amount: parseFloat(formData.amount) || 0,
-            description: formData.description,
-            is_public: formData.is_public,
-            manager_id: user.id,
-            status: 'pending',
-          },
-        ])
-        .select()
-        .single();
-
-      if (projectError) throw projectError;
+      // 1. Create Project using projectService
+      const project = await projectService.createProject({
+        name: formData.name,
+        customer_name: formData.customer_name,
+        amount: parseFloat(formData.amount) || 0,
+        description: formData.description,
+        is_public: formData.is_public,
+        manager_id: user.id,
+        status: 'pending',
+      });
 
       const projectId = project.id;
 
       // 1.5 Create Project-Client association if client selected
       if (selectedClient) {
-        const { error: projectClientError } = await supabase
+        const { error: projectClientError } = await api.db
           .from('project_clients')
           .insert({
             project_id: projectId,
             client_id: selectedClient.id,
-            contract_amount: parseFloat(formData.amount) || 0,
           });
 
         if (projectClientError) {
@@ -162,37 +256,29 @@ const ProjectCreate = () => {
 
       let firstMilestoneId = null;
 
-      // 2. Add creator as Project Manager
-      const { error: memberError } = await supabase
-        .from('project_members')
-        .insert({
-          project_id: projectId,
-          user_id: user.id,
-          role: 'manager'
-        });
-
-      if (memberError) {
-        console.error('Error adding project manager:', memberError);
-      }
+      // 2. Add creator as Project Manager using projectService
+      await projectService.addProjectMember(projectId, user.id, 'manager');
 
       // 3. Initialize Milestones & Tasks (并行处理以提高性能)
       // Note: In a production environment, this should be handled by a database trigger or edge function
       // to ensure atomicity. Here we do it client-side for simplicity given the constraints.
 
+      // 使用从 API 获取的模板，如果没有则使用硬编码的模板
+      const templatesToUse = milestoneTemplates.length > 0 ? milestoneTemplates : MILESTONE_TEMPLATES;
+
       // 首先并行创建所有里程碑
-      const milestonePromises = MILESTONE_TEMPLATES.map(template =>
-        supabase
+      const milestonePromises = templatesToUse.map(async template => {
+        const { data } = await api.db
           .from('project_milestones')
           .insert({
             project_id: projectId,
             name: template.name,
             phase_order: template.phase_order,
             status: template.phase_order === 1 ? 'in_progress' : 'pending',
-            description: `项目阶段 ${template.phase_order}: ${template.name}`
-          })
-          .select()
-          .single()
-      );
+            description: template.description || `项目阶段 ${template.phase_order}: ${template.name}`
+          });
+        return { data: data?.[0], error: null };
+      });
 
       const milestoneResults = await Promise.all(milestonePromises);
 
@@ -201,12 +287,12 @@ const ProjectCreate = () => {
 
       milestoneResults.forEach((result, index) => {
         if (result.error) {
-          console.error(`Error creating milestone ${MILESTONE_TEMPLATES[index].name}:`, result.error);
+          console.error(`Error creating milestone ${templatesToUse[index].name}:`, result.error);
           return;
         }
 
         const milestone = result.data;
-        const template = MILESTONE_TEMPLATES[index];
+        const template = templatesToUse[index];
 
         if (template.phase_order === 1) {
           firstMilestoneId = milestone.id;
@@ -224,7 +310,7 @@ const ProjectCreate = () => {
 
           taskPromises.push(
             (async () => {
-              const { error } = await supabase.from('milestone_tasks').insert(tasksToInsert);
+              const { error } = await api.db.from('milestone_tasks').insert(tasksToInsert);
               if (error) {
                 console.error(`Error creating tasks for ${template.name}:`, error);
               }
@@ -240,10 +326,7 @@ const ProjectCreate = () => {
 
       // 4. Update Project with Current Milestone
       if (firstMilestoneId) {
-        await supabase
-          .from('projects')
-          .update({ current_milestone_id: firstMilestoneId })
-          .eq('id', projectId);
+        await projectService.updateProject(projectId, { current_milestone_id: firstMilestoneId });
       }
 
       navigate(`/projects/${projectId}`);
@@ -331,10 +414,15 @@ const ProjectCreate = () => {
             required
             min="0"
             step="0.01"
-            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             value={formData.amount}
             onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
           />
+          {formData.amount && parseFloat(formData.amount) > 0 && (
+            <p className="mt-1 text-sm text-gray-600">
+              大写：<strong className="text-indigo-600">{numberToChinese(parseFloat(formData.amount))}</strong>
+            </p>
+          )}
         </div>
 
         <div>
@@ -362,6 +450,19 @@ const ProjectCreate = () => {
             公开项目（对所有用户可见）
           </label>
         </div>
+
+        {/* 显示当前使用的里程碑模板版本 */}
+        {templateVersion && (
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+            <p className="text-sm text-blue-800">
+              <span className="font-medium">里程碑模板版本：</span>
+              {templateVersion.name} (v{templateVersion.version_number})
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              {templateVersion.description}
+            </p>
+          </div>
+        )}
 
         <div className="flex justify-end space-x-3">
           <button

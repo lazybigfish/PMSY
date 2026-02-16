@@ -10,7 +10,7 @@ interface TaskWithDetails extends Task {
 
 // 判断任务是否即将到期（3天内）
 const isDueSoon = (task: Task): boolean => {
-  if (!task.due_date || task.status === 'done') return false;
+  if (!task.due_date || task.status === 'completed') return false;
   const due = new Date(task.due_date);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -23,7 +23,7 @@ const isDueSoon = (task: Task): boolean => {
 
 // 判断任务是否已超期
 const isOverdue = (task: Task): boolean => {
-  if (!task.due_date || task.status === 'done') return false;
+  if (!task.due_date || task.status === 'completed') return false;
   const due = new Date(task.due_date);
   const now = new Date();
   now.setHours(0, 0, 0, 0);

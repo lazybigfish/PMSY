@@ -102,8 +102,8 @@ export function TaskCreateModal({
   const fetchModules = async (projectId: string) => {
     setLoadingModules(true);
     try {
-      const { supabase } = await import('../../../lib/supabase');
-      const { data } = await supabase
+      const { api } = await import('../../../lib/api');
+      const { data } = await api.db
         .from('project_modules')
         .select('*')
         .eq('project_id', projectId);

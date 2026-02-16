@@ -163,7 +163,9 @@ router.get('/:table', requireAuth, async (req: Request, res: Response, next: Nex
     }
 
     const options = parseQueryOptions(req);
+    console.log('[REST] Query options:', JSON.stringify(options));
     const data = await dbService.query(table, options);
+    console.log('[REST] Query result:', JSON.stringify(data));
 
     // 返回数组格式（Supabase 兼容）
     res.json(data);
@@ -215,13 +217,23 @@ router.post('/:table', requireAuth, async (req: Request, res: Response, next: Ne
       throw new ValidationError('请求体必须是 JSON 对象');
     }
 
-    // 添加创建者 ID
-    const insertData = {
-      ...data,
-      created_by: req.user?.sub,
-    };
+    // 检查是否为批量插入（数组）
+    const isBatchInsert = Array.isArray(data);
+    const dataArray = isBatchInsert ? data : [data];
 
-    const result = await dbService.insert(table, insertData, select as string);
+    // 获取表的列信息，检查是否有 created_by 字段
+    const columns = await dbService.getTableColumns(table);
+    const hasCreatedBy = columns.includes('created_by');
+
+    // 添加创建者 ID（仅当表有 created_by 字段时）
+    const insertData = dataArray.map(item => ({
+      ...item,
+      ...(hasCreatedBy && req.user?.sub ? { created_by: req.user.sub } : {}),
+    }));
+
+    const result = await dbService.insert(table, isBatchInsert ? insertData : insertData[0], select as string);
+    
+    console.log('[REST] Insert result:', JSON.stringify(result));
 
     res.status(201).json(result);
   } catch (error) {
@@ -396,6 +408,88 @@ router.head('/:table', requireAuth, async (req: Request, res: Response, next: Ne
 
     res.setHeader('X-Total-Count', count.toString());
     res.status(200).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /rest/v1/milestone-templates/active
+ * 获取当前激活的里程碑模板（包含任务）
+ * 用于新建项目时初始化里程碑
+ */
+router.get('/milestone-templates/active', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { db } = await import('../config/database');
+
+    // 1. 获取当前激活的版本
+    const activeVersion = await db('template_versions')
+      .where('is_active', true)
+      .first();
+
+    if (!activeVersion) {
+      return res.status(404).json({ error: '没有激活的里程碑模板版本' });
+    }
+
+    // 2. 获取该版本的所有里程碑模板
+    const milestoneTemplates = await db('milestone_templates')
+      .where('version_id', activeVersion.id)
+      .where('is_active', true)
+      .orderBy('phase_order')
+      .select('*');
+
+    // 3. 获取每个里程碑的任务模板
+    const result = await Promise.all(
+      milestoneTemplates.map(async (template: any) => {
+        const tasks = await db('milestone_task_templates')
+          .where('milestone_template_id', template.id)
+          .orderBy('sort_order')
+          .select('*');
+
+        return {
+          id: template.id,
+          name: template.name,
+          phase_order: template.phase_order,
+          description: template.description,
+          tasks: tasks.map((task: any) => ({
+            id: task.id,
+            name: task.name,
+            description: task.description,
+            is_required: task.is_required,
+            output_documents: task.output_documents,
+            sort_order: task.sort_order,
+          })),
+        };
+      })
+    );
+
+    res.json({
+      version: {
+        id: activeVersion.id,
+        name: activeVersion.name,
+        version_number: activeVersion.version_number,
+        description: activeVersion.description,
+      },
+      milestones: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /rest/v1/template-versions
+ * 获取所有模板版本列表
+ */
+router.get('/template-versions/list', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { db } = await import('../config/database');
+
+    const versions = await db('template_versions')
+      .orderBy('created_at', 'desc')
+      .select('*');
+
+    res.json(versions);
   } catch (error) {
     next(error);
   }

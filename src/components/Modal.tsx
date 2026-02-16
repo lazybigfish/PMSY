@@ -25,12 +25,19 @@ const maxWidthClasses = {
 /**
  * 统一弹框组件
  *
+ * ⚠️ CODE REVIEW 注意：新增弹窗必须使用此组件，禁止独立实现遮罩层！
+ * ❌ 禁止：<div className="fixed inset-0 bg-black/50">...</div>
+ * ✅ 正确：<Modal isOpen={isOpen} onClose={handleClose}>...</Modal>
+ *
  * 标准样式：
- * - 背景：深色半透明 + 模糊效果 (bg-black/50 backdrop-blur-sm)
+ * - 背景：径向渐变毛玻璃效果，从弹窗中心向外淡化至透明
  * - 层级：z-[100]（覆盖导航栏）
  * - 位置：固定全屏覆盖 (fixed inset-0)
  * - 动画：淡入效果 (animate-fade-in)
  * - 内容区：白色圆角卡片，最大高度限制，支持滚动
+ * - 交互：点击背景关闭弹窗
+ *
+ * @see 使用规范文档：.agent/records/2026-02-15/弹窗使用规范.md
  */
 export function Modal({
   isOpen,
@@ -45,7 +52,18 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in"
+      style={{
+        background: `radial-gradient(circle at center, 
+          rgba(0,0,0,0.5) 0%, 
+          rgba(0,0,0,0.35) 15%, 
+          rgba(0,0,0,0.2) 30%, 
+          rgba(0,0,0,0.05) 50%,
+          transparent 70%
+        )`,
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
       onClick={onClose}
     >
       <div
@@ -107,7 +125,18 @@ export function ModalForm({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in"
+      style={{
+        background: `radial-gradient(circle at center, 
+          rgba(0,0,0,0.5) 0%, 
+          rgba(0,0,0,0.35) 15%, 
+          rgba(0,0,0,0.2) 30%, 
+          rgba(0,0,0,0.05) 50%,
+          transparent 70%
+        )`,
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
       onClick={onClose}
     >
       <form
@@ -196,7 +225,18 @@ export function ConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in"
+      style={{
+        background: `radial-gradient(circle at center, 
+          rgba(0,0,0,0.5) 0%, 
+          rgba(0,0,0,0.35) 15%, 
+          rgba(0,0,0,0.2) 30%, 
+          rgba(0,0,0,0.05) 50%,
+          transparent 70%
+        )`,
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
       onClick={onClose}
     >
       <div

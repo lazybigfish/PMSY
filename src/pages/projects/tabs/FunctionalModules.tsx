@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { ProjectModule, Task, ProjectSupplier } from '../../../types';
 import { Loader2, Download, Upload, FileSpreadsheet, ChevronRight, ChevronDown, CheckCircle, AlertTriangle, Plus, Trash2, ArrowUp, ArrowDown, Play, CheckSquare, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -27,7 +27,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
   const fetchModules = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('project_modules')
         .select('*')
         .eq('project_id', projectId)
@@ -58,16 +58,36 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
 
   const fetchSuppliers = async () => {
     try {
-      const { data, error } = await supabase
+      // 1. 先获取项目供应商关联数据
+      const { data: projectSuppliersData, error: psError } = await api.db
         .from('project_suppliers')
-        .select(`
-          *,
-          supplier:suppliers(id, name, contact_person, phone)
-        `)
+        .select('*')
         .eq('project_id', projectId);
 
-      if (error) throw error;
-      setSuppliers(data || []);
+      if (psError) throw psError;
+
+      // 2. 获取供应商详情
+      const projectSuppliers = projectSuppliersData || [];
+      if (projectSuppliers.length > 0) {
+        const supplierIds = projectSuppliers.map(ps => ps.supplier_id).filter(Boolean);
+        if (supplierIds.length > 0) {
+          const { data: suppliersData } = await api.db
+            .from('suppliers')
+            .select('id, name, contact_person, phone')
+            .in('id', supplierIds);
+          
+          const suppliersMap = new Map(suppliersData?.map(s => [s.id, s]) || []);
+          const mappedData = projectSuppliers.map(ps => ({
+            ...ps,
+            supplier: suppliersMap.get(ps.supplier_id)
+          }));
+          setSuppliers(mappedData);
+        } else {
+          setSuppliers(projectSuppliers);
+        }
+      } else {
+        setSuppliers([]);
+      }
     } catch (error) {
       console.error('Error fetching suppliers:', error);
     }
@@ -155,7 +175,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
     
     // Check if we already loaded tasks for this module (simple cache could be added later)
     // For now, just fetch for this module
-    const { data } = await supabase
+    const { data } = await api.db
       .from('tasks')
       .select('id, title, status, module_id') // Select only needed fields
       .eq('project_id', projectId)
@@ -251,7 +271,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
         });
 
         // 1. Delete existing
-        const { error: deleteError } = await supabase.from('project_modules').delete().eq('project_id', projectId);
+        const { error: deleteError } = await api.db.from('project_modules').delete().eq('project_id', projectId);
         if (deleteError) throw deleteError;
 
         // 2. Insert new
@@ -282,7 +302,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
             
             const parentId = parentStack.length > 0 ? parentStack[parentStack.length - 1].id : null;
 
-            const { data: inserted, error } = await supabase.from('project_modules').insert({
+            const { data: inserted, error } = await api.db.from('project_modules').insert({
                 project_id: projectId,
                 name: name,
                 description: desc,
@@ -290,15 +310,15 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
                 level: level,
                 parent_id: parentId,
                 sort_order: i
-            }).select().single();
+            });
 
             if (error) {
                 console.error('Error inserting row:', row, error);
                 throw error;
             }
-            
-            if (inserted) {
-                parentStack.push({ id: inserted.id, level: level });
+
+            if (inserted && inserted[0]) {
+                parentStack.push({ id: inserted[0].id, level: level });
                 insertedCount++;
             }
         }
@@ -308,7 +328,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
         await fetchModules();
         
         // Auto-expand all nodes after import
-        const { data: allModules } = await supabase.from('project_modules').select('id').eq('project_id', projectId);
+        const { data: allModules } = await api.db.from('project_modules').select('id').eq('project_id', projectId);
         if (allModules) {
             const newExpanded: Record<string, boolean> = {};
             allModules.forEach(m => newExpanded[m.id] = true);
@@ -348,7 +368,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
     }
 
     try {
-        const { error } = await supabase.from('project_modules').insert({
+        const { error } = await api.db.from('project_modules').insert({
             project_id: projectId,
             parent_id: parentId,
             name: name.trim(),
@@ -368,7 +388,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
       if (!window.confirm('确定要删除该模块及其所有子模块吗？此操作不可撤销。')) return;
 
       try {
-          const { error } = await supabase.from('project_modules').delete().eq('id', id);
+          const { error } = await api.db.from('project_modules').delete().eq('id', id);
           if (error) throw error;
           
           if (selectedModuleId === id) setSelectedModuleId(null);
@@ -418,8 +438,8 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
         const targetOrder = targetNode.sort_order || 0;
 
         // If orders are same or invalid, we might need a better strategy, but let's try simple swap
-        await supabase.from('project_modules').update({ sort_order: targetOrder }).eq('id', node.id);
-        await supabase.from('project_modules').update({ sort_order: nodeOrder }).eq('id', targetNode.id);
+        await api.db.from('project_modules').update({ sort_order: targetOrder }).eq('id', node.id);
+        await api.db.from('project_modules').update({ sort_order: nodeOrder }).eq('id', targetNode.id);
 
         fetchModules();
     } catch (error) {
@@ -432,7 +452,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
     if (node.status === 'in_progress') return;
 
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('project_modules')
         .update({ status: 'in_progress' })
         .eq('id', node.id);
@@ -450,7 +470,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
     if (node.status === 'completed') return;
 
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('project_modules')
         .update({ status: 'completed', progress: 100 })
         .eq('id', node.id);
@@ -606,7 +626,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
           : { ...n, children: n.children ? updateTree(n.children) : [] });
       return updateTree(prev);
     });
-    await supabase
+    await api.db
       .from('project_modules')
       .update(patch as any)
       .eq('id', selectedModule.id);
@@ -633,7 +653,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
       return updateTree(prev);
     });
 
-    const { error } = await supabase
+    const { error } = await api.db
       .from('project_modules')
       .update(updates as any)
       .eq('id', selectedModule.id);
@@ -665,7 +685,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
       return updateTree(prev);
     });
 
-    const { error } = await supabase
+    const { error } = await api.db
       .from('project_modules')
       .update(updates as any)
       .eq('id', selectedModule.id);
@@ -807,7 +827,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
                       </div>
                       <div>
                         <span className="text-gray-500">合同金额:</span>
-                        <span className="ml-1 text-gray-900 font-medium">¥{(supplier.contract_amount || 0).toLocaleString()}</span>
+                        <span className="ml-1 text-gray-900 font-medium">¥{(Number(supplier.contract_amount) || 0).toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -848,7 +868,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
                     {associatedTasks.map(t => (
                       <li key={t.id} className="px-3 py-2 text-sm">
                         <span className="font-medium text-gray-900">{t.title}</span>
-                        <span className="ml-2 text-gray-500">{t.status === 'done' ? '已完成' : t.status === 'in_progress' ? '进行中' : '未开始'}</span>
+                        <span className="ml-2 text-gray-500">{t.status === 'completed' ? '已完成' : t.status === 'in_progress' ? '进行中' : '未开始'}</span>
                       </li>
                     ))}
                   </ul>

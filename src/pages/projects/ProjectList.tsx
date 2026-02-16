@@ -30,20 +30,20 @@ const ProjectList = () => {
 
   const fetchFinalStageName = async () => {
     try {
-      const activeVersion = await api.db
+      const { data: activeVersion } = await api.db
         .from('template_versions')
         .select('id')
         .eq('is_active', true)
         .single();
 
-      if (activeVersion) {
-        const lastStage = await api.db
+      if (activeVersion?.data) {
+        const { data: lastStage } = await api.db
           .from('milestone_templates')
           .select('name')
-          .eq('version_id', activeVersion.id)
+          .eq('version_id', activeVersion.data.id)
           .order('phase_order', { ascending: false })
           .limit(1);
-        
+
         if (lastStage && lastStage[0]) {
           setFinalStageName(lastStage[0].name);
         }
@@ -56,15 +56,15 @@ const ProjectList = () => {
   const fetchProjects = async () => {
     try {
       setLoading(true);
-      
+
       // 获取所有项目
-      const projectsData = await api.db
+      const { data: projectsData } = await api.db
         .from('projects')
         .select('*')
         .order('created_at', { ascending: false });
 
       // 获取当前用户在所有项目中的角色
-      const userMemberships = await api.db
+      const { data: userMemberships } = await api.db
         .from('project_members')
         .select('project_id, role')
         .eq('user_id', user?.id);
@@ -78,22 +78,22 @@ const ProjectList = () => {
       }
 
       // 获取所有里程碑
-      const milestones = await api.db
+      const { data: milestones } = await api.db
         .from('project_milestones')
         .select('project_id, status, name, phase_order');
 
       // 获取所有模块
-      const modules = await api.db
+      const { data: modules } = await api.db
         .from('project_modules')
         .select('project_id, status, progress');
 
       // 获取所有风险
-      const risks = await api.db
+      const { data: risks } = await api.db
         .from('risks')
         .select('project_id, level, status');
 
       // 获取成员数量
-      const members = await api.db
+      const { data: members } = await api.db
         .from('project_members')
         .select('project_id');
 
@@ -129,7 +129,7 @@ const ProjectList = () => {
 
         const projectModules = modulesByProject[project.id] || [];
         const totalModules = projectModules.length;
-        const totalProgress = projectModules.reduce((sum: number, m: any) => sum + (m.progress || 0), 0);
+        const totalProgress = projectModules.reduce((sum: number, m: any) => sum + (Number(m.progress) || 0), 0);
         const moduleProgress = totalModules > 0 ? Math.round(totalProgress / totalModules) : 0;
 
         const memberCount = memberCountByProject[project.id] || 0;
@@ -291,7 +291,7 @@ const ProjectList = () => {
             {formatAmount(
               projects
                 .filter(p => p.manager_id === user?.id)
-                .reduce((sum, p) => sum + (p.amount || 0), 0)
+                .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
             )}
           </div>
           <p className="text-xs text-dark-400 mt-1">作为项目经理</p>

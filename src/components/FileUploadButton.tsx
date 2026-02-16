@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Upload, Loader2, X, File as FileIcon, CheckCircle } from 'lucide-react';
 import { fileService } from '../services/fileService';
 import { FileRecord } from '../types/file';
+import { Modal } from './Modal';
 
 interface FileUploadButtonProps {
   onUploadComplete?: (files: FileRecord[]) => void;
@@ -92,7 +93,7 @@ export const FileUploadButton: React.FC<FileUploadButtonProps> = ({
         const result = await fileService.uploadFile(file, null, (progress) => {
           setUploadProgress((prev) =>
             prev.map((p, idx) =>
-              idx === i ? { ...p, progress: progress.progress } : p
+              idx === i ? { ...p, progress: progress.percentage } : p
             )
           );
         });
@@ -172,65 +173,55 @@ export const FileUploadButton: React.FC<FileUploadButtonProps> = ({
       />
 
       {/* 上传进度弹窗 */}
-      {showProgress && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">上传进度</h3>
-              {!isUploading && (
-                <button
-                  onClick={handleCancel}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-3 max-h-80 overflow-y-auto">
-              {uploadProgress.map((item, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <div className="flex-shrink-0">
-                    {item.status === 'completed' ? (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    ) : item.status === 'error' ? (
-                      <X className="h-5 w-5 text-red-500" />
-                    ) : (
-                      <FileIcon className="h-5 w-5 text-gray-400" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700 truncate">
-                        {item.fileName}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {item.status === 'completed'
-                          ? '完成'
-                          : item.status === 'error'
-                          ? '失败'
-                          : `${item.progress}%`}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all duration-300 ${
-                          item.status === 'completed'
-                            ? 'bg-green-500'
-                            : item.status === 'error'
-                            ? 'bg-red-500'
-                            : 'bg-indigo-600'
-                        }`}
-                        style={{ width: `${item.progress}%` }}
-                      />
-                    </div>
-                  </div>
+      <Modal
+        isOpen={showProgress}
+        onClose={!isUploading ? handleCancel : () => {}}
+        title="上传进度"
+        maxWidth="md"
+        showCloseButton={!isUploading}
+      >
+        <div className="space-y-3 max-h-80 overflow-y-auto">
+          {uploadProgress.map((item, index) => (
+            <div key={index} className="flex items-center gap-3">
+              <div className="flex-shrink-0">
+                {item.status === 'completed' ? (
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                ) : item.status === 'error' ? (
+                  <X className="h-5 w-5 text-red-500" />
+                ) : (
+                  <FileIcon className="h-5 w-5 text-gray-400" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-gray-700 truncate">
+                    {item.fileName}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {item.status === 'completed'
+                      ? '完成'
+                      : item.status === 'error'
+                      ? '失败'
+                      : `${item.progress}%`}
+                  </span>
                 </div>
-              ))}
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      item.status === 'completed'
+                        ? 'bg-green-500'
+                        : item.status === 'error'
+                        ? 'bg-red-500'
+                        : 'bg-indigo-600'
+                    }`}
+                    style={{ width: `${item.progress}%` }}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
-      )}
+      </Modal>
     </>
   );
 };

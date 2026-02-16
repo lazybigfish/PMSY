@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Upload, FileText, Trash2, Loader2 } from 'lucide-react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
+import { Modal } from '../../../components/Modal';
 
 interface Attachment {
   id?: string;
@@ -135,9 +136,9 @@ export function TaskProgressUpdateModal({
         ));
 
         // 检查 storage bucket 是否存在
-        const { data: buckets } = await supabase.storage.listBuckets();
+        const { data: buckets } = await api.storage.listBuckets();
         const bucketExists = buckets?.some(b => b.name === 'task-attachments');
-        
+
         if (!bucketExists) {
           console.warn('Storage bucket task-attachments does not exist. Skipping file upload.');
           // 继续提交，只是不上传文件
@@ -148,7 +149,7 @@ export function TaskProgressUpdateModal({
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `task-progress/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await api.storage
           .from('task-attachments')
           .upload(filePath, attachment.file);
 
@@ -158,7 +159,7 @@ export function TaskProgressUpdateModal({
           continue;
         }
 
-        const { data: { publicUrl } } = supabase.storage
+        const { data: { publicUrl } } = api.storage
           .from('task-attachments')
           .getPublicUrl(filePath);
 
@@ -218,41 +219,34 @@ export function TaskProgressUpdateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-slide-up">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-100">
-          <div>
-            <h3 className="text-lg font-display font-bold text-dark-900">更新进度</h3>
-            <p className="text-sm text-dark-500 mt-0.5">{taskTitle}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-dark-100 rounded-xl transition-colors"
-            disabled={isSubmitting}
-          >
-            <X className="w-5 h-5 text-dark-500" />
-          </button>
-        </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="更新进度"
+      maxWidth="lg"
+      showCloseButton={false}
+    >
+      <div className="mb-4">
+        <p className="text-sm text-dark-500">{taskTitle}</p>
+      </div>
 
-        {/* Current Progress */}
-        <div className="px-6 py-3 bg-dark-50 border-b border-dark-100">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-dark-500">当前进度</span>
-            <div className="flex items-center gap-2">
-              <div className="w-32 h-2 bg-dark-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-primary-400 to-primary-500 rounded-full transition-all"
-                  style={{ width: `${currentProgress}%` }}
-                />
-              </div>
-              <span className="font-semibold text-dark-700">{currentProgress}%</span>
+      {/* Current Progress */}
+      <div className="px-4 py-3 bg-dark-50 rounded-lg mb-6">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-dark-500">当前进度</span>
+          <div className="flex items-center gap-2">
+            <div className="w-32 h-2 bg-dark-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-primary-400 to-primary-500 rounded-full transition-all"
+                style={{ width: `${currentProgress}%` }}
+              />
             </div>
+            <span className="font-semibold text-dark-700">{currentProgress}%</span>
           </div>
         </div>
+      </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5">
           {/* Progress Slider */}
           <div>
             <label className="block text-sm font-medium text-dark-700 mb-3">
@@ -376,33 +370,32 @@ export function TaskProgressUpdateModal({
             )}
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-dark-100">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="btn-secondary"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !content.trim()}
-              className="btn-primary"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  提交中...
-                </>
-              ) : (
-                '提交更新'
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {/* Actions */}
+        <div className="flex justify-end gap-3 pt-4 border-t border-dark-100">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="btn-secondary"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || !content.trim()}
+            className="btn-primary"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                提交中...
+              </>
+            ) : (
+              '提交更新'
+            )}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

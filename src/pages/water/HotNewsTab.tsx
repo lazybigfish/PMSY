@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Search, ExternalLink, MessageCircle, Calendar, Filter, X, Send, Loader2 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { api } from '../../lib/api';
+import { useAuth } from '../../context/AuthContextNew';
 import { HotNews, NewsComment } from '../../types';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { Modal } from '../../components/Modal';
 
 export default function HotNewsTab() {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ export default function HotNewsTab() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
   const PAGE_SIZE = 20;
 
   // 加载热点资讯
@@ -25,14 +27,35 @@ export default function HotNewsTab() {
       setLoading(true);
       const currentPage = reset ? 0 : page;
       
-      let query = supabase
+      let query = api.db
         .from('hot_news')
         .select('*')
         .order('published_at', { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (searchQuery) {
-        query = query.or(`title.ilike.%${searchQuery}%,summary.ilike.%${searchQuery}%`);
+        // or() 方法不支持，改为分别查询
+        const { data: titleData } = await api.db
+          .from('hot_news')
+          .select('*')
+          .ilike('title', `%${searchQuery}%`)
+          .order('published_at', { ascending: false })
+          .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+        
+        const { data: summaryData } = await api.db
+          .from('hot_news')
+          .select('*')
+          .ilike('summary', `%${searchQuery}%`)
+          .order('published_at', { ascending: false })
+          .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+        
+        const combinedData = [...(titleData || []), ...(summaryData || [])];
+        const uniqueData = Array.from(new Map(combinedData.map(item => [item.id, item])).values());
+        
+        setNews(uniqueData);
+        setTotal(uniqueData.length);
+        setLoading(false);
+        return;
       }
 
       const { data, error } = await query;
@@ -42,7 +65,7 @@ export default function HotNewsTab() {
       // 获取评论数
       if (data && data.length > 0) {
         const newsIds = data.map(n => n.id);
-        const { data: commentData } = await supabase
+        const { data: commentData } = await api.db
           .from('news_comments')
           .select('news_id')
           .in('news_id', newsIds);
@@ -81,17 +104,22 @@ export default function HotNewsTab() {
   // 加载评论
   const loadComments = async (newsId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('news_comments')
         .select(`
           *,
-          user:profiles(id, full_name, avatar_url)
+          profiles(id, full_name, avatar_url)
         `)
         .eq('news_id', newsId)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setComments(data || []);
+      // 将返回数据中的 profiles 字段映射为 user 字段
+      const mappedData = (data || []).map((item: any) => ({
+        ...item,
+        user: item.profiles
+      }));
+      setComments(mappedData);
     } catch (error) {
       console.error('Error loading comments:', error);
     }
@@ -103,7 +131,7 @@ export default function HotNewsTab() {
 
     try {
       setSubmittingComment(true);
-      const { error } = await supabase
+      const { error } = await api.db
         .from('news_comments')
         .insert({
           news_id: selectedNews.id,
@@ -229,102 +257,90 @@ export default function HotNewsTab() {
       )}
 
       {/* 详情弹窗 */}
-      {selectedNews && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            {/* 弹窗头部 */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">{selectedNews.title}</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  {selectedNews.source} · {format(new Date(selectedNews.published_at), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
-                </p>
-              </div>
-              <button
-                onClick={closeDetail}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <Modal
+        isOpen={!!selectedNews}
+        onClose={closeDetail}
+        title={selectedNews?.title || '详情'}
+        maxWidth="2xl"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            {selectedNews?.source} · {selectedNews && format(new Date(selectedNews.published_at), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
+          </p>
 
-            {/* 弹窗内容 */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="prose max-w-none mb-6">
-                <p className="text-gray-700 whitespace-pre-wrap">{selectedNews.summary}</p>
-              </div>
-              
-              <a
-                href={selectedNews.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700"
-              >
-                阅读原文
-                <ExternalLink className="w-4 h-4" />
-              </a>
+          <div className="prose max-w-none mb-6">
+            <p className="text-gray-700 whitespace-pre-wrap">{selectedNews?.summary}</p>
+          </div>
+          
+          <a
+            href={selectedNews?.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700"
+          >
+            阅读原文
+            <ExternalLink className="w-4 h-4" />
+          </a>
 
-              {/* 评论区 */}
-              <div className="mt-8 pt-6 border-t border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  评论 ({comments.length})
-                </h3>
+          {/* 评论区 */}
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              评论 ({comments.length})
+            </h3>
 
-                {/* 评论列表 */}
-                <div className="space-y-4 mb-6">
-                  {comments.map((comment) => (
-                    <div key={comment.id} className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-medium text-blue-600">
-                          {comment.user?.full_name?.[0] || 'U'}
-                        </span>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-gray-900">
-                            {comment.user?.full_name || '未知用户'}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {format(new Date(comment.created_at), 'MM-dd HH:mm')}
-                          </span>
-                        </div>
-                        <p className="text-gray-700 text-sm">{comment.content}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* 评论输入 */}
-                {user && (
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <textarea
-                        value={commentContent}
-                        onChange={(e) => setCommentContent(e.target.value)}
-                        placeholder="写下你的评论..."
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                      />
-                    </div>
-                    <button
-                      onClick={submitComment}
-                      disabled={!commentContent.trim() || submittingComment}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                      {submittingComment ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
-                      发布
-                    </button>
+            {/* 评论列表 */}
+            <div className="space-y-4 mb-6">
+              {comments.map((comment) => (
+                <div key={comment.id} className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-medium text-blue-600">
+                      {comment.user?.full_name?.[0] || 'U'}
+                    </span>
                   </div>
-                )}
-              </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-gray-900">
+                        {comment.user?.full_name || '未知用户'}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {format(new Date(comment.created_at), 'MM-dd HH:mm')}
+                      </span>
+                    </div>
+                    <p className="text-gray-700 text-sm">{comment.content}</p>
+                  </div>
+                </div>
+              ))}
             </div>
+
+            {/* 评论输入 */}
+            {user && (
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <textarea
+                    value={commentContent}
+                    onChange={(e) => setCommentContent(e.target.value)}
+                    placeholder="写下你的评论..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  />
+                </div>
+                <button
+                  onClick={submitComment}
+                  disabled={!commentContent.trim() || submittingComment}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {submittingComment ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  发布
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

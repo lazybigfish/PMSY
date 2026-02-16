@@ -143,7 +143,7 @@ const Login = () => {
             {/* Username Field */}
             <div>
               <label className="block text-sm font-semibold text-dark-700 mb-2">
-                电子邮箱 / 账号
+                用户名
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -156,7 +156,7 @@ const Login = () => {
                   autoComplete="username"
                   required
                   className="input pl-12"
-                  placeholder="name@company.com"
+                  placeholder="请输入用户名"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />

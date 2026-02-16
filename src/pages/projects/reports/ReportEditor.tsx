@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../../../lib/supabase';
-import { useAuth } from '../../../context/AuthContext';
+import { api } from '../../../lib/api';
+import { useAuth } from '../../../context/AuthContextNew';
 import { Loader2, Save, Wand2, FileText, Download, ArrowLeft } from 'lucide-react';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
@@ -67,9 +67,9 @@ const ReportEditor = () => {
 
       // Fetch Data
       const [
-        completedRes, 
-        risksRes, 
-        plannedRes, 
+        completedRes,
+        risksRes,
+        plannedRes,
         progressRes,
         modulesRes,
         milestonesRes,
@@ -77,51 +77,51 @@ const ReportEditor = () => {
         projectRes
       ] = await Promise.all([
         // 1. Completed Tasks (Time range)
-        supabase
+        api.db
           .from('tasks')
           .select('*')
           .eq('project_id', projectId)
           .eq('status', 'done')
           .gte('completed_at', startDateStr),
         // 2. Active Risks (Current major risks)
-        supabase
+        api.db
           .from('risks')
           .select('*')
           .eq('project_id', projectId)
           .neq('status', 'closed')
           .in('level', ['high', 'medium']),
         // 3. Planned Tasks (Due date in future)
-        supabase
+        api.db
           .from('tasks')
           .select('*')
           .eq('project_id', projectId)
           .neq('status', 'done')
           .gte('due_date', new Date().toISOString()),
-        // 4. Progress Logs (Time range)
-        supabase
+        // 4. Progress Logs (Time range) - 先获取日志，再关联任务
+        api.db
           .from('task_progress_logs')
-          .select('*, task:tasks(title)')
+          .select('*')
           .gte('created_at', startDateStr)
           .order('created_at', { ascending: false }),
         // 5. Project Modules
-        supabase
+        api.db
           .from('project_modules')
           .select('*')
           .eq('project_id', projectId),
         // 6. Milestones
-        supabase
+        api.db
           .from('project_milestones')
           .select('*')
           .eq('project_id', projectId)
           .eq('status', 'in_progress'),
         // 7. New Risks (Discovered in time range)
-        supabase
+        api.db
           .from('risks')
           .select('*')
           .eq('project_id', projectId)
           .gte('created_at', startDateStr),
         // 8. Project Info
-        supabase
+        api.db
             .from('projects')
             .select('*')
             .eq('id', projectId)
@@ -131,11 +131,24 @@ const ReportEditor = () => {
       const completedTasks = completedRes.data || [];
       const activeRisks = risksRes.data || [];
       const plannedTasks = plannedRes.data || [];
-      const progressLogs = progressRes.data || [];
+      let progressLogs = progressRes.data || [];
       const modules = modulesRes.data || [];
       const milestones = milestonesRes.data || [];
       const newRisks = newRisksRes.data || [];
       const project = projectRes.data;
+
+      // 关联进度日志与任务
+      if (progressLogs.length > 0) {
+        const taskIds = progressLogs.map(log => log.task_id).filter(Boolean);
+        if (taskIds.length > 0) {
+          const { data: tasksData } = await api.db.from('tasks').select('id, title').in('id', taskIds);
+          const tasksMap = new Map(tasksData?.map(t => [t.id, t]) || []);
+          progressLogs = progressLogs.map(log => ({
+            ...log,
+            task: tasksMap.get(log.task_id)
+          }));
+        }
+      }
 
       // --- Formatting Logic ---
 
@@ -255,7 +268,7 @@ const ReportEditor = () => {
   const fetchReport = async (id: string) => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from('reports').select('*').eq('id', id).single();
+      const { data, error } = await api.db.from('reports').select('*').eq('id', id).single();
       if (error) throw error;
       if (data) setReport(data);
     } catch (error) {
@@ -280,10 +293,10 @@ const ReportEditor = () => {
 
       let error;
       if (reportId && reportId !== 'new') {
-        const { error: err } = await supabase.from('reports').update(payload).eq('id', reportId);
+        const { error: err } = await api.db.from('reports').update(payload).eq('id', reportId);
         error = err;
       } else {
-        const { error: err } = await supabase.from('reports').insert([payload]);
+        const { error: err } = await api.db.from('reports').insert([payload]);
         error = err;
       }
 
@@ -301,8 +314,8 @@ const ReportEditor = () => {
     setAiLoading(true);
     try {
         // 1. Fetch AI Config
-        const { data: providers } = await supabase.from('ai_providers').select('*').eq('is_active', true).limit(1);
-        const { data: roles } = await supabase.from('ai_roles').select('*').eq('is_default', true).limit(1);
+        const { data: providers } = await api.db.from('ai_providers').select('*').eq('is_active', true).limit(1);
+        const { data: roles } = await api.db.from('ai_roles').select('*').eq('is_default', true).limit(1);
         
         if (!providers || providers.length === 0) {
             alert('未找到可用的AI服务提供商，请在系统设置中配置。');
@@ -313,9 +326,9 @@ const ReportEditor = () => {
         const role = roles && roles.length > 0 ? roles[0] : { system_prompt: '你是一位资深项目经理。' };
 
         // 2. Fetch Project Data
-        const { data: tasks } = await supabase.from('tasks').select('*').eq('project_id', projectId);
-        const { data: modules } = await supabase.from('project_modules').select('*').eq('project_id', projectId);
-        const { data: risks } = await supabase.from('risks').select('*').eq('project_id', projectId);
+        const { data: tasks } = await api.db.from('tasks').select('*').eq('project_id', projectId);
+        const { data: modules } = await api.db.from('project_modules').select('*').eq('project_id', projectId);
+        const { data: risks } = await api.db.from('risks').select('*').eq('project_id', projectId);
 
         // 3. Construct Prompt
         const context = JSON.stringify({ tasks, modules, risks });

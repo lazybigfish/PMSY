@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckSquare, Square, Eye, EyeOff, Trash2, ArrowUpDown, AlertCircle, Clock } from 'lucide-react';
 import { Task, Profile, Project } from '../../../types';
 
-interface TaskWithDetails extends Task {
+export interface TaskWithDetails extends Task {
   project?: Project;
   creator?: Profile;  // 责任人（创建者）
   assignees?: { user_id: string; is_primary: boolean; user: Profile }[];
@@ -12,7 +12,7 @@ interface TaskWithDetails extends Task {
 
 // 判断任务是否即将到期（3天内）
 const isDueSoon = (task: Task): boolean => {
-  if (!task.due_date || task.status === 'done') return false;
+  if (!task.due_date || task.status === 'completed') return false;
   const due = new Date(task.due_date);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -25,7 +25,7 @@ const isDueSoon = (task: Task): boolean => {
 
 // 判断任务是否已超期
 const isOverdue = (task: Task): boolean => {
-  if (!task.due_date || task.status === 'done') return false;
+  if (!task.due_date || task.status === 'completed') return false;
   const due = new Date(task.due_date);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -60,12 +60,13 @@ const getDueDateClass = (task: Task): string => {
 
 interface TaskTableProps {
   tasks: TaskWithDetails[];
+  loading?: boolean;
   selectedTasks: Set<string>;
   onSelectTask: (taskId: string, isSelected: boolean) => void;
   onSelectAll: (isSelected: boolean) => void;
   onUpdateStatus: (taskId: string, status: string) => void;
   onDeleteTask: (taskId: string) => void;
-  sortBy: string;
+  sortBy: 'created_at' | 'due_date' | 'priority' | 'completed_at';
   sortOrder: 'asc' | 'desc';
   onSort: (field: 'created_at' | 'due_date' | 'priority' | 'completed_at') => void;
 }

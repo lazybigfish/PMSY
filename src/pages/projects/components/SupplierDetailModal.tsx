@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectSupplier, ProjectModule, SupplierAcceptance } from '../../../types';
 import { FileText, X, ExternalLink, Plus, Upload, ChevronRight, ChevronDown, CheckCircle, Clock, AlertCircle } from 'lucide-react';
-import { supabase } from '../../../lib/supabase';
-import { useAuth } from '../../../context/AuthContext';
+import { api } from '../../../lib/api';
+import { useAuth } from '../../../context/AuthContextNew';
 import { DatePicker } from '../../../components/DatePicker';
+import { Modal, ConfirmModal } from '../../../components/Modal';
 
 // 验收类型配置
 const ACCEPTANCE_TYPE_CONFIG = {
@@ -182,8 +183,14 @@ export function SupplierDetailModal({ projectSupplier, projectModules, onClose, 
   const [activeTab, setActiveTab] = useState<'info' | 'acceptance-payment'>('info');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100] overflow-y-auto">
-      <div className="bg-white rounded-lg max-w-6xl w-full h-[90vh] flex flex-col shadow-xl">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      maxWidth="5xl"
+      showCloseButton={false}
+      className="h-[90vh]"
+    >
+      <div className="flex flex-col h-full">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
           <div>
             <h3 className="text-xl font-bold text-gray-900">{projectSupplier.supplier?.name}</h3>
@@ -237,7 +244,7 @@ export function SupplierDetailModal({ projectSupplier, projectModules, onClose, 
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -326,11 +333,11 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
   }, [projectSupplier.id]);
 
   const fetchAcceptanceStatus = async () => {
-    const { data } = await supabase
+    const { data } = await api.db
       .from('supplier_acceptances')
       .select('*')
       .eq('project_supplier_id', projectSupplier.id);
-    
+
     const acceptances = data || [];
     setAcceptanceStatus({
       count: acceptances.length,
@@ -339,20 +346,20 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
   };
 
   const fetchPaymentStats = async () => {
-    const { data } = await supabase
+    const { data } = await api.db
       .from('supplier_payment_plans')
       .select('amount, status')
       .eq('project_supplier_id', projectSupplier.id);
-    
+
     const plans = data || [];
     const totalPaid = plans
       .filter(p => p.status === 'paid')
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-    const remaining = (projectSupplier.contract_amount || 0) - totalPaid;
-    const remainingPercentage = projectSupplier.contract_amount > 0 
-      ? (remaining / projectSupplier.contract_amount) * 100 
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const remaining = (Number(projectSupplier.contract_amount) || 0) - totalPaid;
+    const remainingPercentage = projectSupplier.contract_amount > 0
+      ? (remaining / projectSupplier.contract_amount) * 100
       : 0;
-    
+
     setPaymentStats({
       totalPaid,
       remaining,
@@ -368,7 +375,7 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
   const handleSaveModules = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('project_suppliers')
         .update({ module_ids: selectedModules })
         .eq('id', projectSupplier.id);
@@ -386,7 +393,7 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
 
   const canEditModules = async () => {
     if (!user) return false;
-    const { data } = await supabase
+    const { data } = await api.db
       .from('project_members')
       .select('*')
       .eq('project_id', projectSupplier.project_id)
@@ -528,10 +535,10 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
   const [selectedPlan, setSelectedPlan] = useState<SupplierPaymentPlan | null>(null);
 
   // 统计计算
-  const contractAmount = projectSupplier.contract_amount || 0;
+  const contractAmount = Number(projectSupplier.contract_amount) || 0;
   const totalPaid = paymentPlans
     .filter(p => p.status === 'paid')
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const remaining = contractAmount - totalPaid;
   const remainingPercentage = contractAmount > 0 ? (remaining / contractAmount) * 100 : 0;
 
@@ -550,7 +557,7 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
 
   const fetchAcceptances = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('supplier_acceptances')
         .select('*')
         .eq('project_supplier_id', projectSupplier.id)
@@ -565,7 +572,7 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
 
   const fetchPaymentPlans = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('supplier_payment_plans')
         .select('*')
         .eq('project_supplier_id', projectSupplier.id)
@@ -580,7 +587,7 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
 
   const handleAddAcceptance = async (type: 'initial' | 'final' | 'phase', date: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('supplier_acceptances')
         .insert({
           project_supplier_id: projectSupplier.id,
@@ -589,11 +596,11 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
           result: 'pass',
           description: '',
           attachments: [],
-          created_by: (await supabase.auth.getUser()).data.user?.id
+          created_by: (await api.auth.getUser()).id
         });
 
       if (error) throw error;
-      
+
       await fetchAcceptances();
       onUpdate();
       setShowAddAcceptanceModal(false);
@@ -607,13 +614,13 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
     if (!confirm('确定要删除这条验收记录吗？')) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('supplier_acceptances')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
-      
+
       await fetchAcceptances();
       onUpdate();
     } catch (error) {
@@ -625,24 +632,24 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
   const handleConfirmPayment = async (plan: SupplierPaymentPlan, actualDate: string, voucherFile?: File) => {
     try {
       let voucherUrl = '';
-      
+
       if (voucherFile) {
         const fileExt = voucherFile.name.split('.').pop();
         const fileName = `${plan.id}_${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await api.storage
           .from('payment-vouchers')
           .upload(fileName, voucherFile);
 
         if (uploadError) throw uploadError;
-        
-        const { data: { publicUrl } } = supabase.storage
+
+        const { data: { publicUrl } } = api.storage
           .from('payment-vouchers')
           .getPublicUrl(fileName);
-        
+
         voucherUrl = publicUrl;
       }
 
-      const { error } = await supabase
+      const { error } = await api.db
         .from('supplier_payment_plans')
         .update({
           status: 'paid',
@@ -668,7 +675,7 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
     if (!confirm('确定要撤回此付款记录吗？')) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await api.db
         .from('supplier_payment_plans')
         .update({
           status: 'pending',
@@ -889,10 +896,10 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
 }
 
 // 新增验收弹窗
-function AddAcceptanceModal({ 
-  onClose, 
-  onConfirm 
-}: { 
+function AddAcceptanceModal({
+  onClose,
+  onConfirm
+}: {
   onClose: () => void;
   onConfirm: (type: 'initial' | 'final' | 'phase', date: string) => void;
 }) {
@@ -904,63 +911,59 @@ function AddAcceptanceModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
-      <div className="bg-white rounded-lg max-w-md w-full">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-900">新增验收</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* 验收类型选择 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              选择验收类型 <span className="text-red-500">*</span>
-            </label>
-            <div className="space-y-2">
-              {(['initial', 'final', 'phase'] as const).map((type) => {
-                const config = ACCEPTANCE_TYPE_CONFIG[type];
-                const Icon = config.icon;
-                return (
-                  <button
-                    key={type}
-                    onClick={() => setSelectedType(type)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
-                      selectedType === type
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className={`p-2 rounded-full ${config.color}`}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <span className="font-medium text-gray-900">{config.label}</span>
-                    {selectedType === type && (
-                      <CheckCircle className="h-5 w-5 text-indigo-600 ml-auto" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 验收日期 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              验收日期 <span className="text-red-500">*</span>
-            </label>
-            <DatePicker
-              value={selectedDate}
-              onChange={(date) => setSelectedDate(date)}
-              placeholder="选择验收日期"
-              className="w-full"
-            />
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="新增验收"
+      maxWidth="md"
+    >
+      <div className="space-y-6">
+        {/* 验收类型选择 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            选择验收类型 <span className="text-red-500">*</span>
+          </label>
+          <div className="space-y-2">
+            {(['initial', 'final', 'phase'] as const).map((type) => {
+              const config = ACCEPTANCE_TYPE_CONFIG[type];
+              const Icon = config.icon;
+              return (
+                <button
+                  key={type}
+                  onClick={() => setSelectedType(type)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
+                    selectedType === type
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className={`p-2 rounded-full ${config.color}`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium text-gray-900">{config.label}</span>
+                  {selectedType === type && (
+                    <CheckCircle className="h-5 w-5 text-indigo-600 ml-auto" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+        {/* 验收日期 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            验收日期 <span className="text-red-500">*</span>
+          </label>
+          <DatePicker
+            value={selectedDate}
+            onChange={(date) => setSelectedDate(date)}
+            placeholder="选择验收日期"
+            className="w-full"
+          />
+        </div>
+
+        <div className="flex justify-end space-x-3 pt-4">
           <button
             onClick={onClose}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
@@ -975,17 +978,17 @@ function AddAcceptanceModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
 // 新增付款计划弹窗
-function AddPaymentPlanModal({ 
-  projectSupplierId, 
-  contractAmount, 
-  onClose, 
-  onSuccess 
-}: { 
+function AddPaymentPlanModal({
+  projectSupplierId,
+  contractAmount,
+  onClose,
+  onSuccess
+}: {
   projectSupplierId: string;
   contractAmount: number;
   onClose: () => void;
@@ -1024,13 +1027,13 @@ function AddPaymentPlanModal({
   const handlePlanChange = (id: string, field: string, value: string | number) => {
     setPlans(plans.map(plan => {
       if (plan.id !== id) return plan;
-      
+
       const updated = { ...plan, [field]: value };
-      
+
       if (field === 'percentage') {
         updated.amount = Math.round(contractAmount * (Number(value) / 100));
       }
-      
+
       return updated;
     }));
   };
@@ -1053,7 +1056,7 @@ function AddPaymentPlanModal({
         status: 'pending'
       }));
 
-      const { error } = await supabase
+      const { error } = await api.db
         .from('supplier_payment_plans')
         .insert(paymentPlans);
 
@@ -1066,101 +1069,98 @@ function AddPaymentPlanModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-900">新增付款计划</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="h-5 w-5" />
-          </button>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="新增付款计划"
+      maxWidth="2xl"
+      className="max-h-[90vh]"
+    >
+      <div className="space-y-6 overflow-y-auto">
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <p className="text-sm text-blue-800">
+            合同金额: <span className="font-bold">¥{contractAmount.toLocaleString()}</span>
+          </p>
         </div>
 
-        <div className="p-6 space-y-6">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-blue-800">
-              合同金额: <span className="font-bold">¥{contractAmount.toLocaleString()}</span>
-            </p>
-          </div>
+        {plans.map((plan, index) => (
+          <div key={plan.id} className="border border-gray-200 rounded-lg p-4 space-y-4">
+            <div className="flex justify-between items-center">
+              <h4 className="font-medium text-gray-900">付款计划 {index + 1}</h4>
+              {plans.length > 1 && (
+                <button
+                  onClick={() => handleRemovePlan(plan.id)}
+                  className="text-red-600 hover:text-red-800 text-sm"
+                >
+                  删除
+                </button>
+              )}
+            </div>
 
-          {plans.map((plan, index) => (
-            <div key={plan.id} className="border border-gray-200 rounded-lg p-4 space-y-4">
-              <div className="flex justify-between items-center">
-                <h4 className="font-medium text-gray-900">付款计划 {index + 1}</h4>
-                {plans.length > 1 && (
-                  <button
-                    onClick={() => handleRemovePlan(plan.id)}
-                    className="text-red-600 hover:text-red-800 text-sm"
-                  >
-                    删除
-                  </button>
-                )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  付款时间 <span className="text-red-500">*</span>
+                </label>
+                <DatePicker
+                  value={plan.planned_date}
+                  onChange={(date) => handlePlanChange(plan.id, 'planned_date', date)}
+                  placeholder="选择付款时间"
+                  className="w-full"
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    付款时间 <span className="text-red-500">*</span>
-                  </label>
-                  <DatePicker
-                    value={plan.planned_date}
-                    onChange={(date) => handlePlanChange(plan.id, 'planned_date', date)}
-                    placeholder="选择付款时间"
-                    className="w-full"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  付款比例 (%) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={plan.percentage}
+                  onChange={(e) => handlePlanChange(plan.id, 'percentage', Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    付款比例 (%) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={plan.percentage}
-                    onChange={(e) => handlePlanChange(plan.id, 'percentage', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  付款金额 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  value={plan.amount}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">根据比例自动计算</p>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    付款金额 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={plan.amount}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">根据比例自动计算</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    付款事由 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={plan.reason}
-                    onChange={(e) => handlePlanChange(plan.id, 'reason', e.target.value)}
-                    placeholder="如：首付款、二期款等"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  付款事由 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={plan.reason}
+                  onChange={(e) => handlePlanChange(plan.id, 'reason', e.target.value)}
+                  placeholder="如：首付款、二期款等"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
             </div>
-          ))}
+          </div>
+        ))}
 
-          <button
-            onClick={handleAddPlan}
-            className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-colors"
-          >
-            + 添加更多付款计划
-          </button>
-        </div>
+        <button
+          onClick={handleAddPlan}
+          className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition-colors"
+        >
+          + 添加更多付款计划
+        </button>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+        <div className="flex justify-end space-x-3 pt-4">
           <button
             onClick={onClose}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
@@ -1175,16 +1175,16 @@ function AddPaymentPlanModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
 // 确认付款弹窗
-function ConfirmPaymentModal({ 
-  plan, 
-  onClose, 
-  onConfirm 
-}: { 
+function ConfirmPaymentModal({
+  plan,
+  onClose,
+  onConfirm
+}: {
   plan: SupplierPaymentPlan;
   onClose: () => void;
   onConfirm: (plan: SupplierPaymentPlan, actualDate: string, voucherFile?: File) => void;
@@ -1199,66 +1199,62 @@ function ConfirmPaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
-      <div className="bg-white rounded-lg max-w-md w-full">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-900">确认付款</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="h-5 w-5" />
-          </button>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="确认付款"
+      maxWidth="md"
+    >
+      <div className="space-y-4">
+        <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+          <p className="text-sm text-gray-600">
+            计划付款金额: <span className="font-bold text-gray-900">¥{plan.amount?.toLocaleString()}</span>
+          </p>
+          <p className="text-sm text-gray-600">
+            计划付款时间: <span className="font-bold text-gray-900">{new Date(plan.planned_date).toLocaleDateString('zh-CN')}</span>
+          </p>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-            <p className="text-sm text-gray-600">
-              计划付款金额: <span className="font-bold text-gray-900">¥{plan.amount?.toLocaleString()}</span>
-            </p>
-            <p className="text-sm text-gray-600">
-              计划付款时间: <span className="font-bold text-gray-900">{new Date(plan.planned_date).toLocaleDateString('zh-CN')}</span>
-            </p>
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            实际付款时间 <span className="text-red-500">*</span>
+          </label>
+          <DatePicker
+            value={actualDate}
+            onChange={(date) => setActualDate(date)}
+            placeholder="选择实际付款时间"
+            className="w-full"
+          />
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              实际付款时间 <span className="text-red-500">*</span>
-            </label>
-            <DatePicker
-              value={actualDate}
-              onChange={(date) => setActualDate(date)}
-              placeholder="选择实际付款时间"
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              付款凭证
-            </label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-indigo-500 transition-colors">
-              <div className="space-y-1 text-center">
-                <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600">
-                  <label className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
-                    <span>上传文件</span>
-                    <input
-                      type="file"
-                      className="sr-only"
-                      accept="image/*,.pdf"
-                      onChange={handleFileChange}
-                    />
-                  </label>
-                  <p className="pl-1">或拖拽到此处</p>
-                </div>
-                <p className="text-xs text-gray-500">支持图片、PDF格式</p>
-                {voucherFile && (
-                  <p className="text-sm text-indigo-600">已选择: {voucherFile.name}</p>
-                )}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            付款凭证
+          </label>
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-indigo-500 transition-colors">
+            <div className="space-y-1 text-center">
+              <Upload className="mx-auto h-12 w-12 text-gray-400" />
+              <div className="flex text-sm text-gray-600">
+                <label className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+                  <span>上传文件</span>
+                  <input
+                    type="file"
+                    className="sr-only"
+                    accept="image/*,.pdf"
+                    onChange={handleFileChange}
+                  />
+                </label>
+                <p className="pl-1">或拖拽到此处</p>
               </div>
+              <p className="text-xs text-gray-500">支持图片、PDF格式</p>
+              {voucherFile && (
+                <p className="text-sm text-indigo-600">已选择: {voucherFile.name}</p>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+        <div className="flex justify-end space-x-3 pt-4">
           <button
             onClick={onClose}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
@@ -1273,6 +1269,6 @@ function ConfirmPaymentModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { taskService, userService, projectService, notificationService } from '../../services';
+import { api } from '../../lib/api';
 import { Task, Profile, Project, TaskComment, TaskProgressLog, ProjectModule, TaskModule } from '../../types';
 import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp, Edit2, Trash2, Calendar, Folder, User, Users, Tag, Clock } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContextNew';
 import { TaskComments } from './components/TaskComments';
 import { TaskProgressUpdateModal } from './components/TaskProgressUpdateModal';
 
@@ -98,51 +99,121 @@ const TaskDetailPage = () => {
     if (!id) return;
     if (!silent) setLoading(true);
     try {
-      const { data: taskData, error: taskError } = await supabase.from('tasks').select(`
-          *,
-          project:projects(*),
-          assignees:task_assignees(user_id, is_primary, user:profiles(*)),
-          creator:created_by(*),
-          task_modules:task_modules(module_id, created_at, module:project_modules(*))
-      `).eq('id', id).single();
-
-      if (taskError) throw taskError;
+      // 使用 taskService 获取任务详情
+      const taskData = await taskService.getTaskById(id);
       
+      if (!taskData) throw new Error('Task not found');
+      
+      // 获取关联数据
       let ownerData = null;
       if (taskData.owner_id) {
-          const { data } = await supabase.from('profiles').select('*').eq('id', taskData.owner_id).single();
-          ownerData = data;
+        ownerData = await userService.getUserById(taskData.owner_id);
       }
       
-      const fullTaskData = { ...taskData, owner: ownerData };
+      // 获取项目信息
+      let projectData = null;
+      if (taskData.project_id) {
+        projectData = await projectService.getProjectById(taskData.project_id);
+      }
+      
+      // 获取处理人信息
+      const { data: assigneesData } = await api.db
+        .from('task_assignees')
+        .select('user_id, is_primary')
+        .eq('task_id', id);
+
+      // 获取处理人详情
+      let assigneesWithUser: any[] = [];
+      if (assigneesData && assigneesData.length > 0) {
+        const userIds = assigneesData.map(a => a.user_id);
+        const { data: usersData } = await api.db.from('profiles').select('*').in('id', userIds);
+        const usersMap = new Map(usersData?.map(u => [u.id, u]) || []);
+        assigneesWithUser = assigneesData.map(a => ({
+          ...a,
+          user: usersMap.get(a.user_id)
+        }));
+      }
+
+      // 获取创建者信息
+      let creatorData = null;
+      if (taskData.created_by) {
+        creatorData = await userService.getUserById(taskData.created_by);
+      }
+
+      // 获取任务模块关联
+      const { data: taskModulesData } = await api.db
+        .from('task_modules')
+        .select('module_id, created_at')
+        .eq('task_id', id);
+
+      // 获取模块详情
+      let taskModulesWithModule: any[] = [];
+      if (taskModulesData && taskModulesData.length > 0) {
+        const moduleIds = taskModulesData.map(tm => tm.module_id);
+        const { data: modulesData } = await api.db.from('project_modules').select('*').in('id', moduleIds);
+        const modulesMap = new Map(modulesData?.map(m => [m.id, m]) || []);
+        taskModulesWithModule = taskModulesData.map(tm => ({
+          ...tm,
+          module: modulesMap.get(tm.module_id)
+        }));
+      }
+
+      const fullTaskData = {
+        ...taskData,
+        owner: ownerData,
+        project: projectData,
+        assignees: assigneesWithUser,
+        creator: creatorData,
+        task_modules: taskModulesWithModule
+      };
       setTask(fullTaskData);
 
+      // 获取评论和进度日志（不使用嵌入查询，后端不支持）
       const [
-          { data: commentsData },
-          { data: logsData }
+        { data: commentsData },
+        { data: logsData }
       ] = await Promise.all([
-        supabase.from('task_comments').select(`*, creator:created_by(*)`).eq('task_id', id).order('created_at', { ascending: true }),
-        supabase.from('task_progress_logs').select(`*, creator:created_by(*)`).eq('task_id', id).order('created_at', { ascending: false })
+        api.db.from('task_comments').select('*').eq('task_id', id).order('created_at', { ascending: true }),
+        api.db.from('task_progress_logs').select('*').eq('task_id', id).order('created_at', { ascending: false })
       ]);
 
+      // 获取评论和日志的用户信息
+      const userIds = [...new Set([
+        ...(commentsData || []).map((c: any) => c.user_id).filter(Boolean),
+        ...(logsData || []).map((l: any) => l.user_id).filter(Boolean)
+      ])];
+
+      let usersMap: Record<string, any> = {};
+      if (userIds.length > 0) {
+        const { data: usersData } = await api.db.from('profiles').select('*').in('id', userIds);
+        usersMap = (usersData || []).reduce((acc: Record<string, any>, user: any) => {
+          acc[user.id] = user;
+          return acc;
+        }, {});
+      }
+
+      // 映射字段名
+      const mappedComments = (commentsData || []).map((item: any) => ({ ...item, creator: usersMap[item.user_id] }));
+      const mappedLogs = (logsData || []).map((item: any) => ({ ...item, creator: usersMap[item.user_id] }));
+
       // 单独获取附件数据
-      let logsWithAttachments = logsData || [];
-      if (logsData && logsData.length > 0) {
-        const logIds = logsData.map(log => log.id);
-        const { data: attachmentsData } = await supabase
+      let logsWithAttachments = mappedLogs || [];
+      if (mappedLogs && mappedLogs.length > 0) {
+        const logIds = mappedLogs.map(log => log.id);
+        const { data: attachmentsData } = await api.db
           .from('task_progress_attachments')
           .select('*')
           .in('progress_log_id', logIds);
-        
+
         if (attachmentsData) {
-          logsWithAttachments = logsData.map(log => ({
+          logsWithAttachments = mappedLogs.map(log => ({
             ...log,
             attachments: attachmentsData.filter(att => att.progress_log_id === log.id)
           }));
         }
       }
 
-      setComments(commentsData || []);
+      setComments(mappedComments);
       setLogs(logsWithAttachments);
 
       const latestLog = logsData?.[0];
@@ -157,12 +228,12 @@ const TaskDetailPage = () => {
       }
 
       if (taskData.project_id) {
-          const [{ data: modules }, { data: usersData }] = await Promise.all([
-              supabase.from('project_modules').select('*').eq('project_id', taskData.project_id),
-              supabase.from('profiles').select('*')
-          ]);
-          setAvailableModules(modules || []);
-          setAllUsers(usersData || []);
+        const [modulesData, usersData] = await Promise.all([
+          projectService.getProjectModules(taskData.project_id),
+          userService.getUsers()
+        ]);
+        setAvailableModules(modulesData || []);
+        setAllUsers(usersData || []);
       }
     } catch (error) {
       console.error('Error fetching task details:', error);
@@ -181,21 +252,24 @@ const TaskDetailPage = () => {
       } else {
         updates.completed_at = null;
       }
-      const { error } = await supabase.from('tasks').update(updates).eq('id', task.id);
-      if (error) throw error;
       
+      // 使用 taskService 更新任务
+      await taskService.updateTask(task.id, updates);
+      
+      // 发送通知给处理人
       const notifications = task.assignees
         ?.filter(a => a.user_id !== user?.id)
         .map(a => ({
           user_id: a.user_id,
           title: '任务状态更新',
           content: `任务 "${task.title}" 状态已变更为 ${newStatus}`,
-          type: 'info',
-          is_read: false
+          type: 'task' as const
         })) || [];
-      
+
       if (notifications.length > 0) {
-        await supabase.from('notifications').insert(notifications);
+        for (const notification of notifications) {
+          await notificationService.createNotification(notification);
+        }
       }
       
       fetchTaskDetails(true);
@@ -208,7 +282,7 @@ const TaskDetailPage = () => {
   const handleAddAssignee = async (userId: string) => {
     if (!task) return;
     try {
-      const { error } = await supabase.from('task_assignees').insert({
+      const { error } = await api.db.from('task_assignees').insert({
         task_id: task.id,
         user_id: userId,
         is_primary: task.assignees?.length === 0
@@ -224,10 +298,8 @@ const TaskDetailPage = () => {
   const handleRemoveAssignee = async (userId: string) => {
     if (!task) return;
     try {
-      const { error } = await supabase.from('task_assignees')
-        .delete()
-        .eq('task_id', task.id)
-        .eq('user_id', userId);
+      // 使用 rpc 或直接调用 API 删除
+      const { error } = await api.db.from('task_assignees').delete().eq('task_id', task.id);
       if (error) throw error;
       fetchTaskDetails(true);
     } catch (error) {
@@ -239,13 +311,13 @@ const TaskDetailPage = () => {
   const handleUpdateModules = async (moduleIds: string[]) => {
     if (!task) return;
     try {
-      const { error: deleteError } = await supabase.from('task_modules')
+      const { error: deleteError } = await api.db.from('task_modules')
         .delete()
         .eq('task_id', task.id);
       if (deleteError) throw deleteError;
 
       if (moduleIds.length > 0) {
-        const { error: insertError } = await supabase.from('task_modules').insert(
+        const { error: insertError } = await api.db.from('task_modules').insert(
           moduleIds.map(moduleId => ({
             task_id: task.id,
             module_id: moduleId
@@ -263,7 +335,7 @@ const TaskDetailPage = () => {
   const handleAddComment = async (content: string) => {
     if (!task || !user) return;
     try {
-      const { error } = await supabase.from('task_comments').insert({
+      const { error } = await api.db.from('task_comments').insert({
         task_id: task.id,
         content,
         created_by: user.id
@@ -294,21 +366,21 @@ const TaskDetailPage = () => {
       });
 
       // 1. 创建进度更新记录
-      const { data: progressLog, error: logError } = await supabase
+      const { data: progressLogData, error: logError } = await api.db
         .from('task_progress_logs')
         .insert({
           task_id: task.id,
           progress,
           description: content,
           created_by: user.id
-        })
-        .select()
-        .single();
+        });
 
       if (logError) {
         console.error('Error inserting progress log:', logError);
         throw new Error(`创建进度记录失败: ${logError.message}`);
       }
+
+      const progressLog = progressLogData?.[0];
 
       console.log('Progress log created:', progressLog);
 
@@ -327,7 +399,7 @@ const TaskDetailPage = () => {
         console.log('Attachments to insert:', attachmentsToInsert);
 
         if (attachmentsToInsert.length > 0) {
-          const { error: attError } = await supabase
+          const { error: attError } = await api.db
             .from('task_progress_attachments')
             .insert(attachmentsToInsert);
 
@@ -341,17 +413,10 @@ const TaskDetailPage = () => {
       // 3. 如果进度为100%，自动完成任务
       if (progress === 100 && task.status !== 'done') {
         console.log('Auto-completing task...');
-        const { error: updateError } = await supabase
-          .from('tasks')
-          .update({
-            status: 'done',
-            completed_at: new Date().toISOString()
-          })
-          .eq('id', task.id);
-
-        if (updateError) {
-          console.error('Error updating task status:', updateError);
-        }
+        await taskService.updateTask(task.id, {
+          status: 'done',
+          completed_at: new Date().toISOString()
+        });
       }
 
       // 4. 发送通知（暂时禁用，测试基本功能）
@@ -379,10 +444,7 @@ const TaskDetailPage = () => {
       //   }
       // });
       // if (notificationData.length > 0) {
-      //   const { error: notifError } = await supabase.from('notifications').insert(notificationData);
-      //   if (notifError) {
-      //     console.error('Notification error:', notifError);
-      //   }
+      //   await notificationService.createNotifications(notificationData);
       // }
 
       // 5. 刷新数据
@@ -542,11 +604,15 @@ const TaskDetailPage = () => {
         {canEdit && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm('确定要删除这个任务吗？')) {
-                  supabase.from('tasks').delete().eq('id', task.id).then(() => {
+                  try {
+                    await taskService.deleteTask(task.id);
                     navigate('/tasks');
-                  });
+                  } catch (error) {
+                    console.error('Error deleting task:', error);
+                    alert('删除任务失败');
+                  }
                 }
               }}
               className="btn-secondary text-sm py-2 px-4 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
@@ -614,11 +680,7 @@ const TaskDetailPage = () => {
                     <button
                       onClick={async () => {
                         try {
-                          const { error } = await supabase
-                            .from('tasks')
-                            .update({ description: editedDescription })
-                            .eq('id', task.id);
-                          if (error) throw error;
+                          await taskService.updateTask(task.id, { description: editedDescription });
                           setTask(prev => prev ? { ...prev, description: editedDescription } : null);
                           setIsEditingDescription(false);
                         } catch (error) {

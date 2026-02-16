@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { Report } from '../../../types';
 import { Loader2, Plus, FileText } from 'lucide-react';
 
@@ -21,7 +21,7 @@ const Reports: React.FC<ReportsProps> = ({ projectId }) => {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await api.db
         .from('reports')
         .select('*')
         .eq('project_id', projectId)

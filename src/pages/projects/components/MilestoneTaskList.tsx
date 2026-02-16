@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { CheckCircle, FilePlus, Trash2, Upload, Download, FileText, Loader2, Archive } from 'lucide-react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 
 interface MilestoneTask {
   id: string;
@@ -49,15 +49,15 @@ export function MilestoneTaskList({
       const fileName = `${task.id}_${docIndex}_${Date.now()}.${fileExt}`;
       const filePath = `milestone-documents/${fileName}`;
 
-      // Upload file to Supabase Storage
-      const { error: uploadError } = await supabase.storage
+      // Upload file to Storage
+      const { error: uploadError } = await api.storage
         .from('project-documents')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      const { data: { publicUrl } } = api.storage
         .from('project-documents')
         .getPublicUrl(filePath);
 
@@ -69,7 +69,7 @@ export function MilestoneTaskList({
         uploaded_at: new Date().toISOString()
       };
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await api.db
         .from('milestone_tasks')
         .update({ output_documents: docs })
         .eq('id', task.id);

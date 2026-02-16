@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -25,19 +25,19 @@ export default function AnalysisDashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch Projects
-      const { data: projects } = await supabase.from('projects').select('status');
+      const { data: projects } = await api.db.from('projects').select('status');
       const pStats = processProjectStats(projects || []);
       setProjectStats(pStats);
 
       // Fetch Tasks
-      const { data: tasks } = await supabase.from('tasks').select('status, priority');
+      const { data: tasks } = await api.db.from('tasks').select('status, priority');
       const tStats = processTaskStats(tasks || []);
       setTaskStats(tStats);
 
       // Fetch Risks
-      const { data: risks } = await supabase.from('risks').select('level');
+      const { data: risks } = await api.db.from('risks').select('level');
       const rStats = processRiskStats(risks || []);
       setRiskStats(rStats);
 

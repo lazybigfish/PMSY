@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bell } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { notificationService } from '../services';
 import { useAuth } from '../context/AuthContextNew';
 import { Notification } from '../types';
 import * as Popover from '@radix-ui/react-popover';
@@ -14,36 +14,15 @@ export const Notifications = () => {
   useEffect(() => {
     if (user) {
       fetchNotifications();
-      // TODO: 实时订阅功能需要 WebSocket 支持，暂时禁用
-      // const subscription = supabase
-      //   .channel('public:notifications')
-      //   .on('postgres_changes', { 
-      //     event: 'INSERT', 
-      //     schema: 'public', 
-      //     table: 'notifications', 
-      //     filter: `user_id=eq.${user.id}` 
-      //   }, (payload) => {
-      //     setNotifications(prev => [payload.new as Notification, ...prev]);
-      //     setUnreadCount(prev => prev + 1);
-      //   })
-      //   .subscribe();
-      // return () => {
-      //   supabase.removeChannel(subscription);
-      // };
     }
   }, [user]);
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-
+      if (!user?.id) return;
+      
+      const data = await notificationService.getNotifications(user.id);
+      
       setNotifications(data || []);
       setUnreadCount(data?.filter(n => !n.is_read).length || 0);
     } catch (error) {
@@ -51,12 +30,9 @@ export const Notifications = () => {
     }
   }, [user?.id]);
 
-  const markAsRead = async (id: string) => {
+  const handleMarkAsRead = async (id: string) => {
     try {
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', id);
+      await notificationService.markAsRead(id);
       
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
@@ -65,13 +41,11 @@ export const Notifications = () => {
     }
   };
 
-  const markAllAsRead = async () => {
+  const handleMarkAllAsRead = async () => {
     try {
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('user_id', user?.id)
-        .eq('is_read', false);
+      if (!user?.id) return;
+      
+      await notificationService.markAllAsRead(user.id);
       
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
@@ -95,7 +69,7 @@ export const Notifications = () => {
           <div className="p-4 border-b flex justify-between items-center">
             <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
             {unreadCount > 0 && (
-              <button onClick={markAllAsRead} className="text-xs text-indigo-600 hover:text-indigo-800">
+              <button onClick={handleMarkAllAsRead} className="text-xs text-indigo-600 hover:text-indigo-800">
                 Mark all read
               </button>
             )}
@@ -108,7 +82,7 @@ export const Notifications = () => {
                 <div 
                   key={notification.id} 
                   className={`p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors ${!notification.is_read ? 'bg-blue-50/50' : ''}`}
-                  onClick={() => !notification.is_read && markAsRead(notification.id)}
+                  onClick={() => !notification.is_read && handleMarkAsRead(notification.id)}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <p className={`text-sm ${!notification.is_read ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>

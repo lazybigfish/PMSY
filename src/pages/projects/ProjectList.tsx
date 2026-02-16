@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { Project } from '../../types';
 import { useAuth } from '../../context/AuthContextNew';
 import { Plus, Search, Loader2, Layers, FileText, Eye, Trash2, Activity, Sparkles, TrendingUp, CheckCircle, Globe } from 'lucide-react';
+import { numberToChinese } from '../../lib/utils';
 
 interface ProjectWithDetails extends Project {
   current_stage_name?: string;
@@ -15,7 +16,7 @@ interface ProjectWithDetails extends Project {
 }
 
 const ProjectList = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,25 +58,26 @@ const ProjectList = () => {
     try {
       setLoading(true);
 
-      // 获取所有项目
-      const { data: projectsData } = await api.db
-        .from('projects')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // 创建用户角色映射（供后续使用）
+      const userRoleMap = new Map<string, 'manager' | 'member'>();
 
-      // 获取当前用户在所有项目中的角色
+      // 获取当前用户是成员的项目ID列表（用于显示角色）
       const { data: userMemberships } = await api.db
         .from('project_members')
         .select('project_id, role')
         .eq('user_id', user?.id);
 
-      // 创建用户角色映射
-      const userRoleMap = new Map<string, 'manager' | 'member'>();
       if (userMemberships) {
         userMemberships.forEach((membership: { project_id: string; role: 'manager' | 'member' }) => {
           userRoleMap.set(membership.project_id, membership.role);
         });
       }
+
+      // 获取项目数据（后端已根据用户角色进行权限过滤）
+      const { data: projectsData } = await api.db
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
 
       // 获取所有里程碑
       const { data: milestones } = await api.db
@@ -152,7 +154,8 @@ const ProjectList = () => {
         }
 
         let userRole: 'manager' | 'member' | null = null;
-        if (project.manager_id === user?.id) {
+        // 管理员视为所有项目的经理
+        if (profile?.role === 'admin' || project.manager_id === user?.id) {
           userRole = 'manager';
         } else {
           userRole = userRoleMap.get(project.id) || null;
@@ -410,8 +413,13 @@ const ProjectList = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm text-dark-900 text-right font-mono font-semibold">
-                    {formatAmount(project.amount)}
+                  <td className="px-6 py-5 whitespace-nowrap text-right">
+                    <div className="text-sm text-dark-900 font-mono font-semibold">
+                      {formatAmount(project.amount)}
+                    </div>
+                    <div className="text-xs text-indigo-600 mt-0.5">
+                      {numberToChinese(project.amount || 0)}
+                    </div>
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-center">
                     <span 

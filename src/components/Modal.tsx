@@ -30,7 +30,7 @@ const maxWidthClasses = {
  * ✅ 正确：<Modal isOpen={isOpen} onClose={handleClose}>...</Modal>
  *
  * 标准样式：
- * - 背景：径向渐变毛玻璃效果，从弹窗中心向外淡化至透明
+ * - 背景：径向渐变效果，从弹窗中心向外淡化至透明
  * - 层级：z-[100]（覆盖导航栏）
  * - 位置：固定全屏覆盖 (fixed inset-0)
  * - 动画：淡入效果 (animate-fade-in)
@@ -61,8 +61,6 @@ export function Modal({
           rgba(0,0,0,0.05) 50%,
           transparent 70%
         )`,
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
       }}
       onClick={onClose}
     >
@@ -134,8 +132,6 @@ export function ModalForm({
           rgba(0,0,0,0.05) 50%,
           transparent 70%
         )`,
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
       }}
       onClick={onClose}
     >
@@ -234,8 +230,6 @@ export function ConfirmModal({
           rgba(0,0,0,0.05) 50%,
           transparent 70%
         )`,
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
       }}
       onClick={onClose}
     >

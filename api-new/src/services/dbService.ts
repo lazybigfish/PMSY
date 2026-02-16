@@ -221,14 +221,27 @@ export async function insertMany(table: string, data: Record<string, any>[], sel
  * @param data - 更新数据
  * @param conditions - 更新条件
  * @param select - 返回字段
+ * @param currentUserId - 当前用户ID（供触发器使用）
  * @returns 更新的数据
  */
 export async function update(
   table: string,
   data: Record<string, any>,
   conditions: Record<string, any>,
-  select?: string
+  select?: string,
+  currentUserId?: string
 ): Promise<any[]> {
+  // 如果需要设置当前用户ID，使用事务确保在同一个连接中执行
+  if (currentUserId && table === 'tasks') {
+    return await db.transaction(async (trx) => {
+      await trx.raw(`SET LOCAL "app.current_user_id" = '${currentUserId}'`);
+      return await trx(table)
+        .where(conditions)
+        .update({ ...data, updated_at: new Date() })
+        .returning(select ? select.split(',').map(f => f.trim()) : '*');
+    });
+  }
+
   return await db(table)
     .where(conditions)
     .update({ ...data, updated_at: new Date() })
@@ -241,14 +254,28 @@ export async function update(
  * @param id - 记录 ID
  * @param data - 更新数据
  * @param select - 返回字段
+ * @param currentUserId - 当前用户ID（供触发器使用）
  * @returns 更新的数据
  */
 export async function updateById(
   table: string,
   id: string,
   data: Record<string, any>,
-  select?: string
+  select?: string,
+  currentUserId?: string
 ): Promise<any | null> {
+  // 如果需要设置当前用户ID，使用事务确保在同一个连接中执行
+  if (currentUserId && table === 'tasks') {
+    const [result] = await db.transaction(async (trx) => {
+      await trx.raw(`SET LOCAL "app.current_user_id" = '${currentUserId}'`);
+      return await trx(table)
+        .where({ id })
+        .update({ ...data, updated_at: new Date() })
+        .returning(select ? select.split(',').map(f => f.trim()) : '*');
+    });
+    return result || null;
+  }
+
   const [result] = await db(table)
     .where({ id })
     .update({ ...data, updated_at: new Date() })

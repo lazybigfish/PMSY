@@ -161,6 +161,54 @@ export interface AddTaskCommentRequest {
   content: string;
 }
 
+/**
+ * 任务历史记录
+ */
+export interface TaskHistory {
+  id: string;
+  task_id: string;
+  user_id: string;
+  field_name: string;           // 变更字段: title/status/priority/due_date/assignees等
+  old_value: string | null;     // 变更前值
+  new_value: string | null;     // 变更后值
+  change_type: 'create' | 'update' | 'delete';
+  description: string;          // 友好描述: "将优先级从'中'修改为'高'"
+  created_at: string;
+  creator?: {
+    id: string;
+    full_name: string;
+    avatar_url?: string;
+  };
+}
+
+/**
+ * 批量操作请求
+ */
+export interface BatchDeleteRequest {
+  task_ids: string[];
+}
+
+export interface BatchUpdateStatusRequest {
+  task_ids: string[];
+  status: TaskStatus;
+}
+
+export interface BatchAssignRequest {
+  task_ids: string[];
+  user_ids: string[];           // 要添加的处理人ID列表
+  mode?: 'append' | 'replace';  // append: 追加, replace: 替换
+}
+
+/**
+ * 批量操作响应
+ */
+export interface BatchOperationResponse {
+  deleted?: number;
+  updated?: number;
+  failed?: { id: string; reason: string }[];
+  message: string;
+}
+
 // 风险等级
 export type RiskLevel = 'low' | 'medium' | 'high';
 

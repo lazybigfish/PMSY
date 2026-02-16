@@ -17,9 +17,10 @@ interface RiskWithRecords extends Omit<Risk, 'handling_records'> {
 
 interface RisksProps {
   projectId: string;
+  canEdit?: boolean;
 }
 
-const Risks: React.FC<RisksProps> = ({ projectId }) => {
+const Risks: React.FC<RisksProps> = ({ projectId, canEdit = true }) => {
   const { user } = useAuth();
   const [risks, setRisks] = useState<RiskWithRecords[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,12 +48,46 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
 
   useEffect(() => {
     fetchRisks();
-    fetchUsers();
+    fetchProjectMembers();
   }, [projectId]);
 
-  const fetchUsers = async () => {
-    const { data } = await api.db.from('profiles').select('*');
-    setUsers(data || []);
+  const fetchProjectMembers = async () => {
+    try {
+      // 获取项目成员
+      const { data: membersData, error: membersError } = await api.db
+        .from('project_members')
+        .select('user_id')
+        .eq('project_id', projectId);
+
+      if (membersError) throw membersError;
+
+      // 获取项目经理
+      const { data: projectData } = await api.db
+        .from('projects')
+        .select('manager_id')
+        .eq('id', projectId)
+        .single();
+
+      // 收集所有用户ID（成员 + 项目经理）
+      const userIds = new Set<string>();
+      membersData?.forEach(m => userIds.add(m.user_id));
+      if (projectData?.manager_id) {
+        userIds.add(projectData.manager_id);
+      }
+
+      if (userIds.size > 0) {
+        const { data: profilesData } = await api.db
+          .from('profiles')
+          .select('*')
+          .in('id', Array.from(userIds));
+        setUsers(profilesData || []);
+      } else {
+        setUsers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching project members:', error);
+      setUsers([]);
+    }
   };
 
   const fetchRisks = async () => {
@@ -67,7 +102,18 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
       if (error) throw error;
 
       // 获取风险负责人信息
-      const risksData = data || [];
+      let risksData = data || [];
+      
+      // 处理 handling_records 字段，确保它是数组
+      risksData = risksData.map(r => ({
+        ...r,
+        handling_records: Array.isArray(r.handling_records) 
+          ? r.handling_records 
+          : (typeof r.handling_records === 'string' && r.handling_records 
+              ? JSON.parse(r.handling_records) 
+              : [])
+      }));
+      
       if (risksData.length > 0) {
         const ownerIds = risksData.map(r => r.owner_id).filter(Boolean);
         if (ownerIds.length > 0) {
@@ -133,7 +179,7 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
 
     const updatedRecords = [...(selectedRisk.handling_records || []), record];
     const updates: any = {
-      handling_records: updatedRecords
+      handling_records: JSON.stringify(updatedRecords)
     };
 
     if (newRecord.newStatus) {
@@ -148,8 +194,14 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
 
       if (error) throw error;
 
-      setRisks(risks.map(r => r.id === selectedRisk.id ? { ...r, ...updates } : r));
-      setSelectedRisk({ ...selectedRisk, ...updates });
+      // 更新本地状态时使用数组格式（不是 JSON 字符串）
+      const localUpdates = {
+        handling_records: updatedRecords,
+        ...(newRecord.newStatus && { status: newRecord.newStatus })
+      };
+
+      setRisks(risks.map(r => r.id === selectedRisk.id ? { ...r, ...localUpdates } : r));
+      setSelectedRisk({ ...selectedRisk, ...localUpdates });
       setNewRecord({ content: '', newStatus: '' });
     } catch (error) {
       console.error('Error adding record:', error);
@@ -223,13 +275,15 @@ const Risks: React.FC<RisksProps> = ({ projectId }) => {
           <h3 className="text-lg font-medium text-gray-900">项目风险</h3>
           <p className="text-sm text-gray-500 mt-1">风险识别、跟踪与处置管理</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          新增风险
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            新增风险
+          </button>
+        )}
       </div>
 
       {/* 筛选栏 */}

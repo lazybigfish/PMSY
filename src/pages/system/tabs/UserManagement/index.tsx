@@ -10,6 +10,7 @@ import { adminUserService } from '@/services/adminUserService';
 import { Profile, AppRole } from '@/types';
 import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { ModalForm } from '@/components/Modal';
+import { Avatar } from '@/components/Avatar';
 
 export default function UserManagement() {
   const [users, setUsers] = useState<Profile[]>([]);
@@ -260,21 +261,12 @@ export default function UserManagement() {
                 <tr key={user.id} className={user.is_active === false ? 'bg-gray-50' : ''}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
-                        {user.avatar_url ? (
-                          <img
-                            className="h-10 w-10 rounded-full"
-                            src={user.avatar_url}
-                            alt={user.username}
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                            <span className="text-indigo-600 font-medium">
-                              {user.username?.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
+                      <Avatar
+                        userId={user.id}
+                        avatarUrl={user.avatar_url}
+                        name={user.full_name || user.username}
+                        size="md"
+                      />
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">
                           {user.full_name || user.username}

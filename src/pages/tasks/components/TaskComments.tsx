@@ -3,6 +3,7 @@ import { Send } from 'lucide-react';
 import { TaskComment } from '../../../types';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { Avatar } from '../../../components/Avatar';
 
 interface TaskCommentsProps {
   comments: TaskComment[];
@@ -30,19 +31,12 @@ export function TaskComments({ comments, onAddComment }: TaskCommentsProps) {
         {comments.map((comment) => (
           <div key={comment.id} className="flex gap-3">
             <div className="flex-shrink-0">
-              {comment.user?.avatar_url ? (
-                <img
-                  src={comment.user.avatar_url}
-                  alt={comment.user.full_name || ''}
-                  className="w-8 h-8 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                  <span className="text-indigo-600 text-sm font-medium">
-                    {comment.user?.full_name?.charAt(0) || '?'}
-                  </span>
-                </div>
-              )}
+              <Avatar
+                userId={comment.user?.id}
+                avatarUrl={comment.user?.avatar_url}
+                name={comment.user?.full_name}
+                size="sm"
+              />
             </div>
             <div className="flex-1 bg-gray-50 rounded-lg p-3">
               <div className="flex items-center justify-between mb-1">

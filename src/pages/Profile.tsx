@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContextNew';
-import { User, Mail, Shield, Calendar, Edit2, Save, X, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Shield, Calendar, Edit2, Save, X, Lock, Eye, EyeOff, Camera } from 'lucide-react';
 import { Profile } from '../types';
 import { ModalForm } from '../components/Modal';
+import { AvatarSelector } from '../components/AvatarSelector';
+import { generateDefaultAvatar } from '../lib/avatarGenerator';
 
 const ProfilePage: React.FC = () => {
   const { user, profile, loading: authLoading, refreshProfile } = useAuth();
@@ -27,6 +29,10 @@ const ProfilePage: React.FC = () => {
     confirm: false
   });
   const [changingPassword, setChangingPassword] = useState(false);
+  
+  // 头像选择相关状态
+  const [showAvatarSelector, setShowAvatarSelector] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -40,23 +46,30 @@ const ProfilePage: React.FC = () => {
         phone: profile.phone || '',
         bio: profile.bio || '',
       });
+      // 如果没有头像，生成默认头像
+      if (!profile.avatar_url && user?.id) {
+        setAvatarUrl(generateDefaultAvatar(user.id));
+      } else {
+        setAvatarUrl(profile.avatar_url);
+      }
     }
     setLoading(false);
   }, [user, profile, authLoading, navigate]);
 
   const handleSave = async () => {
     if (!user) return;
-    
+
     setSaving(true);
     try {
       await api.auth.updateUser({
         full_name: formData.full_name,
         phone: formData.phone,
+        avatar_url: avatarUrl,
       });
-      
+
       // 刷新用户信息
       await refreshProfile();
-      
+
       setIsEditing(false);
       alert('个人信息更新成功');
     } catch (error: unknown) {
@@ -146,12 +159,22 @@ const ProfilePage: React.FC = () => {
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6 bg-indigo-600">
           <div className="flex items-center">
-            <div className="h-20 w-20 rounded-full bg-white flex items-center justify-center">
-              {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="" className="h-20 w-20 rounded-full" />
-              ) : (
-                <User className="h-10 w-10 text-indigo-600" />
-              )}
+            <div className="relative group">
+              <div className="h-20 w-20 rounded-full bg-white flex items-center justify-center overflow-hidden">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover" />
+                ) : (
+                  <User className="h-10 w-10 text-indigo-600" />
+                )}
+              </div>
+              {/* 更换头像按钮 */}
+              <button
+                onClick={() => setShowAvatarSelector(true)}
+                className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                title="更换头像"
+              >
+                <Camera className="h-6 w-6 text-white" />
+              </button>
             </div>
             <div className="ml-6">
               <h3 className="text-lg leading-6 font-medium text-white">
@@ -285,6 +308,17 @@ const ProfilePage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* 头像选择器 */}
+      {user?.id && (
+        <AvatarSelector
+          isOpen={showAvatarSelector}
+          onClose={() => setShowAvatarSelector(false)}
+          onSelect={(url) => setAvatarUrl(url)}
+          currentAvatar={avatarUrl}
+          userId={user.id}
+        />
+      )}
 
       {/* 修改密码弹窗 */}
       <ModalForm

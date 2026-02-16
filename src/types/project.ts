@@ -160,6 +160,7 @@ export interface ProjectSupplier {
   };
   payments?: SupplierPaymentPlan[];
   progress?: number;
+  paid_amount?: number;
   acceptances?: SupplierAcceptance[];
 }
 

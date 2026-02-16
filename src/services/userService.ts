@@ -18,11 +18,11 @@ export async function getUsers(): Promise<Profile[]> {
  * 根据 ID 获取用户
  */
 export async function getUserById(userId: string): Promise<Profile | null> {
-  const { data } = await api.db.from('profiles')
+  const response = await api.db.from('profiles')
     .select('*')
     .eq('id', userId)
     .single();
-  return data?.data || null;
+  return response.data || null;
 }
 
 /**

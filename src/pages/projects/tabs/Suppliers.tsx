@@ -5,6 +5,7 @@ import { Plus, FileText, X, ChevronRight, ChevronDown } from 'lucide-react';
 import { FileUploadButton } from '../../../components/FileUploadButton';
 import { SupplierDetailModal } from '../components/SupplierDetailModal';
 import { ModalForm } from '../../../components/Modal';
+import { numberToChinese } from '../../../lib/utils';
 
 // 模块树形选择组件
 interface ModuleTreeSelectProps {
@@ -169,14 +170,15 @@ function ModuleTreeSelect({ modules, selectedIds, onChange }: ModuleTreeSelectPr
 
 interface SuppliersProps {
   projectId: string;
+  canEdit?: boolean;
 }
 
-export default function Suppliers({ projectId }: SuppliersProps) {
+export default function Suppliers({ projectId, canEdit = true }: SuppliersProps) {
   const [projectSuppliers, setProjectSuppliers] = useState<ProjectSupplier[]>([]);
   const [projectModules, setProjectModules] = useState<ProjectModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  
+
   // Add Modal State
   const [availableSuppliers, setAvailableSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
@@ -216,29 +218,83 @@ export default function Suppliers({ projectId }: SuppliersProps) {
       // Fetch Project Suppliers
       const { data: suppliersData, error: suppliersError } = await api.db
         .from('project_suppliers')
-        .select(`
-          *,
-          suppliers(*),
-          supplier_payments(amount)
-        `)
+        .select('*')
         .eq('project_id', projectId);
 
       if (suppliersError) throw suppliersError;
 
-      // 将返回数据中的字段映射为组件期望的格式
-      const mappedSuppliersData = (suppliersData || []).map((item: any) => ({
-        ...item,
-        supplier: item.suppliers,
-        payments: item.supplier_payments
+      // 获取供应商详细信息
+      const supplierIds = (suppliersData || []).map((item: any) => item.supplier_id).filter(Boolean);
+      let suppliersMap: Record<string, any> = {};
+      if (supplierIds.length > 0) {
+        const { data: suppliersInfo } = await api.db
+          .from('suppliers')
+          .select('*')
+          .in('id', supplierIds);
+        suppliersMap = (suppliersInfo || []).reduce((acc: any, s: any) => {
+          acc[s.id] = s;
+          return acc;
+        }, {});
+      }
+
+      // 获取付款计划信息（通过 supplier_id 和 project_id 关联）
+      const supplierProjectPairs = (suppliersData || []).map((item: any) => ({
+        supplier_id: item.supplier_id,
+        project_id: item.project_id
       }));
+      
+      // 获取所有付款计划（使用新的字段结构）
+      let paymentsMap: Record<string, number> = {};
+      if (suppliersData && suppliersData.length > 0) {
+        const projectSupplierIds = suppliersData.map((item: any) => item.id);
+        const { data: paymentPlansData } = await api.db
+          .from('supplier_payment_plans')
+          .select('project_supplier_id, amount, status')
+          .in('project_supplier_id', projectSupplierIds);
+        
+        // 按 project_supplier_id 计算已支付金额（status = 'paid'）
+        paymentsMap = (paymentPlansData || []).reduce((acc: any, plan: any) => {
+          if (plan.status === 'paid') {
+            if (!acc[plan.project_supplier_id]) acc[plan.project_supplier_id] = 0;
+            acc[plan.project_supplier_id] += Number(plan.amount) || 0;
+          }
+          return acc;
+        }, {});
+      }
 
       // Fetch Project Modules
       const { data: modulesData, error: modulesError } = await api.db
         .from('project_modules')
         .select('*')
         .eq('project_id', projectId);
-      
+
       if (modulesError) throw modulesError;
+
+      // 创建模块ID到进度的映射
+      const moduleProgressMap: Record<string, number> = {};
+      (modulesData || []).forEach((module: any) => {
+        moduleProgressMap[module.id] = module.progress || 0;
+      });
+
+      // 将返回数据中的字段映射为组件期望的格式，并计算供应商进度
+      const mappedSuppliersData = (suppliersData || []).map((item: any) => {
+        // 计算供应商负责的模块的平均进度
+        const moduleIds = item.module_ids || [];
+        let avgProgress = 0;
+        if (moduleIds.length > 0) {
+          const totalProgress = moduleIds.reduce((sum: number, moduleId: string) => {
+            return sum + (moduleProgressMap[moduleId] || 0);
+          }, 0);
+          avgProgress = Math.round(totalProgress / moduleIds.length);
+        }
+
+        return {
+          ...item,
+          supplier: suppliersMap[item.supplier_id] || null,
+          paid_amount: paymentsMap[item.id] || 0,
+          progress: avgProgress
+        };
+      });
 
       setProjectSuppliers(mappedSuppliersData);
       setProjectModules(modulesData || []);
@@ -289,8 +345,8 @@ export default function Suppliers({ projectId }: SuppliersProps) {
         project_id: projectId,
         supplier_id: selectedSupplierId,
         contract_amount: addForm.contract_amount,
-        contract_file_url: addForm.contract_file_url,
-        module_ids: selectedModuleIds
+        module_ids: JSON.stringify(selectedModuleIds),
+        contract_file_url: addForm.contract_file_url || null
       });
 
       if (error) throw error;
@@ -333,13 +389,15 @@ export default function Suppliers({ projectId }: SuppliersProps) {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-medium text-gray-900">供应商列表</h2>
-        <button
-          onClick={openAddModal}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          关联供应商
-        </button>
+        {canEdit && (
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 h-[38px] whitespace-nowrap"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            关联供应商
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -375,11 +433,21 @@ export default function Suppliers({ projectId }: SuppliersProps) {
                   <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={getModuleNames(ps.module_ids || [])}>
                     {getModuleNames(ps.module_ids || [])}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ¥{ps.contract_amount?.toLocaleString()}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      ¥{ps.contract_amount?.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-indigo-600 mt-0.5">
+                      {numberToChinese(ps.contract_amount || 0)}
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ¥{ps.payments?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0).toLocaleString()}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      ¥{(ps.paid_amount || 0).toLocaleString()}
+                    </div>
+                    <div className="text-xs text-indigo-600 mt-0.5">
+                      {numberToChinese(ps.paid_amount || 0)}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -459,13 +527,31 @@ export default function Suppliers({ projectId }: SuppliersProps) {
                 <span className="text-gray-500 sm:text-sm">¥</span>
               </div>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*\.?[0-9]*"
                 className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
                 placeholder="0.00"
-                value={addForm.contract_amount}
-                onChange={(e) => setAddForm({ ...addForm, contract_amount: parseFloat(e.target.value) })}
+                value={addForm.contract_amount === 0 ? '' : addForm.contract_amount}
+                onFocus={(e) => {
+                  if (addForm.contract_amount === 0) {
+                    e.target.select();
+                  }
+                }}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // 只允许数字和小数点
+                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                    setAddForm({ ...addForm, contract_amount: value === '' ? 0 : parseFloat(value) });
+                  }
+                }}
               />
             </div>
+            {addForm.contract_amount > 0 && (
+              <p className="mt-1 text-xs text-indigo-600">
+                大写：{numberToChinese(addForm.contract_amount)}
+              </p>
+            )}
           </div>
 
           <div>

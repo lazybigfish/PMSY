@@ -111,9 +111,10 @@ export default function ClientFormPage() {
       return;
     }
     
-    const validContacts = formData.contacts.filter(c => c.name.trim() && c.phone?.trim());
-    if (validContacts.length === 0) {
-      alert('请至少添加一位联系人（姓名和电话必填）');
+    const validContacts = formData.contacts.filter(c => c.name.trim() || c.phone?.trim());
+    const hasInvalidContact = validContacts.some(c => !c.name.trim() || !c.phone?.trim());
+    if (hasInvalidContact) {
+      alert('已填写的联系人需要同时填写姓名和电话');
       return;
     }
 
@@ -310,7 +311,7 @@ export default function ClientFormPage() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-display font-semibold text-dark-900">
-              联系人 <span className="text-sm font-normal text-dark-500">（至少填写一位）</span>
+              联系人 <span className="text-sm font-normal text-dark-500">（选填）</span>
             </h2>
             <button
               type="button"
@@ -342,7 +343,7 @@ export default function ClientFormPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-dark-600 mb-1">
-                      姓名 <span className="text-red-500">*</span>
+                      姓名
                     </label>
                     <input
                       type="text"
@@ -354,7 +355,7 @@ export default function ClientFormPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-dark-600 mb-1">
-                      电话 <span className="text-red-500">*</span>
+                      电话
                     </label>
                     <input
                       type="text"

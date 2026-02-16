@@ -7,9 +7,10 @@ import { Loader2, Plus, FileText } from 'lucide-react';
 
 interface ReportsProps {
   projectId: string;
+  canEdit?: boolean;
 }
 
-const Reports: React.FC<ReportsProps> = ({ projectId }) => {
+const Reports: React.FC<ReportsProps> = ({ projectId, canEdit = true }) => {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'weekly' | 'daily'>('daily');
@@ -67,13 +68,15 @@ const Reports: React.FC<ReportsProps> = ({ projectId }) => {
             </button>
           </nav>
         </div>
-        <Link
-          to={`/projects/${projectId}/reports/new?type=${activeTab}`}
-          className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          {activeTab === 'weekly' ? '新建周报' : '新建日报'}
-        </Link>
+        {canEdit && (
+          <Link
+            to={`/projects/${projectId}/reports/new?type=${activeTab}`}
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            {activeTab === 'weekly' ? '新建周报' : '新建日报'}
+          </Link>
+        )}
       </div>
 
       <div className="bg-white shadow overflow-hidden sm:rounded-md">

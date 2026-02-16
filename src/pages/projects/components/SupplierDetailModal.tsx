@@ -5,6 +5,7 @@ import { api } from '../../../lib/api';
 import { useAuth } from '../../../context/AuthContextNew';
 import { DatePicker } from '../../../components/DatePicker';
 import { Modal, ConfirmModal } from '../../../components/Modal';
+import { numberToChinese } from '../../../lib/utils';
 
 // 验收类型配置
 const ACCEPTANCE_TYPE_CONFIG = {
@@ -312,7 +313,9 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
   onUpdate: () => void;
 }) {
   const [isEditingModules, setIsEditingModules] = useState(false);
+  const [isEditingAmount, setIsEditingAmount] = useState(false);
   const [selectedModules, setSelectedModules] = useState<string[]>(projectSupplier.module_ids || []);
+  const [contractAmount, setContractAmount] = useState<number>(projectSupplier.contract_amount || 0);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
@@ -391,6 +394,32 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
     }
   };
 
+  const handleSaveAmount = async () => {
+    setLoading(true);
+    try {
+      const { error } = await api.db
+        .from('project_suppliers')
+        .update({ contract_amount: contractAmount })
+        .eq('id', projectSupplier.id);
+
+      if (error) throw error;
+      
+      // 更新 projectSupplier 的本地状态
+      projectSupplier.contract_amount = contractAmount;
+      
+      // 重新获取付款统计数据
+      await fetchPaymentStats();
+      
+      onUpdate();
+      setIsEditingAmount(false);
+    } catch (error) {
+      console.error('Error updating contract amount:', error);
+      alert('更新合同金额失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const canEditModules = async () => {
     if (!user) return false;
     const { data } = await api.db
@@ -414,14 +443,17 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
         <div className="bg-blue-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">合同金额</p>
           <p className="text-lg font-bold text-blue-600">¥{(projectSupplier.contract_amount || 0).toLocaleString()}</p>
+          <p className="text-xs text-indigo-600 mt-1">{numberToChinese(projectSupplier.contract_amount || 0)}</p>
         </div>
         <div className="bg-green-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">已支付金额</p>
           <p className="text-lg font-bold text-green-600">¥{paymentStats.totalPaid.toLocaleString()}</p>
+          <p className="text-xs text-indigo-600 mt-1">{numberToChinese(paymentStats.totalPaid)}</p>
         </div>
         <div className="bg-orange-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">未支付金额</p>
           <p className="text-lg font-bold text-orange-600">¥{paymentStats.remaining.toLocaleString()}</p>
+          <p className="text-xs text-indigo-600 mt-1">{numberToChinese(paymentStats.remaining)}</p>
         </div>
         <div className="bg-purple-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">未支付比例</p>
@@ -452,8 +484,67 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
           <p className="text-lg font-semibold text-gray-900">{projectSupplier.supplier?.phone || '-'}</p>
         </div>
         <div className="bg-gray-50 p-4 rounded-lg">
-          <h4 className="text-sm font-medium text-gray-500 mb-2">合同金额</h4>
-          <p className="text-lg font-semibold text-indigo-600">¥{projectSupplier.contract_amount?.toLocaleString()}</p>
+          <div className="flex justify-between items-center mb-2">
+            <h4 className="text-sm font-medium text-gray-500">合同金额</h4>
+            {canEdit && !isEditingAmount && (
+              <button
+                onClick={() => setIsEditingAmount(true)}
+                className="text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                调整
+              </button>
+            )}
+          </div>
+          
+          {isEditingAmount ? (
+            <div className="space-y-3">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">¥</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={contractAmount.toString()}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                      setContractAmount(value === '' ? 0 : parseFloat(value));
+                    }
+                  }}
+                  className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="请输入合同金额"
+                />
+              </div>
+              {contractAmount > 0 && (
+                <p className="text-sm text-gray-600">
+                  大写：<strong className="text-indigo-600">{numberToChinese(contractAmount)}</strong>
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveAmount}
+                  disabled={loading}
+                  className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {loading ? '保存中...' : '保存'}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingAmount(false);
+                    setContractAmount(projectSupplier.contract_amount || 0);
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-lg font-semibold text-indigo-600">¥{projectSupplier.contract_amount?.toLocaleString()}</p>
+              <p className="text-xs text-indigo-600 mt-1">{numberToChinese(projectSupplier.contract_amount || 0)}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -706,14 +797,17 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
         <div className="bg-blue-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">合同金额</p>
           <p className="text-xl font-bold text-blue-600">¥{contractAmount.toLocaleString()}</p>
+          <p className="text-xs text-indigo-600 mt-1">{numberToChinese(contractAmount)}</p>
         </div>
         <div className="bg-green-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">已支付金额</p>
           <p className="text-xl font-bold text-green-600">¥{totalPaid.toLocaleString()}</p>
+          <p className="text-xs text-indigo-600 mt-1">{numberToChinese(totalPaid)}</p>
         </div>
         <div className="bg-orange-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">未支付金额</p>
           <p className="text-xl font-bold text-orange-600">¥{remaining.toLocaleString()}</p>
+          <p className="text-xs text-indigo-600 mt-1">{numberToChinese(remaining)}</p>
         </div>
         <div className="bg-purple-50 p-4 rounded-lg text-center">
           <p className="text-sm text-gray-600 mb-1">未支付比例</p>
@@ -817,8 +911,13 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
                         {new Date(plan.planned_date).toLocaleDateString('zh-CN')}
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                        ¥{plan.amount?.toLocaleString()}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          ¥{plan.amount?.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-indigo-600">
+                          {numberToChinese(plan.amount || 0)}
+                        </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -1047,13 +1146,15 @@ function AddPaymentPlanModal({
     }
 
     try {
+      const currentUser = await api.auth.getUser();
       const paymentPlans = plans.map(plan => ({
         project_supplier_id: projectSupplierId,
         planned_date: plan.planned_date,
         amount: plan.amount,
         percentage: plan.percentage,
         reason: plan.reason,
-        status: 'pending'
+        status: 'pending',
+        created_by: currentUser?.id
       }));
 
       const { error } = await api.db
@@ -1080,6 +1181,9 @@ function AddPaymentPlanModal({
         <div className="bg-blue-50 p-4 rounded-lg">
           <p className="text-sm text-blue-800">
             合同金额: <span className="font-bold">¥{contractAmount.toLocaleString()}</span>
+          </p>
+          <p className="text-xs text-indigo-600 mt-1">
+            {numberToChinese(contractAmount)}
           </p>
         </div>
 
@@ -1115,12 +1219,21 @@ function AddPaymentPlanModal({
                   付款比例 (%) <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={plan.percentage}
-                  onChange={(e) => handlePlanChange(plan.id, 'percentage', Number(e.target.value))}
+                  type="text"
+                  inputMode="decimal"
+                  value={plan.percentage.toString()}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                      const numValue = value === '' ? 0 : parseFloat(value);
+                      if (numValue >= 0 && numValue <= 100) {
+                        handlePlanChange(plan.id, 'percentage', numValue);
+                      }
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="0-100"
                 />
               </div>
 
@@ -1128,13 +1241,11 @@ function AddPaymentPlanModal({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   付款金额 <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  value={plan.amount}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">根据比例自动计算</p>
+                <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900">
+                  ¥{plan.amount.toLocaleString()}
+                </div>
+                <p className="text-xs text-indigo-600 mt-1">{numberToChinese(plan.amount)}</p>
+                <p className="text-xs text-gray-500 mt-0.5">根据比例自动计算</p>
               </div>
 
               <div>
@@ -1207,9 +1318,14 @@ function ConfirmPaymentModal({
     >
       <div className="space-y-4">
         <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-          <p className="text-sm text-gray-600">
-            计划付款金额: <span className="font-bold text-gray-900">¥{plan.amount?.toLocaleString()}</span>
-          </p>
+          <div>
+            <p className="text-sm text-gray-600">
+              计划付款金额: <span className="font-bold text-gray-900">¥{plan.amount?.toLocaleString()}</span>
+            </p>
+            <p className="text-xs text-indigo-600 mt-0.5">
+              {numberToChinese(plan.amount || 0)}
+            </p>
+          </div>
           <p className="text-sm text-gray-600">
             计划付款时间: <span className="font-bold text-gray-900">{new Date(plan.planned_date).toLocaleDateString('zh-CN')}</span>
           </p>

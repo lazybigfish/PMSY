@@ -18,6 +18,7 @@ import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import restRouter from './routes/rest';
 import storageRouter from './routes/storage';
+import projectsRouter from './routes/projects';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -42,6 +43,7 @@ app.use('/health', healthRouter);
 app.use('/auth/v1', authRouter);
 app.use('/rest/v1', restRouter);
 app.use('/storage/v1', storageRouter);
+app.use('/api/projects', projectsRouter);
 
 // 根路由
 app.get('/', (req, res) => {

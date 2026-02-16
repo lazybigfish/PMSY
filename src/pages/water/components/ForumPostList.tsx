@@ -2,6 +2,7 @@ import { MessageSquare, Eye, Clock, Pin, Star, Edit2, Trash2 } from 'lucide-reac
 import { ForumPost, ForumCategory } from '../../../types';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { Avatar } from '../../../components/Avatar';
 
 interface ForumPostListProps {
   posts: ForumPost[];
@@ -65,19 +66,14 @@ export function ForumPostList({
             <div className="flex items-start gap-4">
               {/* Author Avatar */}
               <div className="flex-shrink-0">
-                {post.author?.avatar_url ? (
-                  <img
-                    src={post.author.avatar_url}
-                    alt={post.author.full_name}
-                    className="w-12 h-12 rounded-xl object-cover ring-2 ring-dark-100"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-                    <span className="text-white font-bold text-lg">
-                      {post.author?.full_name?.charAt(0) || '?'}
-                    </span>
-                  </div>
-                )}
+                <Avatar
+                  userId={post.author?.id}
+                  avatarUrl={post.author?.avatar_url}
+                  name={post.author?.full_name}
+                  size="md"
+                  rounded="xl"
+                  className="ring-2 ring-dark-100"
+                />
               </div>
 
               {/* Content */}

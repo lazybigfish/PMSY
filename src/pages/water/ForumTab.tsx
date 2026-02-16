@@ -7,6 +7,26 @@ import { ForumPost, ForumCategory } from '../../types';
 import { ForumPostList } from './components/ForumPostList';
 import { ModalForm } from '../../components/Modal';
 import { LikeButton } from '../../components/LikeButton';
+import { Avatar } from '../../components/Avatar';
+
+// 辅助函数：解析帖子内容
+const parseContent = (content: any): string => {
+  if (!content) return '';
+  // 如果是字符串，尝试解析为 JSON
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content);
+      return parsed.text || parsed.content || content;
+    } catch {
+      return content;
+    }
+  }
+  // 如果是对象，取 text 或 content 字段
+  if (typeof content === 'object') {
+    return content.text || content.content || '';
+  }
+  return String(content);
+};
 
 const categories: { key: ForumCategory; label: string; color: string; bgColor: string; borderColor: string }[] = [
   { key: 'tech', label: '技术分享', color: 'text-primary-700', bgColor: 'bg-primary-50', borderColor: 'border-primary-200' },
@@ -58,7 +78,7 @@ export default function ForumTab() {
         filteredPosts = filteredPosts.filter(
           (post: any) =>
             post.title?.toLowerCase().includes(searchLower) ||
-            post.content?.text?.toLowerCase().includes(searchLower)
+            parseContent(post.content).toLowerCase().includes(searchLower)
         );
       }
 
@@ -82,10 +102,11 @@ export default function ForumTab() {
       let likedPostIds = new Set<string>();
       if (user) {
         const { data: likesData } = await api.db
-          .from('forum_post_likes')
-          .select('post_id')
-          .eq('user_id', user.id);
-        likesData?.forEach(like => likedPostIds.add(like.post_id));
+          .from('forum_likes')
+          .select('target_id')
+          .eq('user_id', user.id)
+          .eq('target_type', 'post');
+        likesData?.forEach(like => likedPostIds.add(like.target_id));
       }
 
       const postsWithUsers = (filteredPosts || []).map((post: any) => {
@@ -196,15 +217,16 @@ export default function ForumTab() {
         // Unlike - 只需删除点赞记录，触发器会自动更新 like_count
         console.log('Unliking post:', postId);
         const { data: likes } = await api.db
-          .from('forum_post_likes')
+          .from('forum_likes')
           .select('*')
-          .eq('post_id', postId)
+          .eq('target_id', postId)
+          .eq('target_type', 'post')
           .eq('user_id', user.id);
-        
+
         if (likes && likes.length > 0) {
           for (const like of likes) {
             await api.db
-              .from('forum_post_likes')
+              .from('forum_likes')
               .delete()
               .eq('id', like.id);
           }
@@ -229,8 +251,8 @@ export default function ForumTab() {
         // Like - 只需插入点赞记录，触发器会自动更新 like_count
         console.log('Liking post:', postId);
         const { error: insertError } = await api.db
-          .from('forum_post_likes')
-          .insert({ post_id: postId, user_id: user.id });
+          .from('forum_likes')
+          .insert({ target_id: postId, target_type: 'post', user_id: user.id });
         
         if (insertError) {
           console.error('Error inserting like:', insertError);
@@ -350,19 +372,14 @@ export default function ForumTab() {
               <div className="flex items-start gap-4">
                 {/* Author Avatar */}
                 <div className="flex-shrink-0">
-                  {post.author?.avatar_url ? (
-                    <img
-                      src={post.author.avatar_url}
-                      alt={post.author.full_name}
-                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-dark-100"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-                      <span className="text-white font-bold text-lg">
-                        {post.author?.full_name?.charAt(0) || '?'}
-                      </span>
-                    </div>
-                  )}
+                  <Avatar
+                    userId={post.author?.id}
+                    avatarUrl={post.author?.avatar_url}
+                    name={post.author?.full_name}
+                    size="md"
+                    rounded="xl"
+                    className="ring-2 ring-dark-100"
+                  />
                 </div>
 
                 {/* Content */}
@@ -387,7 +404,7 @@ export default function ForumTab() {
 
                   {/* Content Preview */}
                   <p className="text-sm text-dark-600 mt-2 line-clamp-2 leading-relaxed">
-                    {typeof post.content === 'string' ? post.content : (post.content as any)?.text || ''}
+                    {parseContent(post.content)}
                   </p>
 
                   {/* Meta Info */}

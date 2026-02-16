@@ -1,183 +1,55 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { projectService } from '../../services';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Client } from '../../types';
+import { numberToChinese } from '../../lib/utils';
 
-const numberToChinese = (num: number): string => {
-  if (num === 0) return '零元整';
-  
-  const chineseNums = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
-  const chineseUnits = ['', '拾', '佰', '仟'];
-  const chineseBigUnits = ['', '万', '亿', '兆'];
-  
-  const integerPart = Math.floor(num);
-  const decimalPart = Math.round((num - integerPart) * 100);
-  
-  let result = '';
-  
-  if (integerPart > 0) {
-    const unitGroups: number[] = [];
-    let temp = integerPart;
-    while (temp > 0) {
-      unitGroups.push(temp % 10000);
-      temp = Math.floor(temp / 10000);
-    }
-    
-    for (let i = unitGroups.length - 1; i >= 0; i--) {
-      const group = unitGroups[i];
-      if (group === 0) continue;
-      
-      let groupStr = '';
-      const digits = [Math.floor(group / 1000), Math.floor((group % 1000) / 100), Math.floor((group % 100) / 10), group % 10];
-      
-      let lastZero = false;
-      for (let j = 0; j < 4; j++) {
-        const digit = digits[j];
-        if (digit === 0) {
-          lastZero = true;
-        } else {
-          if (lastZero && result.length > 0) {
-            groupStr += '零';
-          }
-          groupStr += chineseNums[digit] + chineseUnits[3 - j];
-          lastZero = false;
-        }
-      }
-      
-      result += groupStr + chineseBigUnits[i];
-    }
-    
-    result += '元';
-  }
-  
-  if (decimalPart === 0) {
-    result += '整';
-  } else {
-    const jiao = Math.floor(decimalPart / 10);
-    const fen = decimalPart % 10;
-    
-    if (jiao > 0) {
-      result += chineseNums[jiao] + '角';
-    }
-    if (fen > 0) {
-      result += chineseNums[fen] + '分';
-    }
-  }
-  
-  return result;
-};
-
-const MILESTONE_TEMPLATES = [
-  {
-    name: '进场前阶段',
-    phase_order: 1,
-    tasks: [
-      { name: '获取基础材料', description: '收集项目可研文件、项目合同', is_required: true, output_documents: [{ name: "可研文件", required: true }, { name: "项目合同", required: true }] },
-      { name: '风险与预算分析', description: '基于可研和合同，输出《项目风险清单》和《项目预算规划表》', is_required: true, output_documents: [{ name: "项目风险清单", required: true }, { name: "项目预算规划表", required: true }] },
-      { name: '组建项目团队', description: '根据建设方向（自研/外采）明确团队成员，输出《项目团队成员表》', is_required: true, output_documents: [{ name: "项目团队成员表", required: true }] },
-      { name: '召开内部启动会', description: '整合前期材料，形成会议纪要', is_required: true, output_documents: [{ name: "内部启动会会议纪要", required: true }] },
-      { name: '明确干系人', description: '梳理甲方负责人及联系人，输出《项目干系人清单》', is_required: true, output_documents: [{ name: "项目干系人清单", required: true }] },
-    ]
-  },
-  {
-    name: '启动阶段',
-    phase_order: 2,
-    tasks: [
-      { name: '编制基础文档', description: '输出《项目经理授权函》《开工报审表》', is_required: true, output_documents: [{ name: "项目经理授权函", required: true }, { name: "开工报审表", required: true }] },
-      { name: '拆解建设内容', description: '形成《项目实施功能清单》和《项目实施方案》', is_required: true, output_documents: [{ name: "项目实施功能清单", required: true }, { name: "项目实施方案", required: true }] },
-      { name: '制定进度计划', description: '输出《项目实施计划表》', is_required: true, output_documents: [{ name: "项目实施计划表", required: true }] },
-      { name: '召开项目启动会', description: '明确议程、参会人，最终输出《开工令》和《会议纪要》', is_required: true, output_documents: [{ name: "开工令", required: true }, { name: "项目启动会会议纪要", required: true }] },
-      { name: '筹备服务器资源', description: '申请并确认资源，输出《服务器资源清单》', is_required: true, output_documents: [{ name: "服务器资源清单", required: true }] },
-      { name: '供应商/硬件下单', description: '根据功能清单签订合同', is_required: false, output_documents: [{ name: "采购合同", required: false }] },
-    ]
-  },
-  {
-    name: '实施阶段',
-    phase_order: 3,
-    tasks: [
-      { name: '需求调研', description: '输出全套设计文档（需求规格、数据库设计、概要/详细设计说明书）', is_required: true, output_documents: [{ name: "需求规格说明书", required: true }, { name: "数据库设计说明书", required: true }, { name: "概要设计说明书", required: true }, { name: "详细设计说明书", required: true }] },
-      { name: '系统部署', description: '在已申请服务器上部署系统，更新《服务器资源清单》', is_required: true, output_documents: [{ name: "系统部署文档", required: true }, { name: "服务器资源清单（更新）", required: true }] },
-      { name: '第三方测评', description: '开展软件测试、三级等保测评、商用密码测评（均需提前三个月筹备），输出对应报告', is_required: true, output_documents: [{ name: "软件测试报告", required: true }, { name: "三级等保测评报告", required: true }, { name: "商用密码测评报告", required: true }] },
-      { name: '培训与自查', description: '组织用户培训并记录；项目组进行功能点自查，输出《功能点验表》', is_required: true, output_documents: [{ name: "用户培训记录", required: true }, { name: "功能点验表", required: true }] },
-      { name: '监理核查', description: '由监理方对功能进行核验', is_required: true, output_documents: [{ name: "监理核查报告", required: true }] },
-    ]
-  },
-  {
-    name: '初验阶段',
-    phase_order: 4,
-    tasks: [
-      { name: '整理验收文档', description: '编制完整的《文档目录》', is_required: true, output_documents: [{ name: "文档目录", required: true }] },
-      { name: '筹备并召开初验会', description: '提交初验申请，形成《初步验收报告》', is_required: true, output_documents: [{ name: "初验申请", required: true }, { name: "初步验收报告", required: true }] },
-      { name: '整改专家意见', description: '针对问题输出《遗留问题整改报告》', is_required: true, output_documents: [{ name: "遗留问题整改报告", required: true }] },
-      { name: '上线试运行', description: '提交《试运行申请》，系统进入试运行期', is_required: true, output_documents: [{ name: "试运行申请", required: true }] },
-    ]
-  },
-  {
-    name: '试运行阶段',
-    phase_order: 5,
-    tasks: [
-      { name: '试运行保障', description: '持续监控并记录运行情况', is_required: true, output_documents: [{ name: "试运行记录", required: true }] },
-      { name: '项目结算与决算', description: '依次输出《结算报告》和《决算报告》', is_required: true, output_documents: [{ name: "结算报告", required: true }, { name: "决算报告", required: true }] },
-    ]
-  },
-  {
-    name: '终验阶段',
-    phase_order: 6,
-    tasks: [
-      { name: '试运行总结', description: '输出《试运行总结报告》', is_required: true, output_documents: [{ name: "试运行总结报告", required: true }] },
-      { name: '终验筹备与召开', description: '提交终验申请，形成《终验报告》', is_required: true, output_documents: [{ name: "终验申请", required: true }, { name: "终验报告", required: true }] },
-      { name: '终验整改', description: '再次整改专家意见，更新《遗留问题整改报告》', is_required: true, output_documents: [{ name: "遗留问题整改报告（更新）", required: true }] },
-    ]
-  },
-  {
-    name: '运维阶段',
-    phase_order: 7,
-    tasks: [
-      { name: '项目移交', description: '整理全部过程材料，输出《移交清单》，正式移交运维', is_required: true, output_documents: [{ name: "移交清单", required: true }, { name: "项目过程材料归档", required: true }] },
-    ]
-  },
-];
-
-interface MilestoneTemplate {
-  id?: string;
+// 表单数据接口
+interface ProjectFormData {
   name: string;
-  phase_order: number;
-  description?: string;
-  tasks: {
-    id?: string;
-    name: string;
-    description: string;
-    is_required: boolean;
-    output_documents: any[];
-    sort_order?: number;
-  }[];
+  customer_name: string;
+  amount: string;
+  description: string;
+  is_public: boolean;
+  client_id: string;
+}
+
+// 模板版本信息
+interface TemplateVersion {
+  id: string;
+  name: string;
+  version_number: number;
+  description: string;
 }
 
 const ProjectCreate = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  
+  // 状态管理
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [showClientSelect, setShowClientSelect] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [milestoneTemplates, setMilestoneTemplates] = useState<MilestoneTemplate[]>([]);
-  const [templateVersion, setTemplateVersion] = useState<any>(null);
-  const [formData, setFormData] = useState({
+  const [templateVersion, setTemplateVersion] = useState<TemplateVersion | null>(null);
+  const [formData, setFormData] = useState<ProjectFormData>({
     name: '',
     customer_name: '',
     amount: '',
     description: '',
     is_public: false,
+    client_id: '',
   });
 
+  // 初始化：获取客户列表和模板版本信息
   useEffect(() => {
     fetchClients();
-    fetchMilestoneTemplates();
+    fetchTemplateVersion();
   }, []);
 
+  // 获取客户列表
   const fetchClients = async () => {
     try {
       const { data, error } = await api.db
@@ -189,11 +61,12 @@ const ProjectCreate = () => {
       if (error) throw error;
       setClients(data || []);
     } catch (error) {
-      console.error('Error fetching clients:', error);
+      console.error('获取客户列表失败:', error);
     }
   };
 
-  const fetchMilestoneTemplates = async () => {
+  // 获取当前激活的模板版本信息（仅用于展示）
+  const fetchTemplateVersion = async () => {
     try {
       const response = await fetch('/rest/v1/milestone-templates/active', {
         headers: {
@@ -201,138 +74,91 @@ const ProjectCreate = () => {
         },
       });
 
-      if (!response.ok) {
-        throw new Error('获取里程碑模板失败');
+      if (response.ok) {
+        const data = await response.json();
+        setTemplateVersion(data.version);
+      } else if (response.status === 404) {
+        // 没有激活的模板版本，这是正常的
+        console.log('没有激活的里程碑模板版本');
+        setTemplateVersion(null);
+      } else {
+        console.error('获取模板版本失败:', response.status, response.statusText);
       }
-
-      const data = await response.json();
-      setMilestoneTemplates(data.milestones || []);
-      setTemplateVersion(data.version);
     } catch (error) {
-      console.error('Error fetching milestone templates:', error);
-      // 如果获取失败，使用硬编码的模板作为后备
-      setMilestoneTemplates(MILESTONE_TEMPLATES);
+      console.error('获取模板版本失败:', error);
+      // 静默处理，不影响用户创建项目
+      setTemplateVersion(null);
     }
   };
 
+  // 选择客户
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
-    setFormData({ ...formData, customer_name: client.name });
+    setFormData(prev => ({
+      ...prev,
+      customer_name: client.name,
+      client_id: client.id,
+    }));
     setShowClientSelect(false);
   };
 
+  // 提交表单
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    
+    if (!user) {
+      alert('请先登录');
+      return;
+    }
+
+    // 表单验证
+    if (!formData.name.trim()) {
+      alert('请输入项目名称');
+      return;
+    }
+    if (!formData.customer_name.trim()) {
+      alert('请选择客户');
+      return;
+    }
 
     setLoading(true);
+
     try {
-      // 1. Create Project using projectService
-      const project = await projectService.createProject({
-        name: formData.name,
-        customer_name: formData.customer_name,
-        amount: parseFloat(formData.amount) || 0,
-        description: formData.description,
-        is_public: formData.is_public,
-        manager_id: user.id,
-        status: 'pending',
+      // 调用新的项目创建 API
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          customer_name: formData.customer_name.trim(),
+          amount: parseFloat(formData.amount) || 0,
+          description: formData.description.trim(),
+          is_public: formData.is_public,
+          client_id: formData.client_id || undefined,
+        }),
       });
 
-      const projectId = project.id;
-
-      // 1.5 Create Project-Client association if client selected
-      if (selectedClient) {
-        const { error: projectClientError } = await api.db
-          .from('project_clients')
-          .insert({
-            project_id: projectId,
-            client_id: selectedClient.id,
-          });
-
-        if (projectClientError) {
-          console.error('Error creating project-client association:', projectClientError);
-        }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `创建项目失败: ${response.status}`);
       }
 
-      let firstMilestoneId = null;
+      const project = await response.json();
 
-      // 2. Add creator as Project Manager using projectService
-      await projectService.addProjectMember(projectId, user.id, 'manager');
-
-      // 3. Initialize Milestones & Tasks (并行处理以提高性能)
-      // Note: In a production environment, this should be handled by a database trigger or edge function
-      // to ensure atomicity. Here we do it client-side for simplicity given the constraints.
-
-      // 使用从 API 获取的模板，如果没有则使用硬编码的模板
-      const templatesToUse = milestoneTemplates.length > 0 ? milestoneTemplates : MILESTONE_TEMPLATES;
-
-      // 首先并行创建所有里程碑
-      const milestonePromises = templatesToUse.map(async template => {
-        const { data } = await api.db
-          .from('project_milestones')
-          .insert({
-            project_id: projectId,
-            name: template.name,
-            phase_order: template.phase_order,
-            status: template.phase_order === 1 ? 'in_progress' : 'pending',
-            description: template.description || `项目阶段 ${template.phase_order}: ${template.name}`
-          });
-        return { data: data?.[0], error: null };
-      });
-
-      const milestoneResults = await Promise.all(milestonePromises);
-
-      // 收集任务插入请求
-      const taskPromises: Promise<any>[] = [];
-
-      milestoneResults.forEach((result, index) => {
-        if (result.error) {
-          console.error(`Error creating milestone ${templatesToUse[index].name}:`, result.error);
-          return;
-        }
-
-        const milestone = result.data;
-        const template = templatesToUse[index];
-
-        if (template.phase_order === 1) {
-          firstMilestoneId = milestone.id;
-        }
-
-        // 批量插入任务
-        if (template.tasks && template.tasks.length > 0) {
-          const tasksToInsert = template.tasks.map(t => ({
-            milestone_id: milestone.id,
-            name: t.name,
-            description: t.description,
-            is_required: t.is_required,
-            output_documents: t.output_documents
-          }));
-
-          taskPromises.push(
-            (async () => {
-              const { error } = await api.db.from('milestone_tasks').insert(tasksToInsert);
-              if (error) {
-                console.error(`Error creating tasks for ${template.name}:`, error);
-              }
-            })()
-          );
-        }
-      });
-
-      // 并行执行所有任务插入
-      if (taskPromises.length > 0) {
-        await Promise.all(taskPromises);
+      // 检查是否有警告信息（里程碑初始化失败）
+      if (project.warning) {
+        console.warn('项目创建警告:', project.warning);
+        alert(`项目创建成功，但里程碑初始化出现问题：${project.warning}`);
       }
 
-      // 4. Update Project with Current Milestone
-      if (firstMilestoneId) {
-        await projectService.updateProject(projectId, { current_milestone_id: firstMilestoneId });
-      }
-
-      navigate(`/projects/${projectId}`);
+      // 跳转到项目详情页
+      navigate(`/projects/${project.id}`);
     } catch (error) {
-      console.error('Error creating project:', error);
-      alert('创建项目失败');
+      console.error('创建项目失败:', error);
+      alert(error instanceof Error ? error.message : '创建项目失败，请重试');
     } finally {
       setLoading(false);
     }
@@ -341,10 +167,12 @@ const ProjectCreate = () => {
   return (
     <div className="max-w-2xl mx-auto py-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">新建项目</h1>
+      
       <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow">
+        {/* 项目名称 */}
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-            项目名称
+            项目名称 <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -352,19 +180,21 @@ const ProjectCreate = () => {
             required
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="请输入项目名称"
           />
         </div>
 
+        {/* 客户选择 */}
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            客户名称
+            客户名称 <span className="text-red-500">*</span>
           </label>
           <div className="mt-1 relative">
             <button
               type="button"
               onClick={() => setShowClientSelect(!showClientSelect)}
-              className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-left focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+              className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-left focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white hover:bg-gray-50"
             >
               {selectedClient ? (
                 <span className="flex items-center">
@@ -396,27 +226,27 @@ const ProjectCreate = () => {
               </div>
             )}
           </div>
-          <input
-            type="hidden"
-            required
-            value={formData.customer_name}
-            onChange={() => {}}
-          />
         </div>
 
+        {/* 项目金额 */}
         <div>
           <label htmlFor="amount" className="block text-sm font-medium text-gray-700">
             项目金额 (¥)
           </label>
           <input
-            type="number"
+            type="text"
             id="amount"
-            required
-            min="0"
-            step="0.01"
-            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            inputMode="decimal"
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             value={formData.amount}
-            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+            onChange={(e) => {
+              const value = e.target.value;
+              // 只允许数字和小数点
+              if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                setFormData(prev => ({ ...prev, amount: value }));
+              }
+            }}
+            placeholder="请输入项目金额"
           />
           {formData.amount && parseFloat(formData.amount) > 0 && (
             <p className="mt-1 text-sm text-gray-600">
@@ -425,6 +255,7 @@ const ProjectCreate = () => {
           )}
         </div>
 
+        {/* 项目描述 */}
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-gray-700">
             项目描述
@@ -434,24 +265,26 @@ const ProjectCreate = () => {
             rows={4}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+            placeholder="请输入项目描述（可选）"
           />
         </div>
 
+        {/* 公开项目选项 */}
         <div className="flex items-center">
           <input
             id="is_public"
             type="checkbox"
             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
             checked={formData.is_public}
-            onChange={(e) => setFormData({ ...formData, is_public: e.target.checked })}
+            onChange={(e) => setFormData(prev => ({ ...prev, is_public: e.target.checked }))}
           />
           <label htmlFor="is_public" className="ml-2 block text-sm text-gray-900">
             公开项目（对所有用户可见）
           </label>
         </div>
 
-        {/* 显示当前使用的里程碑模板版本 */}
+        {/* 模板版本信息 */}
         {templateVersion && (
           <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
             <p className="text-sm text-blue-800">
@@ -459,12 +292,13 @@ const ProjectCreate = () => {
               {templateVersion.name} (v{templateVersion.version_number})
             </p>
             <p className="text-xs text-blue-600 mt-1">
-              {templateVersion.description}
+              {templateVersion.description || '创建项目后将自动根据此模板初始化里程碑阶段和任务'}
             </p>
           </div>
         )}
 
-        <div className="flex justify-end space-x-3">
+        {/* 操作按钮 */}
+        <div className="flex justify-end space-x-3 pt-4">
           <button
             type="button"
             onClick={() => navigate('/projects')}
@@ -475,9 +309,16 @@ const ProjectCreate = () => {
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : '创建项目'}
+            {loading ? (
+              <>
+                <Loader2 className="animate-spin h-5 w-5 mr-2" />
+                创建中...
+              </>
+            ) : (
+              '创建项目'
+            )}
           </button>
         </div>
       </form>

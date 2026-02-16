@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { Profile, Project, ProjectModule } from '../../types';
 import { DatePicker } from '../../components/DatePicker';
+import { Avatar } from '../../components/Avatar';
 
 interface TaskFormData {
   title: string;
@@ -369,9 +370,12 @@ export default function TaskCreatePage() {
                             : 'bg-white text-dark-700 border-2 border-dark-200 hover:border-dark-300'
                         }`}
                       >
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-xs font-bold text-white">
-                          {u.full_name?.charAt(0) || '?'}
-                        </div>
+                        <Avatar
+                          userId={u.id}
+                          avatarUrl={u.avatar_url}
+                          name={u.full_name}
+                          size="xs"
+                        />
                         {u.full_name}
                         {u.id === user?.id && <span className="text-xs opacity-70">(我)</span>}
                       </button>

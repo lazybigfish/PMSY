@@ -1,6 +1,7 @@
 import React from 'react';
 import { Task, Profile, Project } from '../../../types';
 import { Clock, AlertCircle } from 'lucide-react';
+import { Avatar } from '../../../components/Avatar';
 
 interface TaskWithDetails extends Task {
   project?: Project;
@@ -127,13 +128,14 @@ export const TaskKanban: React.FC<TaskKanbanProps> = ({ tasks, onTaskClick }) =>
                   <div className="flex items-center justify-between mt-3">
                     <div className="flex -space-x-2">
                       {task.assignees?.map((a) => (
-                        <div key={a.user_id} className="w-6 h-6 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-[10px] text-gray-500 overflow-hidden" title={a.user.full_name}>
-                          {a.user.avatar_url ? (
-                            <img src={a.user.avatar_url} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            a.user.full_name?.[0] || 'U'
-                          )}
-                        </div>
+                        <Avatar
+                          key={a.user_id}
+                          userId={a.user.id}
+                          avatarUrl={a.user.avatar_url}
+                          name={a.user.full_name}
+                          size="xs"
+                          className="border-2 border-white"
+                        />
                       ))}
                       {(!task.assignees || task.assignees.length === 0) && (
                          <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[10px] text-gray-400">?</div>

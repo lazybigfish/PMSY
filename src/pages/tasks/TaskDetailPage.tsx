@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { taskService, userService, projectService, notificationService } from '../../services';
-import { api } from '../../lib/api';
+import { recordTaskAssigneeChange, recordTaskModuleChange } from '../../services/taskService';
+import { api, apiClient } from '../../lib/api';
 import { Task, Profile, Project, TaskComment, TaskProgressLog, ProjectModule, TaskModule } from '../../types';
-import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp, Edit2, Trash2, Calendar, Folder, User, Users, Tag, Clock } from 'lucide-react';
+import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp, Edit2, Trash2, Calendar, Folder, User, Users, Tag, Clock, XCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContextNew';
 import { TaskComments } from './components/TaskComments';
 import { TaskProgressUpdateModal } from './components/TaskProgressUpdateModal';
+import { TaskHistory } from './components/TaskHistory';
+import { Avatar } from '../../components/Avatar';
 
 interface TaskWithRelations extends Task {
   project?: Project;
@@ -81,13 +84,55 @@ const TaskDetailPage = () => {
     return options;
   };
 
+  // 项目权限级别
+  const [projectPermissionLevel, setProjectPermissionLevel] = useState<'none' | 'viewer' | 'member' | 'manager' | 'admin'>('none');
+
   // 权限判断
   const isOwner = user?.id === task?.created_by;
   const isAssignee = task?.assignees?.some(a => a.user_id === user?.id);
   const isTaskActive = task?.status !== 'done' && task?.status !== 'canceled';
-  
-  const canEdit = isOwner && isTaskActive;
-  const canUpdateStatus = (isOwner || isAssignee) && isTaskActive;
+  const isProjectManager = projectPermissionLevel === 'manager' || projectPermissionLevel === 'admin';
+  const isProjectMember = projectPermissionLevel === 'member' || isProjectManager;
+
+  // 编辑权限：任务创建者 或 项目管理员
+  const canEdit = (isOwner || isProjectManager) && isTaskActive;
+  // 更新状态权限：任务创建者 或 任务处理人 或 项目管理员 或 项目成员
+  const canUpdateStatus = (isOwner || isAssignee || isProjectManager || isProjectMember) && isTaskActive;
+
+  // 获取用户在项目中的权限级别
+  const getProjectPermissionLevel = async (projectId: string, userId: string): Promise<'none' | 'viewer' | 'member' | 'manager' | 'admin'> => {
+    // 1. 检查是否是系统管理员
+    const { data: userData } = await api.db.from('profiles').select('role').eq('id', userId).single();
+    if (userData?.role === 'admin') {
+      return 'admin';
+    }
+
+    // 2. 检查是否是项目经理（manager_id）
+    const { data: projectData } = await api.db.from('projects').select('manager_id').eq('id', projectId).single();
+    if (projectData?.manager_id === userId) {
+      return 'manager';
+    }
+
+    // 3. 检查是否是项目成员
+    const { data: memberData } = await api.db
+      .from('project_members')
+      .select('role')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .single();
+
+    if (memberData) {
+      return memberData.role === 'manager' ? 'manager' : 'member';
+    }
+
+    // 4. 检查项目是否公开
+    const { data: publicProject } = await api.db.from('projects').select('is_public').eq('id', projectId).single();
+    if (publicProject?.is_public) {
+      return 'viewer';
+    }
+
+    return 'none';
+  };
 
   useEffect(() => {
     if (id) {
@@ -101,15 +146,21 @@ const TaskDetailPage = () => {
     try {
       // 使用 taskService 获取任务详情
       const taskData = await taskService.getTaskById(id);
-      
+
       if (!taskData) throw new Error('Task not found');
-      
+
+      // 获取用户在项目中的权限级别
+      if (taskData.project_id && user?.id) {
+        const level = await getProjectPermissionLevel(taskData.project_id, user.id);
+        setProjectPermissionLevel(level);
+      }
+
       // 获取关联数据
       let ownerData = null;
       if (taskData.owner_id) {
         ownerData = await userService.getUserById(taskData.owner_id);
       }
-      
+
       // 获取项目信息
       let projectData = null;
       if (taskData.project_id) {
@@ -282,12 +333,20 @@ const TaskDetailPage = () => {
   const handleAddAssignee = async (userId: string) => {
     if (!task) return;
     try {
+      // 先获取用户姓名
+      const { data: userData } = await api.db.from('profiles').select('full_name').eq('id', userId).single();
+      const userName = userData?.full_name || '未知用户';
+
       const { error } = await api.db.from('task_assignees').insert({
         task_id: task.id,
         user_id: userId,
         is_primary: task.assignees?.length === 0
       });
       if (error) throw error;
+
+      // 记录添加处理人的历史
+      await recordTaskAssigneeChange(task.id, 'add', userName);
+
       fetchTaskDetails(true);
     } catch (error) {
       console.error('Error adding assignee:', error);
@@ -298,9 +357,16 @@ const TaskDetailPage = () => {
   const handleRemoveAssignee = async (userId: string) => {
     if (!task) return;
     try {
-      // 使用 rpc 或直接调用 API 删除
-      const { error } = await api.db.from('task_assignees').delete().eq('task_id', task.id);
-      if (error) throw error;
+      // 先获取用户姓名
+      const { data: userData } = await api.db.from('profiles').select('full_name').eq('id', userId).single();
+      const userName = userData?.full_name || '未知用户';
+
+      // 删除指定处理人 - 使用 REST API 直接调用
+      await apiClient.delete(`/rest/v1/task_assignees?eq.task_id=${task.id}&eq.user_id=${userId}`);
+
+      // 记录移除处理人的历史
+      await recordTaskAssigneeChange(task.id, 'remove', userName);
+
       fetchTaskDetails(true);
     } catch (error) {
       console.error('Error removing assignee:', error);
@@ -311,24 +377,53 @@ const TaskDetailPage = () => {
   const handleUpdateModules = async (moduleIds: string[]) => {
     if (!task) return;
     try {
-      const { error: deleteError } = await api.db.from('task_modules')
-        .delete()
-        .eq('task_id', task.id);
-      if (deleteError) throw deleteError;
+      // 获取当前已关联的模块ID
+      const currentModuleIds = task.task_modules?.map(tm => tm.module_id) || [];
+      
+      // 计算新增的模块ID
+      const addedModuleIds = moduleIds.filter(id => !currentModuleIds.includes(id));
+      
+      // 删除所有现有模块关联
+      await apiClient.delete(`/rest/v1/task_modules?eq.task_id=${task.id}`);
 
+      // 插入新模块关联
       if (moduleIds.length > 0) {
-        const { error: insertError } = await api.db.from('task_modules').insert(
+        await apiClient.post('/rest/v1/task_modules', 
           moduleIds.map(moduleId => ({
             task_id: task.id,
             module_id: moduleId
           }))
         );
-        if (insertError) throw insertError;
       }
+      
+      // 记录新增模块的历史
+      for (const moduleId of addedModuleIds) {
+        const module = availableModules.find(m => m.id === moduleId);
+        if (module) {
+          await recordTaskModuleChange(task.id, 'add', module.name);
+        }
+      }
+      
       fetchTaskDetails(true);
     } catch (error) {
       console.error('Error updating modules:', error);
       alert('更新模块失败');
+    }
+  };
+
+  const handleRemoveModule = async (moduleId: string, moduleName: string) => {
+    if (!task) return;
+    try {
+      // 删除指定的功能模块关联
+      await apiClient.delete(`/rest/v1/task_modules?eq.task_id=${task.id}&eq.module_id=${moduleId}`);
+
+      // 记录移除功能模块的历史
+      await recordTaskModuleChange(task.id, 'remove', moduleName);
+
+      fetchTaskDetails(true);
+    } catch (error) {
+      console.error('Error removing module:', error);
+      alert('移除功能模块失败');
     }
   };
 
@@ -349,40 +444,27 @@ const TaskDetailPage = () => {
   };
 
   const handleProgressUpdate = async (progress: number, content: string, attachments: any[]) => {
-    console.log('handleProgressUpdate called:', { progress, content, attachmentsCount: attachments.length });
-    
     if (!task || !user) {
-      console.error('Task or user is null:', { task, user });
       alert('任务或用户信息缺失');
       return;
     }
 
     try {
-      console.log('Inserting progress log:', {
-        task_id: task.id,
-        progress,
-        description: content,
-        created_by: user.id
-      });
-
       // 1. 创建进度更新记录
       const { data: progressLogData, error: logError } = await api.db
         .from('task_progress_logs')
         .insert({
           task_id: task.id,
+          user_id: user.id,
           progress,
-          description: content,
-          created_by: user.id
+          description: content
         });
 
       if (logError) {
-        console.error('Error inserting progress log:', logError);
         throw new Error(`创建进度记录失败: ${logError.message}`);
       }
 
       const progressLog = progressLogData?.[0];
-
-      console.log('Progress log created:', progressLog);
 
       // 2. 保存附件记录
       if (attachments.length > 0 && progressLog) {
@@ -396,62 +478,24 @@ const TaskDetailPage = () => {
             file_size: att.file_size
           }));
 
-        console.log('Attachments to insert:', attachmentsToInsert);
-
         if (attachmentsToInsert.length > 0) {
-          const { error: attError } = await api.db
+          await api.db
             .from('task_progress_attachments')
             .insert(attachmentsToInsert);
-
-          if (attError) {
-            console.error('Error inserting attachments:', attError);
-            // 附件保存失败不影响主流程
-          }
         }
       }
 
-      // 3. 如果进度为100%，自动完成任务
+      // 3. 更新任务进度和状态
+      const updateData: any = { progress };
       if (progress === 100 && task.status !== 'done') {
-        console.log('Auto-completing task...');
-        await taskService.updateTask(task.id, {
-          status: 'done',
-          completed_at: new Date().toISOString()
-        });
+        updateData.status = 'done';
+        updateData.completed_at = new Date().toISOString();
       }
+      await taskService.updateTask(task.id, updateData);
 
-      // 4. 发送通知（暂时禁用，测试基本功能）
-      // const notificationData = [];
-      // if (task.created_by !== user.id) {
-      //   notificationData.push({
-      //     user_id: task.created_by,
-      //     title: '任务进度更新',
-      //     content: `任务 "${task.title}" 进度更新为 ${progress}%`,
-      //     type: 'info',
-      //     is_read: false,
-      //     link: `/tasks/${task.id}`
-      //   });
-      // }
-      // task.assignees?.forEach(assignee => {
-      //   if (assignee.user_id !== user.id) {
-      //     notificationData.push({
-      //       user_id: assignee.user_id,
-      //       title: '任务进度更新',
-      //       content: `任务 "${task.title}" 进度更新为 ${progress}%`,
-      //       type: 'info',
-      //       is_read: false,
-      //       link: `/tasks/${task.id}`
-      //     });
-      //   }
-      // });
-      // if (notificationData.length > 0) {
-      //   await notificationService.createNotifications(notificationData);
-      // }
-
-      // 5. 刷新数据
-      console.log('Refreshing task details...');
+      // 4. 刷新数据
       await fetchTaskDetails(true);
       setCurrentProgress(progress);
-      console.log('Progress update completed successfully!');
 
     } catch (error: any) {
       console.error('Error submitting progress update:', error);
@@ -489,6 +533,8 @@ const TaskDetailPage = () => {
 
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
+      case 'urgent':
+        return <span className="badge bg-red-500 text-white"><AlertCircle className="w-3 h-3 mr-1" />紧急</span>;
       case 'high':
         return <span className="badge bg-red-100 text-red-700"><AlertCircle className="w-3 h-3 mr-1" />高</span>;
       case 'medium':
@@ -590,9 +636,13 @@ const TaskDetailPage = () => {
               {getPriorityBadge(task.priority)}
             </div>
             <p className="text-sm text-dark-500 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-md gradient-primary flex items-center justify-center text-white text-xs font-bold">
-                {task.creator?.full_name?.charAt(0) || '?'}
-              </span>
+              <Avatar
+                userId={task.creator?.id}
+                avatarUrl={task.creator?.avatar_url}
+                name={task.creator?.full_name}
+                size="xs"
+                rounded="md"
+              />
               <span className="font-medium text-dark-700">{task.creator?.full_name}</span>
               <span className="text-dark-400">·</span>
               <span>{new Date(task.created_at).toLocaleDateString('zh-CN')}</span>
@@ -745,9 +795,31 @@ const TaskDetailPage = () => {
                     {/* 优先级 */}
                     <div>
                       <label className="block text-sm font-medium text-dark-500 mb-2">优先级</label>
-                      <div className="flex items-center gap-2">
-                        {getPriorityBadge(task.priority || 'medium')}
-                      </div>
+                      {canEdit ? (
+                        <select
+                          value={task.priority || 'medium'}
+                          onChange={async (e) => {
+                            const newPriority = e.target.value as Task['priority'];
+                            try {
+                              await taskService.updateTask(task.id, { priority: newPriority });
+                              setTask(prev => prev ? { ...prev, priority: newPriority } : null);
+                            } catch (error) {
+                              console.error('Error updating priority:', error);
+                              alert('更新优先级失败');
+                            }
+                          }}
+                          className="w-full"
+                        >
+                          <option value="low">低</option>
+                          <option value="medium">中</option>
+                          <option value="high">高</option>
+                          <option value="urgent">紧急</option>
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          {getPriorityBadge(task.priority || 'medium')}
+                        </div>
+                      )}
                     </div>
 
                     {/* 责任人 */}
@@ -757,9 +829,13 @@ const TaskDetailPage = () => {
                         责任人
                       </label>
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center text-xs font-bold text-white">
-                          {task.creator?.full_name?.charAt(0) || '?'}
-                        </div>
+                        <Avatar
+                          userId={task.creator?.id}
+                          avatarUrl={task.creator?.avatar_url}
+                          name={task.creator?.full_name}
+                          size="sm"
+                          rounded="lg"
+                        />
                         <span className="text-dark-700 font-medium">{task.creator?.full_name || '未知'}</span>
                         <span className="text-xs text-dark-400">(创建者)</span>
                       </div>
@@ -774,9 +850,13 @@ const TaskDetailPage = () => {
                       <div className="flex flex-wrap items-center gap-2">
                         {task.assignees?.map((assignee) => (
                           <div key={assignee.user_id} className="flex items-center gap-1.5 bg-violet-50 px-2 py-1 rounded-lg">
-                            <div className="w-6 h-6 rounded-md bg-violet-100 flex items-center justify-center text-xs font-bold text-violet-600">
-                              {assignee.user.full_name?.charAt(0) || '?'}
-                            </div>
+                            <Avatar
+                              userId={assignee.user.id}
+                              avatarUrl={assignee.user.avatar_url}
+                              name={assignee.user.full_name}
+                              size="xs"
+                              rounded="md"
+                            />
                             <span className="text-sm text-dark-700">{assignee.user.full_name}</span>
                             {assignee.is_primary && (
                               <span className="text-xs text-violet-600 font-medium">(主)</span>
@@ -830,14 +910,32 @@ const TaskDetailPage = () => {
                         <Calendar className="w-3.5 h-3.5" />
                         截止日期
                       </label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-dark-700">
-                          {task.due_date 
-                            ? new Date(task.due_date).toLocaleDateString('zh-CN')
-                            : '未设置'
-                          }
-                        </span>
-                      </div>
+                      {canEdit ? (
+                        <input
+                          type="date"
+                          value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                          onChange={async (e) => {
+                            const newDueDate = e.target.value || null;
+                            try {
+                              await taskService.updateTask(task.id, { due_date: newDueDate });
+                              setTask(prev => prev ? { ...prev, due_date: newDueDate } : null);
+                            } catch (error) {
+                              console.error('Error updating due date:', error);
+                              alert('更新截止日期失败');
+                            }
+                          }}
+                          className="w-full"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-dark-700">
+                            {task.due_date
+                              ? new Date(task.due_date).toLocaleDateString('zh-CN')
+                              : '未设置'
+                            }
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -846,8 +944,20 @@ const TaskDetailPage = () => {
                     <label className="block text-sm font-medium text-dark-500 mb-3">关联模块</label>
                     <div className="flex flex-wrap gap-2">
                       {task.task_modules?.map((tm) => (
-                        <span key={tm.module_id} className="badge badge-primary">
+                        <span
+                          key={tm.module_id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-700"
+                        >
                           {tm.module?.name}
+                          {canEdit && (
+                            <button
+                              onClick={() => handleRemoveModule(tm.module_id, tm.module?.name || '未知模块')}
+                              className="ml-1 hover:text-primary-900 focus:outline-none"
+                              title="移除关联"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
                         </span>
                       ))}
                       {canEdit && (
@@ -917,9 +1027,13 @@ const TaskDetailPage = () => {
                       <h4 className="text-sm font-medium text-dark-600 mb-3">最近更新</h4>
                       <div className="bg-dark-50 rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="w-6 h-6 rounded-md gradient-primary flex items-center justify-center text-xs font-bold text-white">
-                            {latestLog.creator?.full_name?.charAt(0) || '?'}
-                          </div>
+                          <Avatar
+                            userId={latestLog.creator?.id}
+                            avatarUrl={latestLog.creator?.avatar_url}
+                            name={latestLog.creator?.full_name}
+                            size="xs"
+                            rounded="md"
+                          />
                           <span className="text-sm font-medium text-dark-700">{latestLog.creator?.full_name}</span>
                           <span className="text-xs text-dark-400">
                             {new Date(latestLog.created_at).toLocaleDateString('zh-CN')}
@@ -956,67 +1070,8 @@ const TaskDetailPage = () => {
         )}
 
         {activeTab === 'history' && (
-          <div className="card p-6 space-y-4">
-            {logs.map((log) => (
-              <div key={log.id} className="flex gap-4 p-4 bg-dark-50 rounded-xl">
-                <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center text-white font-bold flex-shrink-0 shadow-glow">
-                  {log.creator?.full_name?.charAt(0) || '?'}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-bold text-dark-900">{log.creator?.full_name}</span>
-                    <span className="text-xs text-dark-400">
-                      {new Date(log.created_at).toLocaleString('zh-CN')}
-                    </span>
-                  </div>
-
-                  {log.progress !== undefined && log.progress !== null && (
-                    <div className="mb-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-dark-500">进度更新</span>
-                        <span className="text-sm font-bold text-primary-600">{log.progress}%</span>
-                      </div>
-                      <div className="w-full h-2 bg-dark-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-primary-400 to-primary-500 rounded-full transition-all"
-                          style={{ width: `${log.progress}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <p className="text-dark-700 whitespace-pre-wrap">{log.description}</p>
-
-                  {log.attachments && log.attachments.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs font-medium text-dark-500">附件:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {log.attachments.map((att: any) => (
-                          <a
-                            key={att.id}
-                            href={att.file_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg text-sm text-dark-700 hover:bg-primary-50 hover:text-primary-600 transition-colors border border-dark-100"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span className="max-w-[150px] truncate">{att.file_name}</span>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            {logs.length === 0 && (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 rounded-2xl bg-dark-100 flex items-center justify-center mx-auto mb-4">
-                  <History className="h-8 w-8 text-dark-400" />
-                </div>
-                <p className="text-dark-500">暂无历史记录</p>
-              </div>
-            )}
+          <div className="card p-6">
+            <TaskHistory taskId={task.id} />
           </div>
         )}
       </div>

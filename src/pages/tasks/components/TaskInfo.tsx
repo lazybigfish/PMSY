@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Calendar, Edit2, X, Check } from 'lucide-react';
+import { Calendar, Edit2, X, Check, XCircle } from 'lucide-react';
 import { Task, Profile, Project, ProjectModule } from '../../../types';
+import { Avatar } from '../../../components/Avatar';
 
 interface TaskModule {
   module_id: string;
@@ -24,6 +25,7 @@ interface TaskInfoProps {
   onAddAssignee: (userId: string) => void;
   onRemoveAssignee: (userId: string) => void;
   onUpdateModules: (moduleIds: string[]) => void;
+  onRemoveModule?: (moduleId: string, moduleName: string) => void;
 }
 
 const priorityLabels: Record<string, string> = {
@@ -123,7 +125,8 @@ export function TaskInfo({
   onStatusChange,
   onAddAssignee,
   onRemoveAssignee,
-  onUpdateModules
+  onUpdateModules,
+  onRemoveModule
 }: TaskInfoProps) {
   const [isEditingModules, setIsEditingModules] = useState(false);
   const [tempSelectedModules, setTempSelectedModules] = useState<string[]>(
@@ -185,12 +188,13 @@ export function TaskInfo({
       <div>
         <label className="block text-sm font-medium text-dark-700 mb-2">责任人</label>
         <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center text-xs font-bold text-white"
-            title={task.creator?.full_name || '未知'}
-          >
-            {task.creator?.full_name?.charAt(0) || '?'}
-          </div>
+          <Avatar
+            userId={task.creator?.id}
+            avatarUrl={task.creator?.avatar_url}
+            name={task.creator?.full_name}
+            size="xs"
+            className="flex-shrink-0"
+          />
           <span className="text-sm font-medium text-dark-900">{task.creator?.full_name || '未知'}</span>
           <span className="text-xs text-dark-400">(任务创建者)</span>
         </div>
@@ -205,9 +209,12 @@ export function TaskInfo({
               key={assignee.user_id}
               className="flex items-center gap-2 bg-violet-100 rounded-full pl-1 pr-3 py-1"
             >
-              <div className="w-6 h-6 rounded-full gradient-primary flex items-center justify-center text-xs text-white font-bold">
-                {assignee.user?.full_name?.charAt(0) || '?'}
-              </div>
+              <Avatar
+                userId={assignee.user?.id}
+                avatarUrl={assignee.user?.avatar_url}
+                name={assignee.user?.full_name}
+                size="xs"
+              />
               <span className="text-sm font-medium text-dark-900">{assignee.user?.full_name}</span>
               {assignee.is_primary && (
                 <span className="text-xs text-violet-600 font-semibold">(主)</span>
@@ -274,20 +281,29 @@ export function TaskInfo({
               associatedModules.map((module) => (
                 <span
                   key={module.id}
-                  className="badge badge-primary"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-700"
                 >
                   {module.name}
+                  {canEdit && onRemoveModule && (
+                    <button
+                      onClick={() => onRemoveModule(module.id, module.name)}
+                      className="ml-1 hover:text-primary-900 focus:outline-none"
+                      title="移除关联"
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  )}
                 </span>
               ))
             ) : (
               <span className="text-dark-400 text-sm">未关联任何模块</span>
             )}
-            {canEdit && associatedModules.length === 0 && (
+            {canEdit && (
               <button
                 onClick={() => setIsEditingModules(true)}
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
-                + 添加关联
+                {associatedModules.length === 0 ? '+ 添加关联' : '+ 管理关联'}
               </button>
             )}
           </div>

@@ -34,9 +34,10 @@ interface MilestoneTask {
 
 interface MilestonesProps {
   projectId: string;
+  canEdit?: boolean;
 }
 
-export default function Milestones({ projectId }: MilestonesProps) {
+export default function Milestones({ projectId, canEdit = true }: MilestonesProps) {
   const { user } = useAuth();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +124,7 @@ export default function Milestones({ projectId }: MilestonesProps) {
       .from('milestone_tasks')
       .select('*')
       .eq('milestone_id', milestoneId)
-      .order('id', { ascending: true });
+      .order('sort_order', { ascending: true });
 
     setTasksByMilestone(prev => ({
       ...prev,

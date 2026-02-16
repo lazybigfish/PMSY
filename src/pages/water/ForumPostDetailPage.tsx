@@ -7,6 +7,26 @@ import { ForumPost, ForumReply, ForumCategory } from '../../types';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { LikeButton } from '../../components/LikeButton';
+import { Avatar } from '../../components/Avatar';
+
+// 辅助函数：解析帖子内容
+const parseContent = (content: any): string => {
+  if (!content) return '';
+  // 如果是字符串，尝试解析为 JSON
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content);
+      return parsed.text || parsed.content || content;
+    } catch {
+      return content;
+    }
+  }
+  // 如果是对象，取 text 或 content 字段
+  if (typeof content === 'object') {
+    return content.text || content.content || '';
+  }
+  return String(content);
+};
 
 const categories: { key: ForumCategory; label: string; color: string; bgColor: string; borderColor: string }[] = [
   { key: 'tech', label: '技术分享', color: 'text-primary-700', bgColor: 'bg-primary-50', borderColor: 'border-primary-200' },
@@ -64,12 +84,13 @@ export default function ForumPostDetailPage() {
       // 检查当前用户是否点赞
       if (user) {
         const { data: likeData } = await api.db
-          .from('forum_post_likes')
+          .from('forum_likes')
           .select('*')
-          .eq('post_id', id)
+          .eq('target_id', id)
+          .eq('target_type', 'post')
           .eq('user_id', user.id)
           .single();
-        
+
         postWithAuthor.is_liked = !!likeData;
       }
       
@@ -118,7 +139,7 @@ export default function ForumPostDetailPage() {
       const repliesWithAuthors = (repliesData || []).map(reply => ({
         ...reply,
         author: authorMap.get(reply.author_id),
-        content: reply.content || { text: '' }
+        content: parseContent(reply.content)
       }));
 
       setReplies(repliesWithAuthors);
@@ -195,15 +216,16 @@ export default function ForumPostDetailPage() {
       if (post.is_liked) {
         // Unlike - 只需删除点赞记录，触发器会自动更新 like_count
         const { data: likes } = await api.db
-          .from('forum_post_likes')
+          .from('forum_likes')
           .select('*')
-          .eq('post_id', post.id)
+          .eq('target_id', post.id)
+          .eq('target_type', 'post')
           .eq('user_id', user.id);
-        
+
         if (likes && likes.length > 0) {
           for (const like of likes) {
             await api.db
-              .from('forum_post_likes')
+              .from('forum_likes')
               .delete()
               .eq('id', like.id);
           }
@@ -218,8 +240,8 @@ export default function ForumPostDetailPage() {
       } else {
         // Like - 只需插入点赞记录，触发器会自动更新 like_count
         const { error: insertError } = await api.db
-          .from('forum_post_likes')
-          .insert({ post_id: post.id, user_id: user.id });
+          .from('forum_likes')
+          .insert({ target_id: post.id, target_type: 'post', user_id: user.id });
         
         if (insertError) {
           console.error('Error inserting like:', insertError);
@@ -307,19 +329,14 @@ export default function ForumPostDetailPage() {
 
         {/* 作者信息 */}
         <div className="flex items-center gap-4 p-4 bg-dark-50 rounded-xl mb-6">
-          {post.author?.avatar_url ? (
-            <img
-              src={post.author.avatar_url}
-              alt={post.author.full_name}
-              className="w-14 h-14 rounded-xl object-cover ring-2 ring-white shadow-md"
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-              <span className="text-white font-bold text-xl">
-                {post.author?.full_name?.charAt(0) || '?'}
-              </span>
-            </div>
-          )}
+          <Avatar
+            userId={post.author?.id}
+            avatarUrl={post.author?.avatar_url}
+            name={post.author?.full_name}
+            size="lg"
+            rounded="xl"
+            className="ring-2 ring-white shadow-md"
+          />
           <div className="flex-1">
             <p className="font-semibold text-dark-900 text-base">{post.author?.full_name || '未知用户'}</p>
             <div className="flex items-center gap-4 text-xs text-dark-500 mt-1.5">
@@ -341,7 +358,7 @@ export default function ForumPostDetailPage() {
 
         {/* 正文内容 */}
         <div className="prose prose-sm max-w-none text-dark-700 leading-relaxed whitespace-pre-wrap text-base mb-6">
-          {typeof post.content === 'string' ? post.content : (post.content as any)?.text || ''}
+          {parseContent(post.content)}
         </div>
 
         {/* 点赞按钮 */}
@@ -374,19 +391,14 @@ export default function ForumPostDetailPage() {
                 key={reply.id}
                 className="flex gap-4 p-4 bg-dark-50 rounded-xl hover:bg-dark-100/50 hover:shadow-sm transition-all duration-200 ease-out"
               >
-                {reply.author?.avatar_url ? (
-                  <img
-                    src={reply.author.avatar_url}
-                    alt={reply.author.full_name}
-                    className="w-11 h-11 rounded-lg object-cover ring-2 ring-white flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-dark-200 to-dark-300 flex items-center justify-center flex-shrink-0">
-                    <span className="text-dark-600 font-semibold">
-                      {reply.author?.full_name?.charAt(0) || '?'}
-                    </span>
-                  </div>
-                )}
+                <Avatar
+                  userId={reply.author?.id}
+                  avatarUrl={reply.author?.avatar_url}
+                  name={reply.author?.full_name}
+                  size="sm"
+                  rounded="lg"
+                  className="ring-2 ring-white flex-shrink-0"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="font-semibold text-sm text-dark-900">
@@ -408,7 +420,7 @@ export default function ForumPostDetailPage() {
                     </div>
                   </div>
                   <p className="text-sm text-dark-700 leading-relaxed whitespace-pre-wrap">
-                    {typeof reply.content === 'string' ? reply.content : (reply.content as any)?.text || ''}
+                    {reply.content}
                   </p>
                 </div>
               </div>

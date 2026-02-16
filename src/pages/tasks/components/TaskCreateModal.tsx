@@ -3,6 +3,7 @@ import { Plus, Loader2 } from 'lucide-react';
 import { Profile, Project, ProjectModule } from '../../../types';
 import { ModalForm } from '../../../components/Modal';
 import { DatePicker } from '../../../components/DatePicker';
+import { Avatar } from '../../../components/Avatar';
 
 interface TaskCreateModalProps {
   isOpen: boolean;
@@ -280,9 +281,12 @@ export function TaskCreateModal({
                     : 'bg-dark-100 text-dark-700 border-2 border-transparent hover:bg-dark-200'
                 }`}
               >
-                <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-xs font-medium">
-                  {user.full_name?.charAt(0) || '?'}
-                </div>
+                <Avatar
+                  userId={user.id}
+                  avatarUrl={user.avatar_url}
+                  name={user.full_name}
+                  size="xs"
+                />
                 {user.full_name}
                 {user.id === currentUserId && <span className="text-xs opacity-70">(我)</span>}
               </button>

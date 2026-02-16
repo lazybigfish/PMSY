@@ -598,9 +598,16 @@ export const apiClient = {
       headers: {
         'Authorization': `Bearer ${getAccessToken() || ''}`,
       },
-    }).then(r => {
+    }).then(async r => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
+      // 处理空响应的情况
+      const text = await r.text();
+      if (!text) return { deleted: 0 };
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { deleted: 0 };
+      }
     });
   },
 };

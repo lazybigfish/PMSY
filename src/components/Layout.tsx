@@ -20,6 +20,7 @@ import { cn } from '../lib/utils';
 import { Notifications } from './Notifications';
 import { getNavItemClasses } from '../lib/interactions';
 import type { ThemeColor } from '../lib/interactions';
+import { Avatar } from './Avatar';
 
 const Layout = () => {
   const { signOut, profile } = useAuth();
@@ -165,9 +166,14 @@ const Layout = () => {
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-dark-700 hover:bg-dark-100 transition-all duration-200"
                 >
-                  <div className="h-9 w-9 rounded-xl gradient-primary flex items-center justify-center text-white font-semibold shadow-glow">
-                    {profile?.full_name?.[0] || profile?.email?.[0] || 'U'}
-                  </div>
+                  <Avatar
+                    userId={profile?.id}
+                    avatarUrl={profile?.avatar_url}
+                    name={profile?.full_name}
+                    email={profile?.email}
+                    size="sm"
+                    rounded="xl"
+                  />
                   <span className="hidden sm:block font-medium">{profile?.full_name || profile?.email || 'User'}</span>
                   <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", showUserMenu && "rotate-180")} />
                 </button>

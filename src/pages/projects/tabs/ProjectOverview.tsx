@@ -4,6 +4,8 @@ import { api } from '../../../lib/api';
 import { Project, Profile, Client } from '../../../types';
 import { Plus, Trash2, Mail, Phone, Loader2, CheckSquare, AlertOctagon, Flag, Layers, Activity, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
+import { numberToChinese } from '../../../lib/utils';
+import { Avatar } from '../../../components/Avatar';
 
 interface ProjectOverviewProps {
   projectId: string;
@@ -12,6 +14,7 @@ interface ProjectOverviewProps {
   onEditChange?: (form: Partial<Project>) => void;
   project?: Project | null;
   onClientSelect?: (clientId: string | null) => void;
+  canEdit?: boolean;
 }
 
 interface ProjectMember extends Profile {
@@ -19,8 +22,8 @@ interface ProjectMember extends Profile {
   member_id: string;
 }
 
-const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing, editForm, onEditChange, project: propProject, onClientSelect }) => {
-  const { user } = useAuth();
+const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing, editForm, onEditChange, project: propProject, onClientSelect, canEdit = true }) => {
+  const { user, profile } = useAuth();
   const [localProject, setLocalProject] = useState<Project | null>(null);
   
   // Use propProject if available, otherwise fallback to local state
@@ -403,23 +406,41 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
             </div>
             <div className="sm:col-span-1">
                 <dt className="text-sm font-medium text-gray-500">项目金额</dt>
-                <dd className="mt-1 text-sm text-gray-900 font-mono">
+                <dd className="mt-1">
                   {!isEditing ? (
-                    `¥${project.amount?.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}`
-                  ) : (
-                    <div className="relative rounded-md shadow-sm">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                        <span className="text-gray-500 sm:text-sm">¥</span>
+                    <div>
+                      <div className="text-sm text-gray-900 font-mono">
+                        ¥{project.amount?.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                       </div>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editForm?.amount || ''}
-                        onChange={(e) => onEditChange?.({ ...editForm, amount: parseFloat(e.target.value) || 0 })}
-                        className="block w-full rounded-md border-gray-300 pl-7 pr-12 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 border"
-                        placeholder="0.00"
-                      />
+                      <div className="text-xs text-indigo-600 mt-1">
+                        {numberToChinese(project.amount || 0)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="relative rounded-md shadow-sm">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                          <span className="text-gray-500 sm:text-sm">¥</span>
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={editForm?.amount?.toString() || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                              onEditChange?.({ ...editForm, amount: parseFloat(value) || 0 });
+                            }
+                          }}
+                          className="block w-full rounded-md border-gray-300 pl-7 pr-12 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 border"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      {editForm?.amount && editForm.amount > 0 && (
+                        <p className="mt-1 text-xs text-indigo-600">
+                          大写：{numberToChinese(editForm.amount)}
+                        </p>
+                      )}
                     </div>
                   )}
                 </dd>
@@ -486,14 +507,24 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
                 <>
                     <div className="sm:col-span-1">
                         <dt className="text-sm font-medium text-gray-500">采购金额</dt>
-                        <dd className="mt-1 text-sm text-gray-900 font-mono">
-                            ¥{contractAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <dd className="mt-1">
+                            <div className="text-sm text-gray-900 font-mono">
+                                ¥{contractAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="text-xs text-indigo-600 mt-1">
+                                {numberToChinese(contractAmount)}
+                            </div>
                         </dd>
                     </div>
                     <div className="sm:col-span-1">
                         <dt className="text-sm font-medium text-gray-500">已支付金额</dt>
-                        <dd className="mt-1 text-sm text-gray-900 font-mono">
-                            ¥{paidAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <dd className="mt-1">
+                            <div className="text-sm text-gray-900 font-mono">
+                                ¥{paidAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="text-xs text-indigo-600 mt-1">
+                                {numberToChinese(paidAmount)}
+                            </div>
                         </dd>
                     </div>
                 </>
@@ -574,7 +605,7 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="px-4 py-5 sm:px-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
           <h3 className="text-lg leading-6 font-medium text-gray-900">团队成员</h3>
-          {(user?.id === project?.manager_id || members.some(m => m.id === user?.id && m.member_role === 'manager') || user?.role === 'admin') && (
+          {(user?.id === project?.manager_id || members.some(m => m.id === user?.id && m.member_role === 'manager') || profile?.role === 'admin') && (
             <button
               onClick={() => {
                   fetchAllUsers();
@@ -645,11 +676,13 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
               <li key={member.member_id} className="px-4 py-4 sm:px-6 hover:bg-gray-50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                        {member.full_name?.[0] || member.email?.[0] || 'U'}
-                      </div>
-                    </div>
+                    <Avatar
+                      userId={member.id}
+                      avatarUrl={member.avatar_url}
+                      name={member.full_name}
+                      email={member.email}
+                      size="md"
+                    />
                     <div className="ml-4">
                       <div className="text-sm font-medium text-gray-900">{member.full_name || '未命名'}</div>
                       <div className="flex items-center text-sm text-gray-500 space-x-4">
@@ -664,7 +697,8 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
                     }`}>
                         {member.member_role === 'manager' ? '项目经理' : '团队成员'}
                     </span>
-                    {(user?.id === project?.manager_id || members.some(m => m.id === user?.id && m.member_role === 'manager') || user?.role === 'admin') && (
+                    {/* 项目经理或管理员可以删除成员，但不能删除自己 */}
+                    {(profile?.role === 'admin' || (user?.id === project?.manager_id || members.some(m => m.id === user?.id && m.member_role === 'manager')) && member.id !== user?.id) && (
                       <button
                           onClick={() => handleRemoveMember(member.member_id)}
                           className="text-gray-400 hover:text-red-600"

@@ -88,7 +88,10 @@ export function TaskProgressUpdateModal({
 
   // 处理鼠标/触摸按下
   const handleProgressBarMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
+    // 只在鼠标事件中调用 preventDefault，触摸事件使用 passive 监听器
+    if ('button' in e) {
+      e.preventDefault();
+    }
     setIsDragging(true);
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const newProgress = calculateProgress(clientX);

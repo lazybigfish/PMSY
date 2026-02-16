@@ -4,6 +4,7 @@ import { Task, Profile, Project, TaskComment, TaskProgressLog, TaskAttachment, T
 import { X, Send, Clock, Calendar, Paperclip, Plus, Edit2 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { Avatar } from '../../../components/Avatar';
 
 interface TaskDetailProps {
   taskId: string | null;
@@ -474,13 +475,12 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                       <div>
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">责任人</label>
                         <div className="flex items-center gap-2">
-                            {task.owner?.avatar_url ? (
-                                <img src={task.owner.avatar_url} className="w-6 h-6 rounded-full" />
-                            ) : (
-                                <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold">
-                                    {task.owner?.full_name?.[0] || 'O'}
-                                </div>
-                            )}
+                            <Avatar
+                                userId={task.owner?.id}
+                                avatarUrl={task.owner?.avatar_url}
+                                name={task.owner?.full_name}
+                                size="xs"
+                            />
                             <span className="text-sm font-medium text-gray-900">{task.owner?.full_name || 'Unknown'}</span>
                             <span className="text-xs bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200">Owner</span>
                         </div>
@@ -586,13 +586,12 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                           {task.assignees && task.assignees.length > 0 ? (
                             task.assignees.map((assignee) => (
                               <div key={assignee.user_id} className="group relative flex items-center gap-2 bg-white border rounded-full pl-1 pr-3 py-1 shadow-sm hover:shadow-md transition-shadow">
-                                {assignee.user.avatar_url ? (
-                                  <img src={assignee.user.avatar_url} alt="" className="w-6 h-6 rounded-full" />
-                                ) : (
-                                  <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold">
-                                    {assignee.user.full_name?.[0] || 'U'}
-                                  </div>
-                                )}
+                                <Avatar
+                                  userId={assignee.user.id}
+                                  avatarUrl={assignee.user.avatar_url}
+                                  name={assignee.user.full_name}
+                                  size="xs"
+                                />
                                 <span className="text-sm text-gray-700">{assignee.user.full_name || '未知用户'}</span>
                                 {assignee.is_primary && <span className="text-xs text-indigo-600 font-bold" title="主要负责人">★</span>}
                                 
@@ -706,13 +705,12 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                         comments.map((comment) => (
                           <div key={comment.id} className="flex gap-3">
                              <div className="flex-shrink-0">
-                                {comment.user?.avatar_url ? (
-                                  <img src={comment.user.avatar_url} className="w-8 h-8 rounded-full" />
-                                ) : (
-                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs">
-                                    {comment.user?.full_name?.[0] || 'U'}
-                                  </div>
-                                )}
+                                <Avatar
+                                  userId={comment.user?.id}
+                                  avatarUrl={comment.user?.avatar_url}
+                                  name={comment.user?.full_name}
+                                  size="sm"
+                                />
                              </div>
                              <div className="flex-1 bg-gray-50 p-3 rounded-lg rounded-tl-none">
                                <div className="flex justify-between items-center mb-1">

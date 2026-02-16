@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckSquare, Square, Eye, EyeOff, Trash2, ArrowUpDown, AlertCircle, Clock } from 'lucide-react';
 import { Task, Profile, Project } from '../../../types';
+import { Avatar } from '../../../components/Avatar';
 
 export interface TaskWithDetails extends Task {
   project?: Project;
@@ -244,12 +245,12 @@ export function TaskTable({
               <td className="px-4 py-3">
                 {/* 责任人 */}
                 <div className="flex items-center gap-2">
-                  <div
-                    className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center text-xs font-bold text-white"
-                    title={task.creator?.full_name || '未知'}
-                  >
-                    {task.creator?.full_name?.charAt(0) || '?'}
-                  </div>
+                  <Avatar
+                    userId={task.creator?.id}
+                    avatarUrl={task.creator?.avatar_url}
+                    name={task.creator?.full_name}
+                    size="sm"
+                  />
                   <span className="text-sm text-dark-700">{task.creator?.full_name || '未知'}</span>
                 </div>
               </td>
@@ -257,13 +258,14 @@ export function TaskTable({
                 {/* 处理人 */}
                 <div className="flex -space-x-2">
                   {task.assignee_profiles?.slice(0, 3).map((profile, idx) => (
-                    <div
+                    <Avatar
                       key={idx}
-                      className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center border-2 border-white text-xs font-bold text-violet-600"
-                      title={profile.full_name}
-                    >
-                      {profile.full_name?.charAt(0) || '?'}
-                    </div>
+                      userId={profile.id}
+                      avatarUrl={profile.avatar_url}
+                      name={profile.full_name}
+                      size="sm"
+                      className="border-2 border-white"
+                    />
                   ))}
                   {(task.assignee_profiles?.length || 0) > 3 && (
                     <div className="w-8 h-8 rounded-full bg-dark-100 flex items-center justify-center border-2 border-white text-xs text-dark-600">

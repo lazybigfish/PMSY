@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT NOT NULL,
     description TEXT,
     status TEXT DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'paused', 'done', 'canceled')),
-    priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
+    priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
     is_public BOOLEAN DEFAULT false,
     assigned_to UUID REFERENCES profiles(id),
     created_by UUID REFERENCES profiles(id),

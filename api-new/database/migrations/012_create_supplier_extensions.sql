@@ -8,10 +8,16 @@ CREATE TABLE IF NOT EXISTS project_suppliers (
     delivery_date DATE,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'terminated')),
     notes TEXT,
+    module_ids JSONB DEFAULT '[]'::jsonb,
+    contract_file_url TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     UNIQUE(project_id, supplier_id)
 );
+
+-- 添加注释
+COMMENT ON COLUMN project_suppliers.module_ids IS '供应商负责的模块ID列表';
+COMMENT ON COLUMN project_suppliers.contract_file_url IS '供应商合同文件URL';
 
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_project_suppliers_project_id ON project_suppliers(project_id);

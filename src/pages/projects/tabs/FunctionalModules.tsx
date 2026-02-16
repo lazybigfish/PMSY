@@ -8,9 +8,10 @@ import { saveAs } from 'file-saver';
 
 interface FunctionalModulesProps {
   projectId: string;
+  canEdit?: boolean;
 }
 
-const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId }) => {
+const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdit = true }) => {
   const [modules, setModules] = useState<ProjectModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});

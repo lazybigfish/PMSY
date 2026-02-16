@@ -1,11 +1,16 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, LayoutGrid, List, Calendar, User, Users, AlertCircle, CheckCircle, Sparkles, CheckSquare, Clock, Flame } from 'lucide-react';
+import { Plus, LayoutGrid, List, Calendar, User, Users, AlertCircle, CheckCircle, Sparkles, CheckSquare, Clock, Flame, Play } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
-import { Task, Profile, Project } from '../../types';
+import { Task, Profile, Project, TaskStatus } from '../../types';
 import { TaskTable, TaskWithDetails } from './components/TaskTable';
 import TaskFilterBar, { TaskFilterState } from './components/TaskFilterBar';
+import { BatchActionBar } from './components/BatchActionBar';
+import { BatchDeleteModal } from './components/BatchDeleteModal';
+import { BatchStatusModal } from './components/BatchStatusModal';
+import { BatchAssignModal } from './components/BatchAssignModal';
+import { batchDeleteTasks, batchUpdateTaskStatus, batchAssignTasks } from '../../services/taskService';
 
 export default function TaskList() {
   const { user } = useAuth();
@@ -19,16 +24,23 @@ export default function TaskList() {
   const [sortBy, setSortBy] = useState<'created_at' | 'due_date' | 'priority' | 'completed_at'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // 批量操作弹窗状态
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
   const [filters, setFilters] = useState<TaskFilterState>({
     keyword: '',
     projectId: '',
     dateRange: { type: 'created', start: '', end: '' },
-    statuses: [],
+    // 默认筛除已完成的任务，只展示未开始、进行中、已暂停的任务
+    statuses: ['todo', 'in_progress', 'paused'],
     priorities: []
   });
 
   type ActiveStatCard =
     | 'all'
+    | 'in_progress'
     | 'my_primary'
     | 'my_participate'
     | 'done'
@@ -49,23 +61,93 @@ export default function TaskList() {
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      
-      const tasksData = await api.db
+
+      // 1. 获取用户是成员的项目ID列表
+      const { data: userMemberships } = await api.db
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', user?.id);
+
+      const memberProjectIds = (userMemberships || []).map((m: { project_id: string }) => m.project_id);
+
+      // 2. 获取用户作为项目经理的项目ID列表
+      const { data: managedProjects } = await api.db
+        .from('projects')
+        .select('id')
+        .eq('manager_id', user?.id);
+
+      const managedProjectIds = (managedProjects || []).map((p: { id: string }) => p.id);
+
+      // 3. 合并用户有权限的项目ID列表（去重）
+      const accessibleProjectIds = [...new Set([...memberProjectIds, ...managedProjectIds])];
+
+      // 4. 获取用户创建的任务
+      const { data: createdTasks } = await api.db
         .from('tasks')
         .select('*')
-        .order(sortBy, { ascending: sortOrder === 'asc' });
+        .eq('created_by', user?.id);
 
-      const projectsData = await api.db
-        .from('projects')
-        .select('*');
-
-      const profilesData = await api.db
-        .from('profiles')
-        .select('*');
-
-      const assigneesData = await api.db
+      // 5. 获取用户作为处理人的任务
+      const { data: userAssignments } = await api.db
         .from('task_assignees')
-        .select('*');
+        .select('task_id')
+        .eq('user_id', user?.id);
+
+      const assignedTaskIds = (userAssignments || []).map((a: { task_id: string }) => a.task_id);
+
+      // 6. 获取用户是成员的项目中的公开任务
+      let publicTasks: any[] = [];
+      if (accessibleProjectIds.length > 0) {
+        const { data: publicTasksData } = await api.db
+          .from('tasks')
+          .select('*')
+          .in('project_id', accessibleProjectIds)
+          .eq('is_public', true);
+        publicTasks = publicTasksData || [];
+      }
+
+      // 7. 合并所有可访问的任务（去重）
+      const allAccessibleTasks = new Map<string, any>();
+
+      // 添加自己创建的任务
+      (createdTasks || []).forEach((task: any) => {
+        allAccessibleTasks.set(task.id, task);
+      });
+
+      // 添加自己是处理人的任务
+      if (assignedTaskIds.length > 0) {
+        const { data: assignedTasksData } = await api.db
+          .from('tasks')
+          .select('*')
+          .in('id', assignedTaskIds);
+        (assignedTasksData || []).forEach((task: any) => {
+          allAccessibleTasks.set(task.id, task);
+        });
+      }
+
+      // 添加公开任务
+      publicTasks.forEach((task: any) => {
+        allAccessibleTasks.set(task.id, task);
+      });
+
+      const accessibleTaskList = Array.from(allAccessibleTasks.values());
+
+      // 如果没有可访问的任务，直接返回空数组
+      if (accessibleTaskList.length === 0) {
+        setTasks([]);
+        setLoading(false);
+        return;
+      }
+
+      // 8. 获取关联数据
+      const projectIds = [...new Set(accessibleTaskList.map(t => t.project_id))];
+      const taskIds = accessibleTaskList.map(t => t.id);
+
+      const [projectsData, profilesData, assigneesData] = await Promise.all([
+        api.db.from('projects').select('*').in('id', projectIds),
+        api.db.from('profiles').select('*'),
+        api.db.from('task_assignees').select('*').in('task_id', taskIds)
+      ]);
 
       const projectMap = new Map<string, Project>();
       (projectsData?.data || []).forEach((p: Project) => projectMap.set(p.id, p));
@@ -86,7 +168,7 @@ export default function TaskList() {
         }
       });
 
-      const tasksWithProfiles = (tasksData?.data || []).map((task: any) => ({
+      const tasksWithProfiles = accessibleTaskList.map((task: any) => ({
         ...task,
         project: projectMap.get(task.project_id),
         creator: profileMap.get(task.created_by),
@@ -120,6 +202,14 @@ export default function TaskList() {
     }
   };
 
+  // 优先级权重映射
+  const priorityWeight: Record<string, number> = {
+    urgent: 4,
+    high: 3,
+    medium: 2,
+    low: 1
+  };
+
   const filteredTasks = useMemo(() => {
     let result = [...tasks];
 
@@ -135,28 +225,6 @@ export default function TaskList() {
       result = result.filter(t => t.project_id === filters.projectId);
     }
 
-    if (filters.statuses.length > 0) {
-      result = result.filter(t => filters.statuses.includes(t.status));
-    }
-
-    if (filters.priorities.length > 0) {
-      result = result.filter(t => filters.priorities.includes(t.priority));
-    }
-
-    if (filters.dateRange.start || filters.dateRange.end) {
-      const dateField = filters.dateRange.type === 'created' ? 'created_at' : 'due_date';
-      result = result.filter(t => {
-        const taskDate = t[dateField];
-        if (!taskDate) return false;
-        const start = filters.dateRange.start ? new Date(filters.dateRange.start) : null;
-        const end = filters.dateRange.end ? new Date(filters.dateRange.end) : null;
-        const task = new Date(taskDate);
-        if (start && task < start) return false;
-        if (end && task > end) return false;
-        return true;
-      });
-    }
-
     if (activeStatCard) {
       const now = new Date();
       const weekEnd = new Date(now);
@@ -165,6 +233,12 @@ export default function TaskList() {
       monthEnd.setMonth(now.getMonth() + 1);
 
       switch (activeStatCard) {
+        case 'all':
+          // 总任务不添加任何筛选，展示全部
+          break;
+        case 'in_progress':
+          result = result.filter(t => t.status === 'in_progress');
+          break;
         case 'my_primary':
           result = result.filter(t => t.assignees?.some(a => a.user_id === user?.id && a.is_primary));
           break;
@@ -195,10 +269,50 @@ export default function TaskList() {
           });
           break;
       }
+    } else {
+      // 只在未激活统计卡片时应用过滤器筛选
+      if (filters.statuses.length > 0) {
+        result = result.filter(t => filters.statuses.includes(t.status));
+      }
+
+      if (filters.priorities.length > 0) {
+        result = result.filter(t => filters.priorities.includes(t.priority));
+      }
+
+      if (filters.dateRange.start || filters.dateRange.end) {
+        const dateField = filters.dateRange.type === 'created' ? 'created_at' : 'due_date';
+        result = result.filter(t => {
+          const taskDate = t[dateField];
+          if (!taskDate) return false;
+          const start = filters.dateRange.start ? new Date(filters.dateRange.start) : null;
+          const end = filters.dateRange.end ? new Date(filters.dateRange.end) : null;
+          const task = new Date(taskDate);
+          if (start && task < start) return false;
+          if (end && task > end) return false;
+          return true;
+        });
+      }
+    }
+
+    // 默认排序：按优先级降序，然后按截止日期升序（快到期的在前）
+    // 只有当用户没有手动选择排序时才应用默认排序
+    if (sortBy === 'created_at' && sortOrder === 'desc') {
+      result.sort((a, b) => {
+        // 第一优先级：按优先级权重降序
+        const priorityDiff = priorityWeight[b.priority] - priorityWeight[a.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+
+        // 第二优先级：按截止日期升序（快到期的在前）
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return 1;  // a 无日期，排后面
+        if (!b.due_date) return -1; // b 无日期，排后面
+
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      });
     }
 
     return result;
-  }, [tasks, filters, activeStatCard, user?.id]);
+  }, [tasks, filters, activeStatCard, user?.id, sortBy, sortOrder, priorityWeight]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -209,6 +323,7 @@ export default function TaskList() {
 
     return {
       total: tasks.length,
+      inProgress: tasks.filter(t => t.status === 'in_progress').length,
       myPrimary: tasks.filter(t => t.assignees?.some(a => a.user_id === user?.id && a.is_primary)).length,
       myParticipate: tasks.filter(t => t.assignees?.some(a => a.user_id === user?.id)).length,
       done: tasks.filter(t => t.status === 'done').length,
@@ -317,6 +432,65 @@ export default function TaskList() {
     }
   };
 
+  // 处理统计卡片点击
+  const handleStatCardClick = (cardType: ActiveStatCard) => {
+    if (activeStatCard === cardType) {
+      // 取消激活，恢复默认筛选
+      setActiveStatCard(null);
+      setFilters({
+        keyword: '',
+        projectId: '',
+        dateRange: { type: 'created', start: '', end: '' },
+        statuses: ['todo', 'in_progress', 'paused'],
+        priorities: []
+      });
+    } else {
+      // 激活卡片，根据卡片类型设置筛选
+      setActiveStatCard(cardType);
+
+      switch (cardType) {
+        case 'all':
+          // 总任务：清除所有筛选，展示全部
+          setFilters({
+            keyword: '',
+            projectId: '',
+            dateRange: { type: 'created', start: '', end: '' },
+            statuses: [],
+            priorities: []
+          });
+          break;
+        case 'in_progress':
+          // 进行中：只筛选状态
+          setFilters({
+            ...filters,
+            statuses: ['in_progress']
+          });
+          break;
+        case 'done':
+          // 已完成：只筛选状态
+          setFilters({
+            ...filters,
+            statuses: ['done']
+          });
+          break;
+        case 'my_primary':
+        case 'my_participate':
+        case 'due_this_week':
+        case 'due_this_month':
+        case 'overdue':
+          // 这些卡片保持默认筛选（筛除已完成）
+          setFilters({
+            keyword: '',
+            projectId: '',
+            dateRange: { type: 'created', start: '', end: '' },
+            statuses: ['todo', 'in_progress', 'paused'],
+            priorities: []
+          });
+          break;
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -342,107 +516,122 @@ export default function TaskList() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         <button
-          onClick={() => setActiveStatCard(activeStatCard === 'all' ? null : 'all')}
+          onClick={() => handleStatCardClick('all')}
           className={`stat-card card-hover text-left ${activeStatCard === 'all' ? 'ring-2 ring-primary-500' : ''}`}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
-              <CheckSquare className="w-5 h-5 text-primary-600" />
+          <div className="flex items-center gap-2 xl:gap-3">
+            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+              <CheckSquare className="w-4 h-4 xl:w-5 xl:h-5 text-primary-600" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-dark-900">{stats.total}</div>
+              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.total}</div>
               <div className="text-xs text-dark-500">总任务</div>
             </div>
           </div>
         </button>
 
         <button
-          onClick={() => setActiveStatCard(activeStatCard === 'my_primary' ? null : 'my_primary')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'my_primary' ? 'ring-2 ring-violet-500' : ''}`}
+          onClick={() => handleStatCardClick('in_progress')}
+          className={`stat-card card-hover text-left ${activeStatCard === 'in_progress' ? 'ring-2 ring-blue-500' : ''}`}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
-              <User className="w-5 h-5 text-violet-600" />
+          <div className="flex items-center gap-2 xl:gap-3">
+            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <Play className="w-4 h-4 xl:w-5 xl:h-5 text-blue-600" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-dark-900">{stats.myPrimary}</div>
+              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.inProgress}</div>
+              <div className="text-xs text-dark-500">进行中</div>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => handleStatCardClick('my_primary')}
+          className={`stat-card card-hover text-left ${activeStatCard === 'my_primary' ? 'ring-2 ring-violet-500' : ''}`}
+        >
+          <div className="flex items-center gap-2 xl:gap-3">
+            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 xl:w-5 xl:h-5 text-violet-600" />
+            </div>
+            <div>
+              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.myPrimary}</div>
               <div className="text-xs text-dark-500">我负责</div>
             </div>
           </div>
         </button>
 
         <button
-          onClick={() => setActiveStatCard(activeStatCard === 'my_participate' ? null : 'my_participate')}
+          onClick={() => handleStatCardClick('my_participate')}
           className={`stat-card card-hover text-left ${activeStatCard === 'my_participate' ? 'ring-2 ring-mint-500' : ''}`}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-mint-100 flex items-center justify-center">
-              <Users className="w-5 h-5 text-mint-600" />
+          <div className="flex items-center gap-2 xl:gap-3">
+            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-mint-100 flex items-center justify-center flex-shrink-0">
+              <Users className="w-4 h-4 xl:w-5 xl:h-5 text-mint-600" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-dark-900">{stats.myParticipate}</div>
+              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.myParticipate}</div>
               <div className="text-xs text-dark-500">我参与</div>
             </div>
           </div>
         </button>
 
         <button
-          onClick={() => setActiveStatCard(activeStatCard === 'done' ? null : 'done')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'done' ? 'ring-2 ring-green-500' : ''}`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-dark-900">{stats.done}</div>
-              <div className="text-xs text-dark-500">已完成</div>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setActiveStatCard(activeStatCard === 'due_this_week' ? null : 'due_this_week')}
+          onClick={() => handleStatCardClick('due_this_week')}
           className={`stat-card card-hover text-left ${activeStatCard === 'due_this_week' ? 'ring-2 ring-sun-500' : ''}`}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sun-100 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-sun-600" />
+          <div className="flex items-center gap-2 xl:gap-3">
+            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-sun-100 flex items-center justify-center flex-shrink-0">
+              <Clock className="w-4 h-4 xl:w-5 xl:h-5 text-sun-600" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-dark-900">{stats.dueThisWeek}</div>
+              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.dueThisWeek}</div>
               <div className="text-xs text-dark-500">本周截止</div>
             </div>
           </div>
         </button>
 
         <button
-          onClick={() => setActiveStatCard(activeStatCard === 'due_this_month' ? null : 'due_this_month')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'due_this_month' ? 'ring-2 ring-blue-500' : ''}`}
+          onClick={() => handleStatCardClick('due_this_month')}
+          className={`stat-card card-hover text-left ${activeStatCard === 'due_this_month' ? 'ring-2 ring-orange-500' : ''}`}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-blue-600" />
+          <div className="flex items-center gap-2 xl:gap-3">
+            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+              <Calendar className="w-4 h-4 xl:w-5 xl:h-5 text-orange-600" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-dark-900">{stats.dueThisMonth}</div>
+              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.dueThisMonth}</div>
               <div className="text-xs text-dark-500">本月截止</div>
             </div>
           </div>
         </button>
 
         <button
-          onClick={() => setActiveStatCard(activeStatCard === 'overdue' ? null : 'overdue')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'overdue' ? 'ring-2 ring-red-500' : ''}`}
+          onClick={() => handleStatCardClick('done')}
+          className={`stat-card card-hover text-left ${activeStatCard === 'done' ? 'ring-2 ring-green-500' : ''}`}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
-              <Flame className="w-5 h-5 text-red-600" />
+          <div className="flex items-center gap-2 xl:gap-3">
+            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-4 h-4 xl:w-5 xl:h-5 text-green-600" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-dark-900">{stats.overdue}</div>
+              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.done}</div>
+              <div className="text-xs text-dark-500">已完成</div>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => handleStatCardClick('overdue')}
+          className={`stat-card card-hover text-left ${activeStatCard === 'overdue' ? 'ring-2 ring-red-500' : ''}`}
+        >
+          <div className="flex items-center gap-2 xl:gap-3">
+            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+              <Flame className="w-4 h-4 xl:w-5 xl:h-5 text-red-600" />
+            </div>
+            <div>
+              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.overdue}</div>
               <div className="text-xs text-dark-500">超期</div>
             </div>
           </div>
@@ -452,7 +641,7 @@ export default function TaskList() {
       {/* 任务完成趋势图 */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-dark-100">
         <h3 className="text-sm font-medium text-dark-700 mb-4">近15天任务完成趋势</h3>
-        <div className="relative h-40">
+        <div className="relative h-30">
           {/* SVG 曲线图 */}
           <svg className="w-full h-full" viewBox="0 0 1000 100" preserveAspectRatio="none">
             {/* 渐变定义 */}
@@ -567,7 +756,14 @@ export default function TaskList() {
           }}
           onUpdateStatus={async (taskId, status) => {
             try {
-              await api.db.from('tasks').update({ status }).eq('id', taskId);
+              const updates: any = { status };
+              // 当状态变为已完成时，设置 completed_at 时间戳
+              if (status === 'done') {
+                updates.completed_at = new Date().toISOString();
+              } else {
+                updates.completed_at = null;
+              }
+              await api.db.from('tasks').update(updates).eq('id', taskId);
               fetchTasks();
             } catch (error) {
               console.error('Error updating task status:', error);
@@ -585,6 +781,56 @@ export default function TaskList() {
           }}
         />
       </div>
+
+      {/* 批量操作工具栏 */}
+      <BatchActionBar
+        selectedCount={selectedTasks.size}
+        onClearSelection={() => setSelectedTasks(new Set())}
+        onDelete={() => setShowDeleteModal(true)}
+        onChangeStatus={() => setShowStatusModal(true)}
+        onAssign={() => setShowAssignModal(true)}
+      />
+
+      {/* 批量删除弹窗 */}
+      <BatchDeleteModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        taskCount={selectedTasks.size}
+        onConfirm={async () => {
+          const result = await batchDeleteTasks(Array.from(selectedTasks));
+          setSelectedTasks(new Set());
+          fetchTasks();
+          // 显示提示
+          if (result.failed && result.failed.length > 0) {
+            alert(`成功删除 ${result.deleted} 个任务，${result.failed.length} 个任务无权限删除`);
+          }
+        }}
+      />
+
+      {/* 批量修改状态弹窗 */}
+      <BatchStatusModal
+        isOpen={showStatusModal}
+        onClose={() => setShowStatusModal(false)}
+        taskCount={selectedTasks.size}
+        onConfirm={async (status: TaskStatus) => {
+          await batchUpdateTaskStatus(Array.from(selectedTasks), status);
+          setSelectedTasks(new Set());
+          fetchTasks();
+        }}
+      />
+
+      {/* 批量分配处理人弹窗 */}
+      <BatchAssignModal
+        isOpen={showAssignModal}
+        onClose={() => setShowAssignModal(false)}
+        taskCount={selectedTasks.size}
+        projectId={filters.projectId || projects[0]?.id || ''}
+        onConfirm={async (userIds: string[]) => {
+          await batchAssignTasks(Array.from(selectedTasks), userIds, 'append');
+          setSelectedTasks(new Set());
+          fetchTasks();
+        }}
+      />
     </div>
   );
 }

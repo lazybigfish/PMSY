@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 任务相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 import type {
   Task,
   TaskDetail,
@@ -16,7 +16,12 @@ import type {
   UpdateTaskProgressRequest,
   AddTaskCommentRequest,
   TaskStatus,
-  TaskPriority
+  TaskPriority,
+  TaskHistory,
+  BatchDeleteRequest,
+  BatchUpdateStatusRequest,
+  BatchAssignRequest,
+  BatchOperationResponse
 } from '../types';
 
 /**
@@ -72,15 +77,11 @@ export async function getTasks(options: {
  * 获取任务详情
  */
 export async function getTaskById(taskId: string): Promise<TaskDetail | null> {
-  console.log('[taskService] getTaskById:', taskId);
-  
   // 1. 获取任务基本信息
   const response = await api.db.from('tasks')
     .select('*')
     .eq('id', taskId)
     .single();
-  
-  console.log('[taskService] getTaskById response:', JSON.stringify(response));
 
   if (!response?.data) return null;
   
@@ -122,6 +123,7 @@ export async function createTask(data: CreateTaskRequest): Promise<Task> {
     priority: data.priority || 'medium',
     start_date: data.start_date || null,
     due_date: data.due_date || null,
+    created_by: data.created_by,
   });
 
   console.log('[taskService] Insert response:', JSON.stringify(response));
@@ -159,15 +161,36 @@ export async function createTask(data: CreateTaskRequest): Promise<Task> {
 /**
  * 更新任务
  */
-export async function updateTask(taskId: string, data: UpdateTaskRequest): Promise<Task> {
-  const result = await api.db.from('tasks').update({
-    title: data.title,
-    description: data.description,
-    status: data.status,
-    priority: data.priority,
-    start_date: data.start_date,
-    due_date: data.due_date,
-  }).eq('id', taskId);
+export async function updateTask(taskId: string, data: UpdateTaskRequest & { progress?: number; completed_at?: string }): Promise<Task> {
+  const updateData: any = {};
+
+  // 只包含传入的字段，避免发送 undefined 值
+  if (data.title !== undefined) {
+    updateData.title = data.title;
+  }
+  if (data.description !== undefined) {
+    updateData.description = data.description;
+  }
+  if (data.status !== undefined) {
+    updateData.status = data.status;
+  }
+  if (data.priority !== undefined) {
+    updateData.priority = data.priority;
+  }
+  if (data.start_date !== undefined) {
+    updateData.start_date = data.start_date;
+  }
+  if (data.due_date !== undefined) {
+    updateData.due_date = data.due_date;
+  }
+  if (data.progress !== undefined) {
+    updateData.progress = data.progress;
+  }
+  if (data.completed_at !== undefined) {
+    updateData.completed_at = data.completed_at;
+  }
+
+  const result = await api.db.from('tasks').update(updateData).eq('id', taskId);
 
   return result?.[0];
 }
@@ -236,16 +259,18 @@ export async function getTaskProgressLogs(taskId: string): Promise<TaskProgressL
  */
 export async function updateTaskProgress(
   taskId: string,
-  data: UpdateTaskProgressRequest
+  data: UpdateTaskProgressRequest,
+  userId?: string
 ): Promise<TaskProgressLog> {
   // 1. 创建进度日志
   const logResult = await api.db.from('task_progress_logs').insert({
     task_id: taskId,
+    user_id: userId,
     progress: data.progress,
-    content: data.content,
+    description: data.content,
   });
 
-  // 2. 更新任务状态（根据进度）
+  // 2. 更新任务状态和进度
   let newStatus: TaskStatus = 'in_progress';
   if (data.progress === 0) {
     newStatus = 'todo';
@@ -255,6 +280,7 @@ export async function updateTaskProgress(
 
   await api.db.from('tasks').update({
     status: newStatus,
+    progress: data.progress,
     completed_at: data.progress === 100 ? new Date().toISOString() : null,
   }).eq('id', taskId);
 
@@ -423,6 +449,82 @@ export async function searchTasks(params: {
   };
 }
 
+/**
+ * 批量删除任务
+ */
+export async function batchDeleteTasks(taskIds: string[]): Promise<BatchOperationResponse> {
+  const response = await apiClient.post('/rest/v1/tasks/batch-delete', { task_ids: taskIds });
+  return response;
+}
+
+/**
+ * 批量更新任务状态
+ */
+export async function batchUpdateTaskStatus(taskIds: string[], status: TaskStatus): Promise<BatchOperationResponse> {
+  const response = await apiClient.post('/rest/v1/tasks/batch-status', { task_ids: taskIds, status });
+  return response;
+}
+
+/**
+ * 批量分配任务处理人
+ */
+export async function batchAssignTasks(
+  taskIds: string[],
+  userIds: string[],
+  mode: 'append' | 'replace' = 'append'
+): Promise<BatchOperationResponse> {
+  const response = await apiClient.post('/rest/v1/tasks/batch-assign', {
+    task_ids: taskIds,
+    user_ids: userIds,
+    mode
+  });
+  return response;
+}
+
+/**
+ * 获取任务历史记录
+ */
+export async function getTaskHistory(taskId: string): Promise<TaskHistory[]> {
+  const response = await apiClient.get(`/rest/v1/tasks/${taskId}/history`);
+  return response || [];
+}
+
+/**
+ * 记录处理人变更历史
+ * @param taskId 任务ID
+ * @param changeType 变更类型: 'add' | 'remove'
+ * @param assigneeName 处理人姓名
+ */
+export async function recordTaskAssigneeChange(
+  taskId: string,
+  changeType: 'add' | 'remove',
+  assigneeName: string
+): Promise<void> {
+  await apiClient.post('/rest/v1/tasks/record-assignee-change', {
+    task_id: taskId,
+    change_type: changeType,
+    assignee_name: assigneeName,
+  });
+}
+
+/**
+ * 记录功能模块变更历史
+ * @param taskId 任务ID
+ * @param changeType 变更类型: 'add' | 'remove'
+ * @param moduleName 模块名称
+ */
+export async function recordTaskModuleChange(
+  taskId: string,
+  changeType: 'add' | 'remove',
+  moduleName: string
+): Promise<void> {
+  await apiClient.post('/rest/v1/tasks/record-module-change', {
+    task_id: taskId,
+    change_type: changeType,
+    module_name: moduleName,
+  });
+}
+
 // 导出服务对象
 export const taskService = {
   getTasks,
@@ -442,4 +544,9 @@ export const taskService = {
   getTaskWithDetails,
   batchUpdateTasks,
   searchTasks,
+  batchDeleteTasks,
+  batchUpdateTaskStatus,
+  batchAssignTasks,
+  getTaskHistory,
+  recordTaskAssigneeChange,
 };

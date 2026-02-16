@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Task } from '../types';
 import { 
@@ -22,8 +22,25 @@ import { useAuth } from '../context/AuthContextNew';
 import { StatsCards } from './dashboard/components/StatsCards';
 import { MyTasks } from './dashboard/components/MyTasks';
 import { HotNews } from './dashboard/components/HotNews';
+
+// 辅助函数：解析帖子内容
+const parseContent = (content: any): string => {
+  if (!content) return '';
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content);
+      return parsed.text || parsed.content || content;
+    } catch {
+      return content;
+    }
+  }
+  if (typeof content === 'object') {
+    return content.text || content.content || '';
+  }
+  return String(content);
+};
  
-const HOT_NEWS_DISPLAY_LIMIT = 20;
+const HOT_POSTS_DISPLAY_LIMIT = 5;
 
 interface DashboardStats {
   totalProjects: number;
@@ -36,29 +53,22 @@ interface DashboardStats {
   totalBudget: number;
 }
 
-interface HotNewsItem {
+interface HotPostItem {
   id: string;
   title: string;
-  summary: string;
-  url: string;
-  source: string;
-  published_at: string;
-}
-
-interface NewsComment {
-  id: string;
   content: string;
+  view_count: number;
+  like_count: number;
+  reply_count: number;
   created_at: string;
-  user_id: string;
-  user?: {
-    id: string;
+  author?: {
     full_name?: string;
-    username?: string;
   } | null;
 }
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     totalProjects: 0,
     activeProjects: 0,
@@ -71,13 +81,7 @@ const Dashboard = () => {
   });
   
   const [myTasks, setMyTasks] = useState<Task[]>([]);
-  const [hotNews, setHotNews] = useState<HotNewsItem[]>([]);
-  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
-  const [activeNews, setActiveNews] = useState<HotNewsItem | null>(null);
-  const [comments, setComments] = useState<NewsComment[]>([]);
-  const [commentDraft, setCommentDraft] = useState('');
-  const [commentsLoading, setCommentsLoading] = useState(false);
-  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [hotPosts, setHotPosts] = useState<HotPostItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const getGreeting = () => {
@@ -94,135 +98,105 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const fetchCommentCounts = async (newsIds: string[]) => {
-    if (newsIds.length === 0) return {} as Record<string, number>;
-    try {
-      const { data } = await api.db
-        .from('news_comments')
-        .select('news_id')
-        .in('news_id', newsIds);
-
-      const counts: Record<string, number> = {};
-      for (const row of (data || []) as { news_id: string }[]) {
-        const id = row.news_id;
-        counts[id] = (counts[id] || 0) + 1;
-      }
-      return counts;
-    } catch (error) {
-      console.error('Error fetching comment counts:', error);
-      return {} as Record<string, number>;
-    }
-  };
-
-  const fetchCommentsForNews = async (newsId: string) => {
-    setCommentsLoading(true);
-    try {
-      const { data } = await api.db
-        .from('news_comments')
-        .select('id, content, created_at, user_id, profiles(id, full_name, username)')
-        .eq('news_id', newsId)
-        .order('created_at', { ascending: true });
-
-      // 将返回数据中的 profiles 字段映射为 user 字段
-      const mappedData = (data || []).map((item: any) => ({
-        ...item,
-        user: item.profiles
-      }));
-      setComments(mappedData as unknown as NewsComment[]);
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-      try {
-        const { data: fallbackData } = await api.db
-          .from('news_comments')
-          .select('id, content, created_at, user_id')
-          .eq('news_id', newsId)
-          .order('created_at', { ascending: true });
-        setComments((fallbackData || []) as unknown as NewsComment[]);
-      } catch (fallbackError) {
-        console.error('Fallback also failed:', fallbackError);
-        setComments([]);
-      }
-    } finally {
-      setCommentsLoading(false);
-    }
-  };
-
-  const openNews = async (news: HotNewsItem) => {
-    setActiveNews(news);
-    setCommentDraft('');
-    await fetchCommentsForNews(news.id);
-  };
-
-  const closeNews = () => {
-    setActiveNews(null);
-    setComments([]);
-    setCommentDraft('');
-  };
-
-  const submitComment = async () => {
-    if (!user || !activeNews) return;
-    const content = commentDraft.trim();
-    if (!content) return;
-
-    setCommentSubmitting(true);
-    try {
-      await api.db.from('news_comments').insert({
-        news_id: activeNews.id,
-        user_id: user.id,
-        content
-      });
-
-      setCommentDraft('');
-      setCommentCounts((prev) => ({
-        ...prev,
-        [activeNews.id]: (prev[activeNews.id] || 0) + 1
-      }));
-      await fetchCommentsForNews(activeNews.id);
-    } catch (error) {
-      console.error('Error submitting comment:', error);
-      alert('评论发布失败');
-    } finally {
-      setCommentSubmitting(false);
-    }
+  const openPost = (post: HotPostItem) => {
+    navigate(`/water/forum/${post.id}`);
   };
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // 1. Fetch Projects & Calculate Stats
-      const { data: projects } = await api.db.from('projects').select('*');
 
-      const totalProjects = projects?.length || 0;
-      const activeProjects = projects?.filter((p: any) => p.status === 'in_progress').length || 0;
-      const completedProjects = projects?.filter((p: any) => p.status === 'completed').length || 0;
+      // 1. 获取用户可访问的项目列表
+      const { data: userMemberships } = await api.db
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', user?.id);
 
-      // Calculate total budget
-      const totalBudget = projects
-        ?.filter((p: any) => p.manager_id === user?.id)
+      const memberProjectIds = (userMemberships || []).map((m: { project_id: string }) => m.project_id);
+
+      const { data: managedProjects } = await api.db
+        .from('projects')
+        .select('id')
+        .eq('manager_id', user?.id);
+
+      const managedProjectIds = (managedProjects || []).map((p: { id: string }) => p.id);
+      const accessibleProjectIds = [...new Set([...memberProjectIds, ...managedProjectIds])];
+
+      // 获取用户有权限的项目详情
+      let accessibleProjects: any[] = [];
+      if (accessibleProjectIds.length > 0) {
+        const { data: projectsData } = await api.db
+          .from('projects')
+          .select('*')
+          .in('id', accessibleProjectIds);
+        accessibleProjects = projectsData || [];
+      }
+
+      const totalProjects = accessibleProjects.length;
+      const activeProjects = accessibleProjects.filter((p: any) => p.status === 'in_progress').length;
+      const completedProjects = accessibleProjects.filter((p: any) => p.status === 'completed').length;
+
+      // Calculate total budget (only for projects where user is manager)
+      const totalBudget = accessibleProjects
+        .filter((p: any) => p.manager_id === user?.id)
         .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0;
 
-      // 2. Fetch My Tasks
-      const { data: tasks } = await api.db
+      // 2. 获取用户可访问的任务列表（使用与任务列表相同的权限逻辑）
+      // 2.1 获取用户创建的任务
+      const { data: createdTasks } = await api.db
         .from('tasks')
         .select('*')
-        .eq('assigned_to', user?.id)
+        .eq('created_by', user?.id)
         .neq('status', 'done')
         .order('due_date', { ascending: true });
 
-      const myTaskList = tasks || [];
+      // 2.2 获取用户作为处理人的任务
+      const { data: userAssignments } = await api.db
+        .from('task_assignees')
+        .select('task_id')
+        .eq('user_id', user?.id);
+
+      const assignedTaskIds = (userAssignments || []).map((a: { task_id: string }) => a.task_id);
+
+      let assignedTasks: any[] = [];
+      if (assignedTaskIds.length > 0) {
+        const { data: assignedTasksData } = await api.db
+          .from('tasks')
+          .select('*')
+          .in('id', assignedTaskIds)
+          .neq('status', 'done')
+          .order('due_date', { ascending: true });
+        assignedTasks = assignedTasksData || [];
+      }
+
+      // 2.3 获取用户是成员的项目中的公开任务
+      let publicTasks: any[] = [];
+      if (accessibleProjectIds.length > 0) {
+        const { data: publicTasksData } = await api.db
+          .from('tasks')
+          .select('*')
+          .in('project_id', accessibleProjectIds)
+          .eq('is_public', true)
+          .neq('status', 'done')
+          .order('due_date', { ascending: true });
+        publicTasks = publicTasksData || [];
+      }
+
+      // 合并任务（去重）
+      const allAccessibleTasks = new Map<string, any>();
+      (createdTasks || []).forEach((task: any) => allAccessibleTasks.set(task.id, task));
+      assignedTasks.forEach((task: any) => allAccessibleTasks.set(task.id, task));
+      publicTasks.forEach((task: any) => allAccessibleTasks.set(task.id, task));
+
+      const myTaskList = Array.from(allAccessibleTasks.values());
       setMyTasks(myTaskList.slice(0, 6));
 
       // Calculate Stats from tasks
       const highPriorityCount = myTaskList.filter((t: any) => t.priority === 'high').length;
 
-      // Task Center aligned stats
-      const { data: tasksForStats } = await api.db
-        .from('tasks')
-        .select('id, status, due_date');
-
-      const taskTotal = tasksForStats?.length || 0;
-      const overdueCount = (tasksForStats || []).filter((t: { due_date?: string; status?: string }) => {
+      // Task Center aligned stats - 只统计用户可访问的任务
+      const taskTotal = myTaskList.length;
+      const overdueCount = myTaskList.filter((t: any) => {
         if (!t.due_date || t.status === 'done' || t.status === 'canceled') return false;
         const due = new Date(t.due_date);
         const now = new Date();
@@ -230,32 +204,89 @@ const Dashboard = () => {
         return due < now;
       }).length;
 
-      // 3. Fetch Risks - 使用 count 方法
+      // 3. Fetch Risks - 只统计用户有权限的项目中的风险
       let riskCount = 0;
       try {
-        const { data: risks } = await api.db
-          .from('risks')
-          .select('id')
-          .eq('status', 'open');
-        riskCount = risks?.length || 0;
+        if (accessibleProjectIds.length > 0) {
+          const { data: risks } = await api.db
+            .from('risks')
+            .select('id')
+            .in('project_id', accessibleProjectIds)
+            .eq('status', 'open');
+          riskCount = risks?.length || 0;
+        }
       } catch (e) {
         console.warn('Could not fetch risks:', e);
       }
 
-      // 4. Fetch Hot News
-      const { data: newsData } = await api.db
-        .from('hot_news')
-        .select('*')
-        .order('published_at', { ascending: false })
-        .limit(HOT_NEWS_DISPLAY_LIMIT);
+      // 4. Fetch Hot Posts from forum_posts (按当日浏览量+点赞量排序)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString();
 
-      if (newsData) {
-        setHotNews(newsData);
-        const counts = await fetchCommentCounts(newsData.map((n: any) => n.id));
-        setCommentCounts(counts);
+      const { data: postsData } = await api.db
+        .from('forum_posts')
+        .select('id, title, content, view_count, like_count, reply_count, created_at, author_id')
+        .gte('created_at', todayStr)
+        .order('view_count', { ascending: false })
+        .limit(HOT_POSTS_DISPLAY_LIMIT);
+
+      if (postsData && postsData.length > 0) {
+        // 获取作者信息
+        const authorIds = new Set<string>();
+        postsData.forEach((post: any) => {
+          if (post.author_id) authorIds.add(post.author_id);
+        });
+
+        const authorMap = new Map<string, { full_name?: string }>();
+        if (authorIds.size > 0) {
+          const { data: authorsData } = await api.db
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', Array.from(authorIds));
+          authorsData?.forEach((a: any) => authorMap.set(a.id, a));
+        }
+
+        const postsWithAuthors = postsData.map((post: any) => ({
+          ...post,
+          content: parseContent(post.content),
+          author: authorMap.get(post.author_id) || null
+        }));
+
+        setHotPosts(postsWithAuthors);
       } else {
-        setHotNews([]);
-        setCommentCounts({});
+        // 如果当日没有帖子，获取最近的5条帖子
+        const { data: recentPosts } = await api.db
+          .from('forum_posts')
+          .select('id, title, content, view_count, like_count, reply_count, created_at, author_id')
+          .order('created_at', { ascending: false })
+          .limit(HOT_POSTS_DISPLAY_LIMIT);
+
+        if (recentPosts) {
+          const authorIds = new Set<string>();
+          recentPosts.forEach((post: any) => {
+            if (post.author_id) authorIds.add(post.author_id);
+          });
+
+          const authorMap = new Map<string, { full_name?: string }>();
+          if (authorIds.size > 0) {
+            const { data: authorsData } = await api.db
+              .from('profiles')
+              .select('id, full_name')
+              .in('id', Array.from(authorIds));
+            authorsData?.forEach((a: any) => authorMap.set(a.id, a));
+          }
+
+          const postsWithAuthors = recentPosts.map((post: any) => ({
+            ...post,
+            content: parseContent(post.content),
+            author: authorMap.get(post.author_id) || null
+          }));
+
+          setHotPosts(postsWithAuthors);
+        } else {
+          setHotPosts([]);
+        }
       }
 
       setStats({
@@ -322,12 +353,11 @@ const Dashboard = () => {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Left Column (2/3): Hot News */}
+        {/* Left Column (2/3): Hot Posts */}
         <div className="lg:col-span-2">
           <HotNews 
-            news={hotNews} 
-            commentCounts={commentCounts} 
-            onOpenNews={openNews} 
+            posts={hotPosts} 
+            onOpenPost={openPost} 
           />
         </div>
 
@@ -336,112 +366,6 @@ const Dashboard = () => {
           <MyTasks tasks={myTasks} />
         </div>
       </div>
-
-      {/* News Detail Modal */}
-      {activeNews && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-          <div className="absolute inset-0 bg-dark-900/60 backdrop-blur-sm" onClick={closeNews} />
-          <div className="relative bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-dark-100 overflow-hidden max-h-[90vh] flex flex-col animate-scale-in">
-            <div className="px-6 py-5 border-b border-dark-100 flex items-start justify-between gap-4 bg-gradient-to-r from-primary-50/50 to-transparent">
-              <div className="min-w-0">
-                <h3 className="text-xl font-display font-bold text-dark-900">{activeNews.title}</h3>
-                <div className="mt-2 flex items-center gap-3 text-sm text-dark-500">
-                  <span className="badge badge-primary">{activeNews.source}</span>
-                  <span>{new Date(activeNews.published_at).toLocaleString()}</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={closeNews}
-                className="p-2 rounded-xl text-dark-400 hover:text-dark-700 hover:bg-dark-100 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-              <div className="text-dark-700 leading-relaxed whitespace-pre-wrap text-base">
-                {activeNews.summary}
-              </div>
-              <div>
-                <a
-                  href={activeNews.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary-600 hover:text-primary-700 inline-flex items-center gap-2 font-semibold"
-                >
-                  阅读原文 <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-
-              {/* Comments Section */}
-              <div className="border-t border-dark-100 pt-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-display font-semibold text-dark-900 flex items-center gap-2">
-                    评论 
-                    <span className="badge badge-dark">{comments.length}</span>
-                  </h4>
-                </div>
-                
-                {commentsLoading ? (
-                  <div className="text-center py-8">
-                    <Loader2 className="animate-spin h-6 w-6 text-primary-500 mx-auto" />
-                  </div>
-                ) : (
-                  <div className="space-y-4 max-h-60 overflow-y-auto scrollbar-thin">
-                    {comments.map((comment) => (
-                      <div key={comment.id} className="flex gap-3">
-                        <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0 shadow-glow">
-                          <span className="text-white text-sm font-bold">
-                            {comment.user?.full_name?.charAt(0) || '?'}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-dark-900">{comment.user?.full_name || '未知用户'}</span>
-                            <span className="text-xs text-dark-400">
-                              {new Date(comment.created_at).toLocaleString()}
-                            </span>
-                          </div>
-                          <p className="text-dark-700 mt-1">{comment.content}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {comments.length === 0 && (
-                      <div className="text-center py-8 bg-dark-50 rounded-xl">
-                        <p className="text-dark-400">暂无评论，来发表第一条评论吧！</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Add Comment */}
-                <div className="mt-5 flex gap-3">
-                  <input
-                    type="text"
-                    value={commentDraft}
-                    onChange={(e) => setCommentDraft(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && submitComment()}
-                    placeholder="写下你的评论..."
-                    className="input flex-1"
-                  />
-                  <button
-                    onClick={submitComment}
-                    disabled={commentSubmitting || !commentDraft.trim()}
-                    className="btn-primary px-4"
-                  >
-                    {commentSubmitting ? (
-                      <Loader2 className="animate-spin w-5 h-5" />
-                    ) : (
-                      <Send className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

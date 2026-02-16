@@ -12,6 +12,9 @@ import Risks from './tabs/Risks';
 import Reports from './tabs/Reports';
 import Suppliers from './tabs/Suppliers';
 
+// 项目权限级别类型
+export type ProjectPermissionLevel = 'none' | 'viewer' | 'member' | 'manager' | 'admin';
+
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -25,9 +28,14 @@ const ProjectDetail = () => {
 
   const activeTab = searchParams.get('tab') || 'overview';
 
-  const [canEdit, setCanEdit] = useState(false);
-  const [canViewAll, setCanViewAll] = useState(false);
+  // 权限状态
+  const [permissionLevel, setPermissionLevel] = useState<ProjectPermissionLevel>('none');
   const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+
+  // 权限计算属性
+  const canEdit = permissionLevel === 'manager' || permissionLevel === 'admin';
+  const canViewAll = permissionLevel !== 'none' && permissionLevel !== 'viewer';
+  const isViewer = permissionLevel === 'viewer';
 
   useEffect(() => {
     if (permissionsLoaded && !canViewAll && activeTab !== 'overview') {
@@ -40,6 +48,51 @@ const ProjectDetail = () => {
       fetchProjectDetails();
     }
   }, [id]);
+
+  /**
+   * 获取用户在项目中的权限级别
+   */
+  const getProjectPermissionLevel = async (projectId: string, userId: string): Promise<ProjectPermissionLevel> => {
+    // 1. 检查是否是系统管理员
+    if (profile?.role === 'admin') {
+      return 'admin';
+    }
+
+    // 2. 获取项目信息
+    const { data: projectData } = await api.db
+      .from('projects')
+      .select('manager_id, is_public')
+      .eq('id', projectId)
+      .single();
+
+    if (!projectData) {
+      return 'none';
+    }
+
+    // 3. 检查是否是项目经理
+    if (projectData.manager_id === userId) {
+      return 'manager';
+    }
+
+    // 4. 检查是否是项目成员
+    const { data: memberData } = await api.db
+      .from('project_members')
+      .select('role')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .single();
+
+    if (memberData) {
+      return memberData.role === 'manager' ? 'manager' : 'member';
+    }
+
+    // 5. 检查项目是否公开（相关方可查看）
+    if (projectData.is_public) {
+      return 'viewer';
+    }
+
+    return 'none';
+  };
 
   const fetchProjectDetails = async () => {
     try {
@@ -77,23 +130,10 @@ const ProjectDetail = () => {
       setProject(projectWithManager);
       setEditForm(projectWithManager);
 
-      // Check permissions
+      // 检查权限
       if (user) {
-        const isCreator = project.manager_id === user.id;
-        const isAdmin = profile?.role === 'admin';
-
-        const { data: member, error: memberError } = await api.db
-          .from('project_members')
-          .select('role')
-          .eq('project_id', id)
-          .eq('user_id', user.id)
-          .single();
-
-        const isManager = !memberError && member?.role === 'manager';
-        const isMember = !memberError && !!member;
-
-        setCanEdit(isCreator || isAdmin || isManager);
-        setCanViewAll(isCreator || isAdmin || isManager || isMember);
+        const level = await getProjectPermissionLevel(id!, user.id);
+        setPermissionLevel(level);
       }
 
       setPermissionsLoaded(true);
@@ -107,6 +147,11 @@ const ProjectDetail = () => {
   };
 
   const handleUpdateProject = async () => {
+    if (!canEdit) {
+      alert('您没有权限编辑此项目');
+      return;
+    }
+
     try {
       const updates = {
         name: editForm.name,
@@ -304,7 +349,7 @@ const ProjectDetail = () => {
               </div>
             )
           )}
-          {!canViewAll && (
+          {isViewer && (
             <span className="badge badge-dark flex items-center gap-1">
               <Eye className="w-3 h-3" />
               仅查看权限
@@ -336,23 +381,44 @@ const ProjectDetail = () => {
 
       <div className="mt-6">
         {activeTab === 'overview' && (
-          <ProjectOverview 
-            projectId={id!} 
-            isEditing={isEditing && canEdit}
-            editForm={editForm}
-            onEditChange={setEditForm}
-            project={project}
-            onClientSelect={setSelectedClientId}
+          <ProjectOverview
+            projectId={id!}
+            canEdit={canEdit}
           />
         )}
-        {canViewAll && activeTab === 'modules' && <FunctionalModules projectId={id!} />}
-        {canViewAll && activeTab === 'milestones' && <Milestones projectId={id!} />}
-        {canViewAll && activeTab === 'risks' && <Risks projectId={id!} />}
-        {canViewAll && activeTab === 'suppliers' && <Suppliers projectId={id!} />}
-        {canViewAll && activeTab === 'reports' && <Reports projectId={id!} />}
+        {activeTab === 'modules' && canViewAll && (
+          <FunctionalModules
+            projectId={id!}
+            canEdit={canEdit}
+          />
+        )}
+        {activeTab === 'milestones' && canViewAll && (
+          <Milestones
+            projectId={id!}
+            canEdit={canEdit}
+          />
+        )}
+        {activeTab === 'risks' && canViewAll && (
+          <Risks
+            projectId={id!}
+            canEdit={canEdit}
+          />
+        )}
+        {activeTab === 'suppliers' && canViewAll && (
+          <Suppliers
+            projectId={id!}
+            canEdit={canEdit}
+          />
+        )}
+        {activeTab === 'reports' && canViewAll && (
+          <Reports
+            projectId={id!}
+            canEdit={canEdit}
+          />
+        )}
       </div>
     </div>
   );
 };
 
-export default ProjectDetail;
+export default ProjectDetail; 

@@ -332,30 +332,37 @@ const Dashboard = () => {
   );
 
   return (
-    <div className="space-y-8 pb-8 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 pb-8 animate-fade-in">
       {/* Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className={`text-3xl font-bold flex items-center gap-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          <h1 className={`text-xl sm:text-2xl lg:text-3xl font-bold flex items-center gap-2 sm:gap-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {getGreeting()}，{user?.user_metadata?.full_name || user?.email?.split('@')[0]}
-            <span className="text-3xl">👋</span>
+            <span className="text-xl sm:text-2xl lg:text-3xl">👋</span>
           </h1>
-          <p className={`mt-2 flex items-center gap-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            <Calendar className="w-4 h-4" />
-            今天是 {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+          <p className={`mt-1 sm:mt-2 flex items-center gap-2 text-sm sm:text-base ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            <Calendar className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">
+              今天是 {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+            </span>
+            <span className="sm:hidden">
+              {new Date().toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', weekday: 'short' })}
+            </span>
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3">
           <Link to="/tasks">
-            <ThemedButton variant="secondary" size="sm">
-              <CheckSquare className="w-4 h-4" />
-              我的任务
+            <ThemedButton variant="secondary" size="sm" className="text-xs sm:text-sm">
+              <CheckSquare className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">我的任务</span>
+              <span className="sm:hidden">任务</span>
             </ThemedButton>
           </Link>
           <Link to="/projects/new">
-            <ThemedButton variant="primary" size="sm">
-              <Plus className="w-4 h-4" />
-              新建项目
+            <ThemedButton variant="primary" size="sm" className="text-xs sm:text-sm">
+              <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">新建项目</span>
+              <span className="sm:hidden">新建</span>
             </ThemedButton>
           </Link>
         </div>
@@ -365,18 +372,18 @@ const Dashboard = () => {
       <StatsCards stats={stats} />
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+
         {/* Left Column (2/3): Hot Posts */}
-        <div className="lg:col-span-2">
-          <HotNews 
-            posts={hotPosts} 
-            onOpenPost={openPost} 
+        <div className="lg:col-span-2 order-2 lg:order-1">
+          <HotNews
+            posts={hotPosts}
+            onOpenPost={openPost}
           />
         </div>
 
         {/* Right Column (1/3): My Tasks */}
-        <div>
+        <div className="order-1 lg:order-2">
           <MyTasks tasks={myTasks} />
         </div>
       </div>

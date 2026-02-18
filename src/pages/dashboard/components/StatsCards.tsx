@@ -82,31 +82,31 @@ export function StatsCards({ stats }: StatsCardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:gap-6 sm:grid-cols-2 lg:grid-cols-4">
       {cards.map((card) => (
         <ThemedCard
           key={card.id}
           variant="default"
           className="overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer group p-0"
         >
-          <div className="p-6">
+          <div className="p-3 sm:p-4 lg:p-6">
             <div className="flex items-center">
               <div
-                className="p-3 rounded-lg group-hover:scale-110 transition-transform duration-200"
+                className="p-2 sm:p-3 rounded-lg group-hover:scale-110 transition-transform duration-200 flex-shrink-0"
                 style={{
                   backgroundColor: card.bgColor,
                   color: card.color,
                 }}
               >
-                <card.icon className="h-6 w-6" />
+                <card.icon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
               </div>
-              <div className="ml-4">
-                <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <div className="ml-2 sm:ml-3 lg:ml-4 min-w-0 flex-1">
+                <p className={`text-xs sm:text-sm font-medium truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   {card.title}
                 </p>
-                <div className="flex items-baseline gap-2">
+                <div className="flex items-baseline gap-1 sm:gap-2">
                   <h3
-                    className={`text-2xl font-bold truncate max-w-[140px] group-hover:transition-colors duration-200 group-hover:text-[${card.color}] ${
+                    className={`text-lg sm:text-xl lg:text-2xl font-bold truncate max-w-[100px] sm:max-w-[120px] lg:max-w-[140px] group-hover:transition-colors duration-200 group-hover:text-[${card.color}] ${
                       isDark ? 'text-white' : 'text-gray-900'
                     }`}
                     title={String(card.value)}
@@ -114,7 +114,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
                     {card.value}
                   </h3>
                   {card.suffix && (
-                    <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <span className={`text-xs hidden sm:inline ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                       {card.suffix}
                     </span>
                   )}
@@ -123,7 +123,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
             </div>
           </div>
           <div
-            className="px-6 py-2 transition-colors duration-200"
+            className="px-3 sm:px-4 lg:px-6 py-2 transition-colors duration-200"
             style={{
               backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : colors.background.main,
             }}
@@ -131,7 +131,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
             {card.link ? (
               <Link
                 to={card.link}
-                className="text-xs font-medium flex items-center justify-between group/link"
+                className="text-xs font-medium flex items-center justify-between group/link min-h-touch"
                 style={{ color: card.color }}
               >
                 {card.footer}
@@ -139,7 +139,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
               </Link>
             ) : (
               <div
-                className="text-xs font-medium flex items-center justify-between cursor-default"
+                className="text-xs font-medium flex items-center justify-between cursor-default min-h-touch"
                 style={{ color: card.color }}
               >
                 {card.footer}

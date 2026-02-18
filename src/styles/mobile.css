@@ -1,0 +1,206 @@
+/**
+ * 移动端全局样式
+ * 用于优化移动设备上的触摸体验和渲染性能
+ */
+
+/* 禁用文本选择（可选，用于按钮等元素） */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* 允许文本选择 */
+.allow-select {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* 触摸优化 */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* 禁用双击缩放 */
+.no-double-tap-zoom {
+  touch-action: manipulation;
+}
+
+/* 移除点击高亮 */
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 保持点击高亮 */
+.tap-highlight {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+}
+
+/* 平滑滚动 */
+.scroll-smooth {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* 隐藏滚动条但保持滚动功能 */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* 最小触摸区域 44x44px */
+.min-touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 表单元素移动端优化 - 禁用 iOS 上的自动缩放 */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* 防止 iOS 表单元素样式被覆盖 */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+textarea {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border-radius: 0.375rem;
+}
+
+/* 按钮移动端优化 */
+button {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
+}
+
+/* 图片移动端优化 */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 链接移动端优化 */
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 禁用长按弹出菜单 */
+.no-context-menu {
+  -webkit-touch-callout: none;
+}
+
+/* GPU 加速 */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* 硬件加速的滚动 */
+.hw-scroll {
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+}
+
+/* 减少动画（用于 prefers-reduced-motion） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 小屏幕优化 */
+@media (max-width: 480px) {
+  .xs-text-base {
+    font-size: 0.875rem;
+  }
+
+  .xs-p-2 {
+    padding: 0.5rem;
+  }
+
+  .xs-gap-2 {
+    gap: 0.5rem;
+  }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .hover\:hidden-on-touch:hover {
+    display: none;
+  }
+
+  /* 触摸设备上的按钮反馈 */
+  .btn-touch-feedback:active {
+    transform: scale(0.96);
+    opacity: 0.8;
+  }
+}
+
+/* 非触摸设备优化 */
+@media (hover: hover) and (pointer: fine) {
+  .touch-only {
+    display: none;
+  }
+}
+
+/* 安全区域适配（作为后备） */
+@supports not (padding: env(safe-area-inset-top)) {
+  .safe-area-top {
+    padding-top: 20px;
+  }
+
+  .safe-area-bottom {
+    padding-bottom: 20px;
+  }
+}
+
+/* 刘海屏/挖孔屏适配 */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-area-inset-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-area-inset-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* 底部固定元素适配（防止被底部手势条遮挡） */
+.fixed-bottom-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 16px);
+}
+
+/* 顶部固定元素适配（防止被刘海遮挡） */
+.fixed-top-safe {
+  padding-top: max(env(safe-area-inset-top), 16px);
+}

@@ -29,26 +29,26 @@ export function MyTasks({ tasks }: MyTasksProps) {
   }).slice(0, 5);
 
   return (
-    <div className="bg-white rounded-lg shadow">
-      <div className="flex items-center justify-between p-4 border-b">
-        <h2 className="text-lg font-semibold text-gray-900">我的任务</h2>
-        <Link to="/tasks" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+    <div className="bg-white dark:bg-dark-800 rounded-lg shadow border border-dark-100 dark:border-dark-700">
+      <div className="flex items-center justify-between p-3 sm:p-4 border-b border-dark-100 dark:border-dark-700">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100">我的任务</h2>
+        <Link to="/tasks" className="text-xs sm:text-sm text-primary-500 hover:text-primary-600 flex items-center gap-1 min-h-touch">
           查看全部
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
         </Link>
       </div>
 
-      <div className="divide-y">
+      <div className="divide-y divide-dark-100 dark:divide-dark-700">
         {sortedTasks.map((task) => (
           <Link
             key={task.id}
             to={`/tasks/${task.id}`}
-            className="block p-4 hover:bg-gray-50 transition-colors"
+            className="block p-3 sm:p-4 hover:bg-gray-50 dark:hover:bg-dark-700/50 transition-colors min-h-touch"
           >
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-gray-900 truncate">{task.title}</h3>
-                <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-dark-100 truncate">{task.title}</h3>
+                <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-dark-400">
                   <span className={`px-2 py-0.5 rounded-full ${priorityColors[task.priority || 'medium']}`}>
                     {priorityLabels[task.priority || 'medium']}
                   </span>
@@ -65,8 +65,8 @@ export function MyTasks({ tasks }: MyTasksProps) {
         ))}
 
         {sortedTasks.length === 0 && (
-          <div className="p-8 text-center text-gray-500">
-            <p>暂无任务</p>
+          <div className="p-6 sm:p-8 text-center text-gray-500 dark:text-dark-400">
+            <p className="text-sm">暂无任务</p>
           </div>
         )}
       </div>

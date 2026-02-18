@@ -462,31 +462,18 @@ echo -e "${YELLOW}   构建前端...${NC}"
 
 # 保存原始 .env 文件内容（如果存在）
 ORIGINAL_ENV=""
-if [ -f ".env" ]; then
-    ORIGINAL_ENV=$(cat .env)
-    echo "   已保存原始 .env 配置"
-fi
-
-# 使用生产环境配置进行构建
+# 构建前端 - 使用 VITE_ENV_FILE 环境变量加载生产环境配置
+# 不再覆盖 .env 文件，避免开发环境配置丢失
 if [ -f "config/env/.env.production" ]; then
-    cp config/env/.env.production .env
     echo "   使用 config/env/.env.production 进行构建"
+    export VITE_ENV_FILE="config/env/.env.production"
 else
-    cp config/env/.env.example .env
     echo "   使用 config/env/.env.example 进行构建"
+    export VITE_ENV_FILE="config/env/.env.example"
 fi
 
-# 构建前端
-npm run build
-
-# 恢复原始 .env 文件
-if [ -n "$ORIGINAL_ENV" ]; then
-    echo "$ORIGINAL_ENV" > .env
-    echo "   已恢复原始 .env 配置"
-else
-    rm -f .env
-    echo "   已删除临时 .env 文件"
-fi
+# 使用 --mode production 构建，VITE_ENV_FILE 指定环境文件
+npm run build -- --mode production
 
 echo -e "${GREEN}   ✅ 前端构建完成${NC}"
 

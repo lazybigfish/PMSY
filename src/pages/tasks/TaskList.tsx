@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContextNew';
 import { useTheme } from '../../context/ThemeContext';
 import { Task, Profile, Project, TaskStatus } from '../../types';
 import { TaskTable, TaskWithDetails } from './components/TaskTable';
+import { MobileTaskCard } from './components/MobileTaskCard';
 import TaskFilterBar, { TaskFilterState } from './components/TaskFilterBar';
 import { BatchActionBar } from './components/BatchActionBar';
 import { BatchDeleteModal } from './components/BatchDeleteModal';
@@ -14,6 +15,7 @@ import { BatchAssignModal } from './components/BatchAssignModal';
 import { batchDeleteTasks, batchUpdateTaskStatus, batchAssignTasks } from '../../services/taskService';
 import { ThemedButton } from '../../components/theme/ThemedButton';
 import { ThemedCard } from '../../components/theme/ThemedCard';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 export default function TaskList() {
   const { user } = useAuth();
@@ -21,6 +23,7 @@ export default function TaskList() {
   const { colors } = themeConfig;
   const isDark = colors.background.main === '#0A0A0F';
   const navigate = useNavigate();
+  const { isMobile } = useBreakpoint();
   const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -527,19 +530,20 @@ export default function TaskList() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>任务中心</h1>
-          <p className={`mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>管理和跟踪所有任务进度</p>
+          <h1 className={`text-xl sm:text-2xl lg:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>任务中心</h1>
+          <p className={`mt-1 sm:mt-2 text-sm sm:text-base ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>管理和跟踪所有任务进度</p>
         </div>
-        <ThemedButton variant="primary" size="md" onClick={handleCreateTask}>
-          <Plus className="w-5 h-5" />
-          新建任务
+        <ThemedButton variant="primary" size="sm" onClick={handleCreateTask} className="w-full sm:w-auto">
+          <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="hidden sm:inline">新建任务</span>
+          <span className="sm:hidden">新建</span>
         </ThemedButton>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 sm:gap-3">
         <ThemedCard
           variant={activeStatCard === 'all' ? 'elevated' : 'default'}
           className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'all' ? 'ring-2' : ''}`}
@@ -802,55 +806,107 @@ export default function TaskList() {
           </div>
         </div>
 
-        <TaskTable
-          tasks={filteredTasks}
-          loading={loading}
-          sortBy={sortBy}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          selectedTasks={selectedTasks}
-          onSelectTask={(taskId, isSelected) => {
-            const newSelected = new Set(selectedTasks);
-            if (isSelected) {
-              newSelected.add(taskId);
-            } else {
-              newSelected.delete(taskId);
-            }
-            setSelectedTasks(newSelected);
-          }}
-          onSelectAll={(isSelected) => {
-            if (isSelected) {
-              setSelectedTasks(new Set(filteredTasks.map(t => t.id)));
-            } else {
-              setSelectedTasks(new Set());
-            }
-          }}
-          onUpdateStatus={async (taskId, status) => {
-            try {
-              const updates: any = { status };
-              // 当状态变为已完成时，设置 completed_at 时间戳
-              if (status === 'done') {
-                updates.completed_at = new Date().toISOString();
+        {isMobile ? (
+          // 移动端使用卡片式布局
+          <div className="space-y-3">
+            {filteredTasks.map((task) => (
+              <MobileTaskCard
+                key={task.id}
+                task={task}
+                isSelected={selectedTasks.has(task.id)}
+                onSelect={(taskId, isSelected) => {
+                  const newSelected = new Set(selectedTasks);
+                  if (isSelected) {
+                    newSelected.add(taskId);
+                  } else {
+                    newSelected.delete(taskId);
+                  }
+                  setSelectedTasks(newSelected);
+                }}
+                onUpdateStatus={async (taskId, status) => {
+                  try {
+                    const updates: any = { status };
+                    if (status === 'done') {
+                      updates.completed_at = new Date().toISOString();
+                    } else {
+                      updates.completed_at = null;
+                    }
+                    await api.db.from('tasks').update(updates).eq('id', taskId);
+                    fetchTasks();
+                  } catch (error) {
+                    console.error('Error updating task status:', error);
+                  }
+                }}
+                onDelete={async (taskId) => {
+                  if (confirm('确定要删除这个任务吗？')) {
+                    try {
+                      await api.db.from('tasks').delete().eq('id', taskId);
+                      fetchTasks();
+                    } catch (error) {
+                      console.error('Error deleting task:', error);
+                    }
+                  }
+                }}
+              />
+            ))}
+            {filteredTasks.length === 0 && (
+              <div className="text-center py-8 text-dark-500 dark:text-dark-400">
+                <p>暂无任务</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          // 桌面端使用表格布局
+          <TaskTable
+            tasks={filteredTasks}
+            loading={loading}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSort={handleSort}
+            selectedTasks={selectedTasks}
+            onSelectTask={(taskId, isSelected) => {
+              const newSelected = new Set(selectedTasks);
+              if (isSelected) {
+                newSelected.add(taskId);
               } else {
-                updates.completed_at = null;
+                newSelected.delete(taskId);
               }
-              await api.db.from('tasks').update(updates).eq('id', taskId);
-              fetchTasks();
-            } catch (error) {
-              console.error('Error updating task status:', error);
-            }
-          }}
-          onDeleteTask={async (taskId) => {
-            if (confirm('确定要删除这个任务吗？')) {
+              setSelectedTasks(newSelected);
+            }}
+            onSelectAll={(isSelected) => {
+              if (isSelected) {
+                setSelectedTasks(new Set(filteredTasks.map(t => t.id)));
+              } else {
+                setSelectedTasks(new Set());
+              }
+            }}
+            onUpdateStatus={async (taskId, status) => {
               try {
-                await api.db.from('tasks').delete().eq('id', taskId);
+                const updates: any = { status };
+                // 当状态变为已完成时，设置 completed_at 时间戳
+                if (status === 'done') {
+                  updates.completed_at = new Date().toISOString();
+                } else {
+                  updates.completed_at = null;
+                }
+                await api.db.from('tasks').update(updates).eq('id', taskId);
                 fetchTasks();
               } catch (error) {
-                console.error('Error deleting task:', error);
+                console.error('Error updating task status:', error);
               }
-            }
-          }}
-        />
+            }}
+            onDeleteTask={async (taskId) => {
+              if (confirm('确定要删除这个任务吗？')) {
+                try {
+                  await api.db.from('tasks').delete().eq('id', taskId);
+                  fetchTasks();
+                } catch (error) {
+                  console.error('Error deleting task:', error);
+                }
+              }
+            }}
+          />
+        )}
       </ThemedCard>
 
       {/* 批量操作工具栏 */}

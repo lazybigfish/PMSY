@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContextNew';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../lib/api';
@@ -22,11 +22,15 @@ import { Notifications } from './Notifications';
 import { getNavItemClasses } from '../lib/interactions';
 import type { ThemeColor } from '../lib/interactions';
 import { Avatar } from './Avatar';
+import { useBreakpoint } from '../hooks/useBreakpoint';
+import { BottomNav } from './mobile/BottomNav';
 
 const Layout = () => {
   const { signOut, profile } = useAuth();
   const { logoStyle } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isMobile } = useBreakpoint();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
   const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set());
   const [, setLoadingPerms] = useState(true);
@@ -96,18 +100,34 @@ const Layout = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.role]);
 
-  const navigation = allNavigation.filter(item => 
+  const navigation = allNavigation.filter(item =>
     allowedModules.size === 0 || allowedModules.has(item.key)
   );
+
+  // 移动端底部导航项（显示所有导航）
+  const bottomNavItems = navigation.map(item => ({
+    key: item.key,
+    label: item.name,
+    icon: item.icon,
+  }));
+
+  // 获取当前激活的导航项
+  const getActiveNavKey = () => {
+    const currentItem = navigation.find(item =>
+      location.pathname === item.href ||
+      (item.href !== '/' && location.pathname.startsWith(item.href))
+    );
+    return currentItem?.key || 'dashboard';
+  };
 
   const getNavColors = (color: string, isActive: boolean) => {
     const themeColor = color as ThemeColor;
     const navClasses = getNavItemClasses(themeColor, isActive);
-    
+
     if (isActive) {
       return cn(navClasses, 'text-dark-900 font-semibold');
     }
-    
+
     return navClasses;
   };
 
@@ -231,36 +251,28 @@ const Layout = () => {
           </div>
         </div>
 
-        {/* Mobile Navigation */}
-        <div className="md:hidden border-t border-dark-100">
-          <div className="flex overflow-x-auto py-3 px-4 gap-2 scrollbar-hide">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href || 
-                (item.href !== '/' && location.pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={cn(
-                    "inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200",
-                    getNavColors(item.color, isActive)
-                  )}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Outlet />
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      {isMobile && bottomNavItems.length > 0 && (
+        <BottomNav
+          items={bottomNavItems}
+          activeKey={getActiveNavKey()}
+          onChange={(key) => {
+            const item = navigation.find(n => n.key === key);
+            if (item) {
+              navigate(item.href);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

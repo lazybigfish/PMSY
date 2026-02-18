@@ -12,6 +12,8 @@ import { ThemedInput } from '../../components/theme/ThemedInput';
 import { ThemedBadge } from '../../components/theme/ThemedBadge';
 import { ThemedTable } from '../../components/theme/ThemedTable';
 import { ThemedConfirmModal } from '../../components/theme/ThemedModal';
+import { MobileProjectCard } from './components/MobileProjectCard';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 interface ProjectWithDetails extends Project {
   current_stage_name?: string;
@@ -29,6 +31,7 @@ const ProjectList = () => {
   const { colors } = themeConfig;
   const isDark = colors.background.main === '#0A0A0F';
   const navigate = useNavigate();
+  const { isMobile } = useBreakpoint();
   const [projects, setProjects] = useState<ProjectWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -578,46 +581,47 @@ const ProjectList = () => {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in">
       {/* 页面标题 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>项目管理</h1>
-          <p className={`mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          <h1 className={`text-xl sm:text-2xl lg:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>项目管理</h1>
+          <p className={`mt-1 sm:mt-2 text-sm sm:text-base ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             管理项目全生命周期，跟踪进度与里程碑
           </p>
         </div>
         <Link to="/projects/new">
-          <ThemedButton variant="primary" size="md">
-            <Plus className="h-5 w-5" />
-            新建项目
+          <ThemedButton variant="primary" size="sm" className="w-full sm:w-auto">
+            <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="hidden sm:inline">新建项目</span>
+            <span className="sm:hidden">新建</span>
           </ThemedButton>
         </Link>
       </div>
 
       {/* 统计信息 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         {statsCards.map((stat) => (
           <ThemedCard
             key={stat.id}
             variant="default"
             className="hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer"
           >
-            <div className="flex items-center justify-between mb-3">
-              <span className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <span className={`text-xs sm:text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {stat.title}
               </span>
               <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-200"
+                className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-200"
                 style={{ 
                   backgroundColor: isDark ? `${stat.color}20` : `${stat.color}15`,
                   color: stat.color 
                 }}
               >
-                <stat.icon className="w-5 h-5" />
+                <stat.icon className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
             </div>
-            <div className="text-2xl font-bold" style={{ color: stat.color }}>
+            <div className="text-lg sm:text-2xl font-bold" style={{ color: stat.color }}>
               {stat.value}
             </div>
             {stat.subtitle && (
@@ -631,21 +635,21 @@ const ProjectList = () => {
 
       {/* 搜索和筛选 */}
       <ThemedCard variant="default">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <div className="flex-1">
             <ThemedInput
               type="text"
-              icon={<Search className="h-5 w-5" />}
+              icon={<Search className="h-4 w-4 sm:h-5 sm:w-5" />}
               placeholder="搜索项目名称、客户或描述..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as 'all' | 'pending' | 'in_progress' | 'completed')}
-              className={`px-4 py-3 rounded-xl border outline-none transition-all duration-200 ${
+              className={`px-3 sm:px-4 py-2 sm:py-3 rounded-xl border outline-none transition-all duration-200 text-sm ${
                 isDark 
                   ? 'bg-gray-800 border-gray-700 text-gray-200 focus:border-cyan-500' 
                   : 'bg-white border-gray-200 text-gray-700 focus:border-orange-300'
@@ -661,14 +665,36 @@ const ProjectList = () => {
       </ThemedCard>
 
       {/* 项目列表 */}
-      <ThemedCard variant="default" className="overflow-hidden p-0">
-        <ThemedTable
-          columns={columns}
-          data={filteredProjects}
-          loading={false}
-          emptyText="暂无项目数据"
-        />
-      </ThemedCard>
+      {isMobile ? (
+        // 移动端使用卡片式布局
+        <div className="space-y-3">
+          {filteredProjects.map((project, index) => (
+            <MobileProjectCard
+              key={project.id}
+              project={project}
+              index={index}
+              onDelete={handleDeleteClick}
+              isDark={isDark}
+              colors={colors}
+            />
+          ))}
+          {filteredProjects.length === 0 && (
+            <div className="text-center py-8 text-dark-500 dark:text-dark-400">
+              <p>暂无项目数据</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        // 桌面端使用表格布局
+        <ThemedCard variant="default" className="overflow-hidden p-0">
+          <ThemedTable
+            columns={columns}
+            data={filteredProjects}
+            loading={false}
+            emptyText="暂无项目数据"
+          />
+        </ThemedCard>
+      )}
 
       {/* 删除确认弹窗 */}
       <ThemedConfirmModal

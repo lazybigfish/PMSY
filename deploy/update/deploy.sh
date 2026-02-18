@@ -76,30 +76,15 @@ echo -e "${GREEN}   ✅ 服务器连接正常${NC}"
 
 echo -e "${GREEN}[3/7] 构建前端...${NC}"
 
-# 保存原始 .env 文件内容（如果存在）
-ORIGINAL_ENV=""
-if [ -f ".env" ]; then
-    ORIGINAL_ENV=$(cat .env)
-    echo "   已保存原始 .env 配置"
-fi
-
-# 使用生产环境配置进行构建
-cp "$ENV_FILE" .env
-echo "   使用 $ENV_FILE 进行构建"
-
-# 构建前端
+# 构建前端 - 使用 VITE_ENV_FILE 环境变量加载生产环境配置
+# 不再覆盖 .env 文件，避免开发环境配置丢失
+echo "   使用 $ENV_FILE 进行生产环境构建"
 echo "   开始构建前端（可能需要 30-60 秒）..."
-npm run build
-BUILD_EXIT_CODE=$?
 
-# 恢复原始 .env 文件
-if [ -n "$ORIGINAL_ENV" ]; then
-    echo "$ORIGINAL_ENV" > .env
-    echo "   已恢复原始 .env 配置"
-else
-    rm -f .env
-    echo "   已删除临时 .env 文件"
-fi
+# 使用 --mode production 构建，VITE_ENV_FILE 指定环境文件
+export VITE_ENV_FILE="$ENV_FILE"
+npm run build -- --mode production
+BUILD_EXIT_CODE=$?
 
 if [ $BUILD_EXIT_CODE -ne 0 ]; then
     echo -e "${RED}   ❌ 前端构建失败${NC}"

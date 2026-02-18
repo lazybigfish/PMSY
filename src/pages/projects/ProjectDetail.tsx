@@ -205,18 +205,18 @@ const ProjectDetail = () => {
   };
 
   const allTabs = [
-    { id: 'overview', label: '项目概览', icon: BarChart3, color: 'primary' },
-    { id: 'modules', label: '功能模块', icon: Layers, color: 'violet' },
-    { id: 'milestones', label: '里程碑', icon: Flag, color: 'mint' },
-    { id: 'risks', label: '风险', icon: AlertTriangle, color: 'sun' },
-    { id: 'suppliers', label: '供应商', icon: Package, color: 'dark' },
-    { id: 'payments', label: '回款管理', icon: Wallet, color: 'primary' },
-    { id: 'extra', label: '合同外需求', icon: FilePlus, color: 'violet' },
-    { id: 'reports', label: '周日报', icon: FileText, color: 'primary' },
+    { id: 'overview', label: '项目概览', shortLabel: '概览', icon: BarChart3, color: 'primary' },
+    { id: 'modules', label: '功能模块', shortLabel: '模块', icon: Layers, color: 'violet' },
+    { id: 'milestones', label: '里程碑', shortLabel: '里程碑', icon: Flag, color: 'mint' },
+    { id: 'risks', label: '风险', shortLabel: '风险', icon: AlertTriangle, color: 'sun' },
+    { id: 'suppliers', label: '供应商', shortLabel: '供应商', icon: Package, color: 'dark' },
+    { id: 'payments', label: '回款管理', shortLabel: '回款', icon: Wallet, color: 'primary' },
+    { id: 'extra', label: '合同外需求', shortLabel: '需求', icon: FilePlus, color: 'violet' },
+    { id: 'reports', label: '周日报', shortLabel: '报告', icon: FileText, color: 'primary' },
   ];
 
   const limitedTabs = [
-    { id: 'overview', label: '项目概览', icon: BarChart3, color: 'primary' },
+    { id: 'overview', label: '项目概览', shortLabel: '概览', icon: BarChart3, color: 'primary' },
   ];
 
   const tabs = canViewAll ? allTabs : limitedTabs;
@@ -289,23 +289,23 @@ const ProjectDetail = () => {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center space-x-3 sm:space-x-4">
           <button
             onClick={() => navigate('/projects')}
-            className="p-2.5 hover:bg-dark-100 rounded-xl transition-all duration-200 ease-out hover:scale-105"
+            className="p-2 sm:p-2.5 hover:bg-dark-100 rounded-xl transition-all duration-200 ease-out hover:scale-105 flex-shrink-0"
           >
-            <ArrowLeft className="h-5 w-5 text-dark-600" />
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-dark-600" />
           </button>
-          <div>
+          <div className="min-w-0 flex-1">
             {!isEditing ? (
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-display font-bold text-dark-900">{project.name}</h1>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <h1 className="text-lg sm:text-xl lg:text-2xl font-display font-bold text-dark-900 truncate">{project.name}</h1>
                 {project.is_public && (
-                  <span className="badge badge-mint flex items-center gap-1">
+                  <span className="badge badge-mint flex items-center gap-1 flex-shrink-0">
                     <Eye className="w-3 h-3" />
-                    公开
+                    <span className="hidden sm:inline">公开</span>
                   </span>
                 )}
               </div>
@@ -362,8 +362,8 @@ const ProjectDetail = () => {
         </div>
       </div>
 
-      <div className="border-b border-dark-200">
-        <nav className="-mb-px flex space-x-1">
+      <div className="border-b border-dark-200 overflow-x-auto scrollbar-hide">
+        <nav className="-mb-px flex space-x-1 min-w-max">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -371,12 +371,13 @@ const ProjectDetail = () => {
                 key={tab.id}
                 onClick={() => setSearchParams({ tab: tab.id })}
                 className={`
-                  group inline-flex items-center py-4 px-4 border-b-2 font-medium text-sm rounded-t-xl transition-all duration-200
+                  group inline-flex items-center py-3 px-3 sm:py-4 sm:px-4 border-b-2 font-medium text-sm rounded-t-xl transition-all duration-200 whitespace-nowrap
                   ${getTabColors(tab.color, isActive)}
                 `}
               >
-                <tab.icon className={`-ml-0.5 mr-2 h-5 w-5 transition-colors ${getTabIconColors(tab.color, isActive)}`} />
-                {tab.label}
+                <tab.icon className={`-ml-0.5 mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5 transition-colors ${getTabIconColors(tab.color, isActive)}`} />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.shortLabel || tab.label}</span>
               </button>
             );
           })}

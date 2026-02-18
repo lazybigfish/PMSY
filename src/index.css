@@ -5,38 +5,80 @@
 @tailwind utilities;
 
 :root {
-  /* 主色调 - 珊瑚橙 */
-  --color-primary: #FF6B4A;
-  --color-primary-light: #FF8F75;
-  --color-primary-dark: #F05A3A;
+  /* 默认 V1 主题变量 - 珊瑚橙 */
+  --color-primary-50: #FFF5F3;
+  --color-primary-100: #FFE8E4;
+  --color-primary-200: #FFD5CC;
+  --color-primary-300: #FFB8A8;
+  --color-primary-400: #FF8F75;
+  --color-primary-500: #FF6B4A;
+  --color-primary-600: #F05A3A;
+  --color-primary-700: #D94A2C;
+  --color-primary-800: #B33D24;
+  --color-primary-900: #8F331F;
   
-  /* 辅助色 - 薄荷绿 */
-  --color-mint: #14B890;
-  --color-mint-light: #2DD4AA;
+  --color-secondary-50: #F0FDF9;
+  --color-secondary-100: #CCFBEF;
+  --color-secondary-200: #99F6E0;
+  --color-secondary-300: #5EE9C7;
+  --color-secondary-400: #2DD4AA;
+  --color-secondary-500: #14B890;
+  --color-secondary-600: #0D9480;
+  --color-secondary-700: #0F766E;
+  --color-secondary-800: #115E59;
+  --color-secondary-900: #134E4A;
   
-  /* 强调色 - 紫罗兰 */
-  --color-violet: #8B5CF6;
-  --color-violet-light: #A78BFA;
+  --color-accent-50: #F5F3FF;
+  --color-accent-100: #EDE9FE;
+  --color-accent-200: #DDD6FE;
+  --color-accent-300: #C4B5FD;
+  --color-accent-400: #A78BFA;
+  --color-accent-500: #8B5CF6;
+  --color-accent-600: #7C3AED;
+  --color-accent-700: #6D28D9;
+  --color-accent-800: #5B21B6;
+  --color-accent-900: #4C1D95;
   
-  /* 阳光黄 */
-  --color-sun: #F59E0B;
+  --color-bg-main: #FAFBFC;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-elevated: #FFFFFF;
   
-  /* 背景色 */
-  --color-bg: #FAFBFC;
-  --color-surface: #FFFFFF;
-  --color-surface-elevated: #FFFFFF;
-  
-  /* 文字色 */
-  --color-text: #0F172A;
+  --color-text-primary: #0F172A;
   --color-text-secondary: #64748B;
   --color-text-muted: #94A3B8;
   
-  /* 边框 */
-  --color-border: #E2E8F0;
+  --color-border-light: #E2E8F0;
+  --color-border-default: #CBD5E1;
+  --color-border-dark: #94A3B8;
   
-  /* 阴影 */
-  --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
+  --color-status-success: #14B890;
+  --color-status-warning: #F59E0B;
+  --color-status-error: #EF4444;
+  --color-status-info: #3B82F6;
+  
   --shadow-glow: 0 0 20px rgba(255, 107, 74, 0.3);
+  
+  --gradient-primary: linear-gradient(135deg, #FF6B4A 0%, #F05A3A 100%);
+  --gradient-hero: linear-gradient(135deg, #FF6B4A 0%, #8B5CF6 50%, #14B890 100%);
+  --gradient-text: linear-gradient(135deg, #FF6B4A 0%, #8B5CF6 100%);
+  
+  /* 兼容旧变量 */
+  --color-primary: #FF6B4A;
+  --color-primary-light: #FF8F75;
+  --color-primary-dark: #F05A3A;
+  --color-mint: #14B890;
+  --color-mint-light: #2DD4AA;
+  --color-violet: #8B5CF6;
+  --color-violet-light: #A78BFA;
+  --color-sun: #F59E0B;
+  --color-bg: #FAFBFC;
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #FFFFFF;
+  --color-text: #0F172A;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
+  --color-border: #E2E8F0;
+  --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
 }
 
 @layer base {
@@ -278,6 +320,59 @@
   
   .animation-delay-300 {
     animation-delay: 300ms;
+  }
+  
+  /* 极光流动动画 */
+  .animate-aurora {
+    background-size: 400% 400%;
+    animation: aurora 15s ease infinite;
+  }
+  
+  @keyframes aurora {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+  
+  /* 浮动动画 */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-20px) rotate(5deg);
+    }
+  }
+  
+  /* V2 矩阵风格动画 */
+  @keyframes pulse-line {
+    0%, 100% {
+      opacity: 0.2;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+  
+  @keyframes pulse-dot {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.5);
+    }
   }
   
   /* 隐藏滚动条 */

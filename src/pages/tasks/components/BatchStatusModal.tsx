@@ -66,7 +66,7 @@ export const BatchStatusModal: React.FC<BatchStatusModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="sm">
       <div className="p-6">
         {/* 标题 */}
         <div className="mb-6">

@@ -1,12 +1,12 @@
 -- ==========================================
 -- PMSY 数据库完整初始化脚本
--- 合并了所有 migrations (001-022) 的修改
+-- 合并了所有 migrations (001-026) 的修改
 -- 适用于全新部署，无需执行 ALTER 语句
 -- ==========================================
 
 -- 执行顺序说明：
--- 1. 001_create_profiles.sql - 用户基础表
--- 2. 002_create_projects.sql - 项目相关表
+-- 1. 001_create_profiles.sql - 用户基础表（含 force_password_change 字段）
+-- 2. 002_create_projects.sql - 项目相关表（含项目名称索引）
 -- 3. 003_create_milestones.sql - 里程碑相关表
 -- 4. 004_create_tasks.sql - 任务相关表
 -- 5. 005_create_task_history.sql - 任务历史记录
@@ -22,7 +22,11 @@
 -- 15. 015_create_file_extensions.sql - 文件扩展表
 -- 16. 016_create_forum_extensions.sql - 论坛扩展表
 -- 17. 017_create_system_tables.sql - 系统表
+-- 18. 018_create_client_payments.sql - 客户回款记录表
+-- 19. 019_create_extra_requirements.sql - 合同外需求表
+-- 20. 020_create_duplicate_check_indexes.sql - 查重索引
+-- 21. 021_create_system_settings.sql - 系统设置表（主题配置等）
 
 -- 使用方式：
 -- psql -U postgres -d pmsy -f 999_complete_schema.sql
--- 或者通过 Knex 迁移执行
+-- 或者通过 PostgreSQL 初始化目录自动执行

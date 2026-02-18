@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     type TEXT NOT NULL CHECK (type IN ('task', 'project', 'system', 'mention')),
     title TEXT NOT NULL,
     content TEXT,
+    link TEXT,
+    priority TEXT DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high')),
     data JSONB,
     is_read BOOLEAN DEFAULT false,
     read_at TIMESTAMPTZ,
@@ -89,7 +91,12 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_priority ON notifications(priority);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+
+-- 添加注释
+COMMENT ON COLUMN notifications.link IS '通知链接，点击后跳转的URL';
+COMMENT ON COLUMN notifications.priority IS '通知优先级：low-低, normal-普通, high-高';
 
 -- 创建 storage_quotas 表（存储配额）
 CREATE TABLE IF NOT EXISTS storage_quotas (

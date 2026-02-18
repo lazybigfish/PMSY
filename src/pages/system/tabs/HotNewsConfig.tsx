@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, apiClient } from '../../../lib/api';
 import { Loader2, Globe, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 
@@ -76,18 +76,14 @@ export default function HotNewsConfig() {
   const handleManualFetch = async () => {
     setFetchingNews(true);
     try {
-        const token = localStorage.getItem('access_token');
-        if (!token) throw new Error('未登录或登录状态已失效');
+        const result = await apiClient.post<{
+          success: boolean;
+          inserted: number;
+          fetched: number;
+          limit: number;
+          error?: string;
+        }>('/api/news/fetch-hot');
 
-        const resp = await fetch('/api/news/fetch-hot', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        const result = await resp.json();
         if (!result?.success) {
           throw new Error(result?.error || '抓取失败');
         }

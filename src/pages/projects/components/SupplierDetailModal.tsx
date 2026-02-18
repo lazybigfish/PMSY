@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectSupplier, ProjectModule, SupplierAcceptance } from '../../../types';
 import { FileText, X, ExternalLink, Plus, Upload, ChevronRight, ChevronDown, CheckCircle, Clock, AlertCircle } from 'lucide-react';
-import { api } from '../../../lib/api';
+import { api, apiClient } from '../../../lib/api';
 import { useAuth } from '../../../context/AuthContextNew';
 import { DatePicker } from '../../../components/DatePicker';
 import { Modal, ConfirmModal } from '../../../components/Modal';
@@ -422,6 +422,16 @@ function SupplierInfoTab({ projectSupplier, projectModules, onUpdate }: {
 
   const canEditModules = async () => {
     if (!user) return false;
+    // 检查是否是项目经理
+    const { data: project } = await api.db
+      .from('projects')
+      .select('manager_id')
+      .eq('id', projectSupplier.project_id)
+      .single();
+    if (project?.manager_id === user.id) return true;
+    // 检查是否是管理员
+    if (user.role === 'admin') return true;
+    // 检查是否是项目成员
     const { data } = await api.db
       .from('project_members')
       .select('*')
@@ -983,6 +993,7 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
       {showConfirmModal && selectedPlan && (
         <ConfirmPaymentModal
           plan={selectedPlan}
+          projectId={projectSupplier.project_id}
           onClose={() => {
             setShowConfirmModal(false);
             setSelectedPlan(null);
@@ -1293,20 +1304,65 @@ function AddPaymentPlanModal({
 // 确认付款弹窗
 function ConfirmPaymentModal({
   plan,
+  projectId,
   onClose,
   onConfirm
 }: {
   plan: SupplierPaymentPlan;
+  projectId: string;
   onClose: () => void;
   onConfirm: (plan: SupplierPaymentPlan, actualDate: string, voucherFile?: File) => void;
 }) {
   const [actualDate, setActualDate] = useState(new Date().toISOString().split('T')[0]);
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
+  const [balanceCheck, setBalanceCheck] = useState<{
+    canProceed: boolean;
+    clientTotalPayment: number;
+    supplierTotalPaid: number;
+    plannedPaymentAmount: number;
+    projectedTotal: number;
+    deficit: number;
+    message: string;
+  } | null>(null);
+  const [isChecking, setIsChecking] = useState(true);
+  const [showConfirmOverride, setShowConfirmOverride] = useState(false);
+
+  useEffect(() => {
+    checkBalance();
+  }, []);
+
+  const checkBalance = async () => {
+    setIsChecking(true);
+    try {
+      const result = await apiClient.get<{
+        canProceed: boolean;
+        clientTotalPayment: number;
+        supplierTotalPaid: number;
+        plannedPaymentAmount: number;
+        projectedTotal: number;
+        deficit: number;
+        message: string;
+      }>(`/api/projects/${projectId}/payment-balance-check?plannedPaymentAmount=${plan.amount}`);
+      setBalanceCheck(result);
+    } catch (error) {
+      console.error('检查余额失败:', error);
+    } finally {
+      setIsChecking(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setVoucherFile(e.target.files[0]);
     }
+  };
+
+  const handleConfirm = () => {
+    if (balanceCheck && !balanceCheck.canProceed && !showConfirmOverride) {
+      setShowConfirmOverride(true);
+      return;
+    }
+    onConfirm(plan, actualDate, voucherFile || undefined);
   };
 
   return (
@@ -1317,6 +1373,48 @@ function ConfirmPaymentModal({
       maxWidth="md"
     >
       <div className="space-y-4">
+        {/* 余额检查结果 */}
+        {isChecking ? (
+          <div className="p-4 bg-gray-50 rounded-lg text-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto"></div>
+            <p className="text-sm text-gray-500 mt-2">正在检查资金余额...</p>
+          </div>
+        ) : balanceCheck && !balanceCheck.canProceed ? (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-red-700">资金余额不足</h4>
+                <div className="mt-2 space-y-1 text-sm text-red-600">
+                  <p>客户回款金额: ¥{balanceCheck.clientTotalPayment.toLocaleString('zh-CN')}</p>
+                  <p>已付供应商金额: ¥{balanceCheck.supplierTotalPaid.toLocaleString('zh-CN')}</p>
+                  <p>本次付款金额: ¥{balanceCheck.plannedPaymentAmount.toLocaleString('zh-CN')}</p>
+                  <p className="font-medium">付款后累计支出: ¥{balanceCheck.projectedTotal.toLocaleString('zh-CN')}</p>
+                  <p className="font-bold text-red-700">资金缺口: ¥{balanceCheck.deficit.toLocaleString('zh-CN')}</p>
+                </div>
+                {!showConfirmOverride && (
+                  <p className="mt-3 text-sm text-red-700">
+                    客户回款不足以覆盖本次付款，是否继续？
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : balanceCheck?.canProceed ? (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <div>
+                <h4 className="font-semibold text-green-700">资金余额充足</h4>
+                <p className="text-sm text-green-600">
+                  客户回款: ¥{balanceCheck.clientTotalPayment.toLocaleString('zh-CN')} |
+                  付款后累计: ¥{balanceCheck.projectedTotal.toLocaleString('zh-CN')}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="bg-gray-50 p-4 rounded-lg space-y-2">
           <div>
             <p className="text-sm text-gray-600">
@@ -1378,10 +1476,16 @@ function ConfirmPaymentModal({
             取消
           </button>
           <button
-            onClick={() => onConfirm(plan, actualDate, voucherFile || undefined)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+            onClick={handleConfirm}
+            className={`px-4 py-2 text-white rounded-md ${
+              balanceCheck && !balanceCheck.canProceed && !showConfirmOverride
+                ? 'bg-red-600 hover:bg-red-700'
+                : 'bg-indigo-600 hover:bg-indigo-700'
+            }`}
           >
-            确认付款
+            {balanceCheck && !balanceCheck.canProceed && !showConfirmOverride
+              ? '仍要付款'
+              : '确认付款'}
           </button>
         </div>
       </div>

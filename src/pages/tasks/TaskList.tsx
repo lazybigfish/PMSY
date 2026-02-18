@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, LayoutGrid, List, Calendar, User, Users, AlertCircle, CheckCircle, Sparkles, CheckSquare, Clock, Flame, Play } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
+import { useTheme } from '../../context/ThemeContext';
 import { Task, Profile, Project, TaskStatus } from '../../types';
 import { TaskTable, TaskWithDetails } from './components/TaskTable';
 import TaskFilterBar, { TaskFilterState } from './components/TaskFilterBar';
@@ -11,9 +12,14 @@ import { BatchDeleteModal } from './components/BatchDeleteModal';
 import { BatchStatusModal } from './components/BatchStatusModal';
 import { BatchAssignModal } from './components/BatchAssignModal';
 import { batchDeleteTasks, batchUpdateTaskStatus, batchAssignTasks } from '../../services/taskService';
+import { ThemedButton } from '../../components/theme/ThemedButton';
+import { ThemedCard } from '../../components/theme/ThemedCard';
 
 export default function TaskList() {
   const { user } = useAuth();
+  const { themeConfig } = useTheme();
+  const { colors } = themeConfig;
+  const isDark = colors.background.main === '#0A0A0F';
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
@@ -494,10 +500,27 @@ export default function TaskList() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="relative">
-          <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glow animate-pulse">
-            <Sparkles className="w-8 h-8 text-white" />
+        <div className="text-center">
+          <div className="relative">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center animate-pulse"
+              style={{
+                background: `linear-gradient(135deg, ${colors.primary[400]}, ${colors.primary[600]})`,
+                boxShadow: `0 0 30px ${colors.primary[500]}40`,
+              }}
+            >
+              <Sparkles className="w-8 h-8 text-white" />
+            </div>
+            <div
+              className="absolute inset-0 w-16 h-16 rounded-2xl blur-xl opacity-50 animate-pulse"
+              style={{
+                background: `linear-gradient(135deg, ${colors.primary[400]}, ${colors.primary[600]})`,
+              }}
+            />
           </div>
+          <p className={`mt-4 font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            正在加载任务数据...
+          </p>
         </div>
       </div>
     );
@@ -507,152 +530,192 @@ export default function TaskList() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">任务中心</h1>
-          <p className="page-subtitle">管理和跟踪所有任务进度</p>
+          <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>任务中心</h1>
+          <p className={`mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>管理和跟踪所有任务进度</p>
         </div>
-        <button onClick={handleCreateTask} className="btn-primary shadow-glow">
+        <ThemedButton variant="primary" size="md" onClick={handleCreateTask}>
           <Plus className="w-5 h-5" />
           新建任务
-        </button>
+        </ThemedButton>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
-        <button
+        <ThemedCard
+          variant={activeStatCard === 'all' ? 'elevated' : 'default'}
+          className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'all' ? 'ring-2' : ''}`}
+          style={activeStatCard === 'all' ? { outline: `2px solid ${colors.primary[500]}`, outlineOffset: '2px' } : {}}
           onClick={() => handleStatCardClick('all')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'all' ? 'ring-2 ring-primary-500' : ''}`}
         >
           <div className="flex items-center gap-2 xl:gap-3">
-            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
-              <CheckSquare className="w-4 h-4 xl:w-5 xl:h-5 text-primary-600" />
+            <div 
+              className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isDark ? `${colors.primary[500]}20` : `${colors.primary[100]}`, color: colors.primary[600] }}
+            >
+              <CheckSquare className="w-4 h-4 xl:w-5 xl:h-5" />
             </div>
             <div>
-              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.total}</div>
-              <div className="text-xs text-dark-500">总任务</div>
+              <div className={`text-xl xl:text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.total}</div>
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>总任务</div>
             </div>
           </div>
-        </button>
+        </ThemedCard>
 
-        <button
+        <ThemedCard
+          variant={activeStatCard === 'in_progress' ? 'elevated' : 'default'}
+          className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'in_progress' ? 'ring-2' : ''}`}
+          style={activeStatCard === 'in_progress' ? { outline: `2px solid #3b82f6`, outlineOffset: '2px' } : {}}
           onClick={() => handleStatCardClick('in_progress')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'in_progress' ? 'ring-2 ring-blue-500' : ''}`}
         >
           <div className="flex items-center gap-2 xl:gap-3">
-            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <Play className="w-4 h-4 xl:w-5 xl:h-5 text-blue-600" />
+            <div 
+              className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isDark ? 'rgba(59,130,246,0.2)' : '#dbeafe', color: '#2563eb' }}
+            >
+              <Play className="w-4 h-4 xl:w-5 xl:h-5" />
             </div>
             <div>
-              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.inProgress}</div>
-              <div className="text-xs text-dark-500">进行中</div>
+              <div className={`text-xl xl:text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.inProgress}</div>
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>进行中</div>
             </div>
           </div>
-        </button>
+        </ThemedCard>
 
-        <button
+        <ThemedCard
+          variant={activeStatCard === 'my_primary' ? 'elevated' : 'default'}
+          className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'my_primary' ? 'ring-2' : ''}`}
+          style={activeStatCard === 'my_primary' ? { outline: `2px solid #8b5cf6`, outlineOffset: '2px' } : {}}
           onClick={() => handleStatCardClick('my_primary')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'my_primary' ? 'ring-2 ring-violet-500' : ''}`}
         >
           <div className="flex items-center gap-2 xl:gap-3">
-            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
-              <User className="w-4 h-4 xl:w-5 xl:h-5 text-violet-600" />
+            <div 
+              className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isDark ? 'rgba(139,92,246,0.2)' : '#ede9fe', color: '#7c3aed' }}
+            >
+              <User className="w-4 h-4 xl:w-5 xl:h-5" />
             </div>
             <div>
-              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.myPrimary}</div>
-              <div className="text-xs text-dark-500">我负责</div>
+              <div className={`text-xl xl:text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.myPrimary}</div>
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>我负责</div>
             </div>
           </div>
-        </button>
+        </ThemedCard>
 
-        <button
+        <ThemedCard
+          variant={activeStatCard === 'my_participate' ? 'elevated' : 'default'}
+          className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'my_participate' ? 'ring-2' : ''}`}
+          style={activeStatCard === 'my_participate' ? { outline: `2px solid #10b981`, outlineOffset: '2px' } : {}}
           onClick={() => handleStatCardClick('my_participate')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'my_participate' ? 'ring-2 ring-mint-500' : ''}`}
         >
           <div className="flex items-center gap-2 xl:gap-3">
-            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-mint-100 flex items-center justify-center flex-shrink-0">
-              <Users className="w-4 h-4 xl:w-5 xl:h-5 text-mint-600" />
+            <div 
+              className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isDark ? 'rgba(16,185,129,0.2)' : '#d1fae5', color: '#059669' }}
+            >
+              <Users className="w-4 h-4 xl:w-5 xl:h-5" />
             </div>
             <div>
-              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.myParticipate}</div>
-              <div className="text-xs text-dark-500">我参与</div>
+              <div className={`text-xl xl:text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.myParticipate}</div>
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>我参与</div>
             </div>
           </div>
-        </button>
+        </ThemedCard>
 
-        <button
+        <ThemedCard
+          variant={activeStatCard === 'due_this_week' ? 'elevated' : 'default'}
+          className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'due_this_week' ? 'ring-2' : ''}`}
+          style={activeStatCard === 'due_this_week' ? { outline: `2px solid #f59e0b`, outlineOffset: '2px' } : {}}
           onClick={() => handleStatCardClick('due_this_week')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'due_this_week' ? 'ring-2 ring-sun-500' : ''}`}
         >
           <div className="flex items-center gap-2 xl:gap-3">
-            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-sun-100 flex items-center justify-center flex-shrink-0">
-              <Clock className="w-4 h-4 xl:w-5 xl:h-5 text-sun-600" />
+            <div 
+              className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isDark ? 'rgba(245,158,11,0.2)' : '#fef3c7', color: '#d97706' }}
+            >
+              <Clock className="w-4 h-4 xl:w-5 xl:h-5" />
             </div>
             <div>
-              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.dueThisWeek}</div>
-              <div className="text-xs text-dark-500">本周截止</div>
+              <div className={`text-xl xl:text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.dueThisWeek}</div>
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>本周截止</div>
             </div>
           </div>
-        </button>
+        </ThemedCard>
 
-        <button
+        <ThemedCard
+          variant={activeStatCard === 'due_this_month' ? 'elevated' : 'default'}
+          className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'due_this_month' ? 'ring-2' : ''}`}
+          style={activeStatCard === 'due_this_month' ? { outline: `2px solid #f97316`, outlineOffset: '2px' } : {}}
           onClick={() => handleStatCardClick('due_this_month')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'due_this_month' ? 'ring-2 ring-orange-500' : ''}`}
         >
           <div className="flex items-center gap-2 xl:gap-3">
-            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
-              <Calendar className="w-4 h-4 xl:w-5 xl:h-5 text-orange-600" />
+            <div 
+              className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isDark ? 'rgba(249,115,22,0.2)' : '#ffedd5', color: '#ea580c' }}
+            >
+              <Calendar className="w-4 h-4 xl:w-5 xl:h-5" />
             </div>
             <div>
-              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.dueThisMonth}</div>
-              <div className="text-xs text-dark-500">本月截止</div>
+              <div className={`text-xl xl:text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.dueThisMonth}</div>
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>本月截止</div>
             </div>
           </div>
-        </button>
+        </ThemedCard>
 
-        <button
+        <ThemedCard
+          variant={activeStatCard === 'done' ? 'elevated' : 'default'}
+          className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'done' ? 'ring-2' : ''}`}
+          style={activeStatCard === 'done' ? { outline: `2px solid #22c55e`, outlineOffset: '2px' } : {}}
           onClick={() => handleStatCardClick('done')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'done' ? 'ring-2 ring-green-500' : ''}`}
         >
           <div className="flex items-center gap-2 xl:gap-3">
-            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="w-4 h-4 xl:w-5 xl:h-5 text-green-600" />
+            <div 
+              className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isDark ? 'rgba(34,197,94,0.2)' : '#dcfce7', color: '#16a34a' }}
+            >
+              <CheckCircle className="w-4 h-4 xl:w-5 xl:h-5" />
             </div>
             <div>
-              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.done}</div>
-              <div className="text-xs text-dark-500">已完成</div>
+              <div className={`text-xl xl:text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.done}</div>
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>已完成</div>
             </div>
           </div>
-        </button>
+        </ThemedCard>
 
-        <button
+        <ThemedCard
+          variant={activeStatCard === 'overdue' ? 'elevated' : 'default'}
+          className={`cursor-pointer transition-all duration-200 ${activeStatCard === 'overdue' ? 'ring-2' : ''}`}
+          style={activeStatCard === 'overdue' ? { outline: `2px solid #ef4444`, outlineOffset: '2px' } : {}}
           onClick={() => handleStatCardClick('overdue')}
-          className={`stat-card card-hover text-left ${activeStatCard === 'overdue' ? 'ring-2 ring-red-500' : ''}`}
         >
           <div className="flex items-center gap-2 xl:gap-3">
-            <div className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-              <Flame className="w-4 h-4 xl:w-5 xl:h-5 text-red-600" />
+            <div 
+              className="w-8 h-8 xl:w-10 xl:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isDark ? 'rgba(239,68,68,0.2)' : '#fee2e2', color: '#dc2626' }}
+            >
+              <Flame className="w-4 h-4 xl:w-5 xl:h-5" />
             </div>
             <div>
-              <div className="text-xl xl:text-2xl font-bold text-dark-900">{stats.overdue}</div>
-              <div className="text-xs text-dark-500">超期</div>
+              <div className={`text-xl xl:text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.overdue}</div>
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>超期</div>
             </div>
           </div>
-        </button>
+        </ThemedCard>
       </div>
 
       {/* 任务完成趋势图 */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-dark-100">
-        <h3 className="text-sm font-medium text-dark-700 mb-4">近15天任务完成趋势</h3>
+      <ThemedCard variant="default">
+        <h3 className={`text-sm font-medium mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>近15天任务完成趋势</h3>
         <div className="relative h-30">
           {/* SVG 曲线图 */}
           <svg className="w-full h-full" viewBox="0 0 1000 100" preserveAspectRatio="none">
             {/* 渐变定义 */}
             <defs>
               <linearGradient id="trendGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#6366f1" />
-                <stop offset="100%" stopColor="#8b5cf6" />
+                <stop offset="0%" stopColor={colors.primary[500]} />
+                <stop offset="100%" stopColor={colors.secondary[500]} />
               </linearGradient>
               <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.05" />
+                <stop offset="0%" stopColor={colors.primary[500]} stopOpacity="0.3" />
+                <stop offset="100%" stopColor={colors.secondary[500]} stopOpacity="0.05" />
               </linearGradient>
             </defs>
             {/* 填充区域 */}
@@ -673,34 +736,34 @@ export default function TaskList() {
               style={{ left: `${point.x}%`, bottom: `${point.y}%`, transform: 'translateX(-50%)' }}
             >
               {/* 数值 */}
-              <span className="text-xs font-semibold text-dark-700 mb-1">
+              <span className={`text-xs font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                 {point.value}
               </span>
               {/* 节点 */}
               <div
-                className={`w-2 h-2 rounded-full ${
-                  index === 14 ? 'bg-primary-500' : 'bg-dark-300'
-                }`}
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: index === 14 ? colors.primary[500] : (isDark ? '#4b5563' : '#d1d5db') }}
               />
             </div>
           ))}
 
           {/* 横线 */}
-          <div className="absolute bottom-0 left-0 right-0 h-px bg-dark-200" />
+          <div className="absolute bottom-0 left-0 right-0 h-px" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb' }} />
 
           {/* 日期标签 */}
           <div className="absolute bottom-2 left-0 right-0 flex justify-between px-2">
             {dateRange.map((date, index) => (
               <span
                 key={index}
-                className={`text-xs ${index === 14 ? 'text-primary-600 font-medium' : 'text-dark-400'}`}
+                className="text-xs"
+                style={{ color: index === 14 ? colors.primary[600] : (isDark ? '#9ca3af' : '#9ca3af'), fontWeight: index === 14 ? 500 : 400 }}
               >
                 {index === 14 ? '今天' : formatDate(date)}
               </span>
             ))}
           </div>
         </div>
-      </div>
+      </ThemedCard>
 
       <TaskFilterBar
         filters={filters}
@@ -710,23 +773,31 @@ export default function TaskList() {
         currentUserId={user?.id}
       />
 
-      <div className="card overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-dark-100">
+      <ThemedCard variant="default" className="overflow-hidden p-0">
+        <div className="flex items-center justify-between p-4" style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb'}` }}>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-primary-100 text-primary-600' : 'text-dark-400 hover:bg-dark-100'}`}
+              className="p-2 rounded-lg transition-colors"
+              style={{
+                backgroundColor: viewMode === 'list' ? (isDark ? `${colors.primary[500]}20` : colors.primary[100]) : 'transparent',
+                color: viewMode === 'list' ? colors.primary[600] : (isDark ? '#9ca3af' : '#6b7280')
+              }}
             >
               <List className="w-5 h-5" />
             </button>
             <button
               onClick={() => setViewMode('kanban')}
-              className={`p-2 rounded-lg ${viewMode === 'kanban' ? 'bg-primary-100 text-primary-600' : 'text-dark-400 hover:bg-dark-100'}`}
+              className="p-2 rounded-lg transition-colors"
+              style={{
+                backgroundColor: viewMode === 'kanban' ? (isDark ? `${colors.primary[500]}20` : colors.primary[100]) : 'transparent',
+                color: viewMode === 'kanban' ? colors.primary[600] : (isDark ? '#9ca3af' : '#6b7280')
+              }}
             >
               <LayoutGrid className="w-5 h-5" />
             </button>
           </div>
-          <div className="text-sm text-dark-500">
+          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             共 {filteredTasks.length} 条任务
           </div>
         </div>
@@ -780,7 +851,7 @@ export default function TaskList() {
             }
           }}
         />
-      </div>
+      </ThemedCard>
 
       {/* 批量操作工具栏 */}
       <BatchActionBar

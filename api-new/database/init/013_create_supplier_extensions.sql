@@ -37,9 +37,13 @@ CREATE TABLE IF NOT EXISTS supplier_acceptances (
     acceptance_type TEXT NOT NULL CHECK (acceptance_type IN ('initial', 'final')),
     acceptance_date DATE,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'passed', 'failed')),
+    result TEXT CHECK (result IN ('passed', 'failed', 'pending')),
+    description TEXT,
     notes TEXT,
+    attachments JSONB DEFAULT '[]'::jsonb,
     next_acceptance_date DATE,
     remarks TEXT,
+    created_by UUID REFERENCES profiles(id),
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
@@ -48,6 +52,14 @@ CREATE TABLE IF NOT EXISTS supplier_acceptances (
 CREATE INDEX IF NOT EXISTS idx_supplier_acceptances_project_supplier_id ON supplier_acceptances(project_supplier_id);
 CREATE INDEX IF NOT EXISTS idx_supplier_acceptances_acceptance_type ON supplier_acceptances(acceptance_type);
 CREATE INDEX IF NOT EXISTS idx_supplier_acceptances_status ON supplier_acceptances(status);
+CREATE INDEX IF NOT EXISTS idx_supplier_acceptances_created_by ON supplier_acceptances(created_by);
+CREATE INDEX IF NOT EXISTS idx_supplier_acceptances_result ON supplier_acceptances(result);
+
+-- 添加注释
+COMMENT ON COLUMN supplier_acceptances.attachments IS '验收附件列表';
+COMMENT ON COLUMN supplier_acceptances.created_by IS '验收记录创建者ID';
+COMMENT ON COLUMN supplier_acceptances.description IS '验收描述';
+COMMENT ON COLUMN supplier_acceptances.result IS '验收结果：passed-通过, failed-不通过, pending-待定';
 
 -- 创建更新时间戳触发器
 CREATE TRIGGER update_supplier_acceptances_updated_at

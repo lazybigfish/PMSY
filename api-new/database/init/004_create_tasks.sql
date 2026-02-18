@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS task_comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id UUID REFERENCES tasks(id) ON DELETE CASCADE NOT NULL,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+    created_by UUID REFERENCES profiles(id),
     content TEXT NOT NULL,
     parent_id UUID REFERENCES task_comments(id) ON DELETE CASCADE,
     like_count INTEGER DEFAULT 0,
@@ -83,8 +84,12 @@ CREATE TABLE IF NOT EXISTS task_comments (
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_task_comments_task_id ON task_comments(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_comments_user_id ON task_comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_task_comments_created_by ON task_comments(created_by);
 CREATE INDEX IF NOT EXISTS idx_task_comments_parent_id ON task_comments(parent_id);
 CREATE INDEX IF NOT EXISTS idx_task_comments_created_at ON task_comments(created_at);
+
+-- 添加注释
+COMMENT ON COLUMN task_comments.created_by IS '评论创建者ID，与 user_id 保持一致';
 
 -- 创建更新时间戳触发器
 CREATE TRIGGER update_task_comments_updated_at

@@ -175,3 +175,25 @@ BEGIN
         (v_milestone_id, '项目移交', '整理全部过程材料，输出《移交清单》，正式移交运维', true, '[{"name":"移交清单","required":true},{"name":"项目过程材料归档","required":true}]'::jsonb, NOW(), NOW());
     END IF;
 END $$;
+
+-- 添加 milestone_tasks.template_id 的外键约束（在 milestone_task_templates 表创建后）
+-- 注意：先清理无效的 template_id 值，再添加外键约束
+DO $$
+BEGIN
+    -- 清理无效的 template_id 值（设置为 NULL）
+    UPDATE milestone_tasks 
+    SET template_id = NULL 
+    WHERE template_id IS NOT NULL 
+    AND template_id NOT IN (SELECT id FROM milestone_task_templates);
+    
+    -- 添加外键约束
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'milestone_tasks_template_id_fkey' 
+        AND table_name = 'milestone_tasks'
+    ) THEN
+        ALTER TABLE milestone_tasks 
+        ADD CONSTRAINT milestone_tasks_template_id_fkey 
+        FOREIGN KEY (template_id) REFERENCES milestone_task_templates(id) ON DELETE SET NULL;
+    END IF;
+END $$;

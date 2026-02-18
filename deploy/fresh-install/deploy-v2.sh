@@ -92,8 +92,10 @@ check_config_consistency() {
     if [ "$SQL_COUNT" -gt 0 ]; then
         success "找到 $SQL_COUNT 个 SQL 初始化文件"
         info "SQL 文件列表:"
-        ls -1 "$INIT_SQL_DIR"/*.sql | while read f; do
-            echo "    - $(basename $f)"
+        for f in "$INIT_SQL_DIR"/*.sql; do
+            if [ -f "$f" ]; then
+                echo "    - $(basename "$f")"
+            fi
         done
     else
         error "未找到 SQL 初始化文件"
@@ -426,7 +428,7 @@ echo -e "${CYAN}========================================${NC}"
 echo ""
 echo -e "${YELLOW}⚠️  重要：部署前必须修改以下配置${NC}"
 echo ""
-echo "配置文件路径: ${CYAN}$ENV_SOURCE${NC}"
+echo -e "配置文件路径: ${CYAN}$ENV_SOURCE${NC}"
 echo ""
 
 # 读取当前配置值
@@ -444,34 +446,34 @@ echo "├───────────────────────�
 
 # DB_PASSWORD
 if [ -z "$current_db_password" ] || [ "$current_db_password" = "pmsy_prod_password_change_me" ] || [ "$current_db_password" = "your_secure_password_here" ]; then
-    echo "│ 1. DB_PASSWORD      │ ${RED}⚠️  未修改 (必须修改)${NC}              │"
+    echo -e "│ 1. DB_PASSWORD      │ ${RED}⚠️  未修改 (必须修改)${NC}              │"
     needs_config_update=true
 else
-    echo "│ 1. DB_PASSWORD      │ ${GREEN}✅ 已设置${NC}                        │"
+    echo -e "│ 1. DB_PASSWORD      │ ${GREEN}✅ 已设置${NC}                        │"
 fi
 
 # JWT_SECRET
 if [ -z "$current_jwt_secret" ] || [ "$current_jwt_secret" = "your_jwt_secret_key_here_change_in_production_at_least_32_chars" ] || [ "$current_jwt_secret" = "your_production_jwt_secret_key_here" ]; then
-    echo "│ 2. JWT_SECRET       │ ${RED}⚠️  未修改 (必须修改)${NC}              │"
+    echo -e "│ 2. JWT_SECRET       │ ${RED}⚠️  未修改 (必须修改)${NC}              │"
     needs_config_update=true
 else
-    echo "│ 2. JWT_SECRET       │ ${GREEN}✅ 已设置${NC}                        │"
+    echo -e "│ 2. JWT_SECRET       │ ${GREEN}✅ 已设置${NC}                        │"
 fi
 
 # MINIO_SECRET_KEY
 if [ -z "$current_minio_secret" ] || [ "$current_minio_secret" = "minio_secret_key_change_me" ] || [ "$current_minio_secret" = "minioadmin" ]; then
-    echo "│ 3. MINIO_SECRET_KEY │ ${RED}⚠️  未修改 (必须修改)${NC}              │"
+    echo -e "│ 3. MINIO_SECRET_KEY │ ${RED}⚠️  未修改 (必须修改)${NC}              │"
     needs_config_update=true
 else
-    echo "│ 3. MINIO_SECRET_KEY │ ${GREEN}✅ 已设置${NC}                        │"
+    echo -e "│ 3. MINIO_SECRET_KEY │ ${GREEN}✅ 已设置${NC}                        │"
 fi
 
 # API_URL
 if [ -z "$current_api_url" ] || [[ "$current_api_url" == *"localhost"* ]] || [[ "$current_api_url" == *"change"* ]]; then
-    echo "│ 4. API_URL          │ ${YELLOW}⚠️  建议修改: http://$DEPLOY_SERVER_IP${NC} │"
+    echo -e "│ 4. API_URL          │ ${YELLOW}⚠️  建议修改: http://$DEPLOY_SERVER_IP${NC} │"
     needs_config_update=true
 else
-    echo "│ 4. API_URL          │ ${GREEN}✅ 已设置: $current_api_url${NC} │"
+    echo -e "│ 4. API_URL          │ ${GREEN}✅ 已设置: $current_api_url${NC} │"
 fi
 
 echo "└─────────────────────────────────────────────────────────┘"
@@ -542,30 +544,34 @@ echo -e "${BLUE}[步骤 4/5] 构建前端和后端...${NC}"
 echo ""
 
 echo -e "${YELLOW}   构建前端...${NC}"
+
+# 保存原始 .env 文件内容（如果存在）
+ORIGINAL_ENV=""
 if [ -f ".env" ]; then
-    cp .env .env.backup.development
+    ORIGINAL_ENV=$(cat .env)
+    echo "   已保存原始 .env 配置"
 fi
 
+# 使用生产环境配置进行构建
 if [ -f "config/env/.env.production" ]; then
     cp config/env/.env.production .env
+    echo "   使用 config/env/.env.production 进行构建"
 else
     cp config/env/.env.example .env
+    echo "   使用 config/env/.env.example 进行构建"
 fi
 
-if [ -f ".env.local" ]; then
-    mv .env.local .env.local.backup
-fi
-
+# 构建前端
 npm run build
+BUILD_EXIT_CODE=$?
 
-if [ -f ".env.local.backup" ]; then
-    mv .env.local.backup .env.local
-fi
-
-if [ -f ".env.backup.development" ]; then
-    mv .env.backup.development .env
+# 恢复原始 .env 文件
+if [ -n "$ORIGINAL_ENV" ]; then
+    echo "$ORIGINAL_ENV" > .env
+    echo "   已恢复原始 .env 配置"
 else
     rm -f .env
+    echo "   已删除临时 .env 文件"
 fi
 
 echo -e "${GREEN}   ✅ 前端构建完成${NC}"
@@ -576,8 +582,82 @@ if [ ! -d "node_modules" ]; then
     npm install
 fi
 npm run build 2>/dev/null || echo "   注意: API 可能已在 dist 目录中"
-cd "$PROJECT_DIR"
 echo -e "${GREEN}   ✅ 后端构建完成${NC}"
+
+echo -e "${YELLOW}   检测架构环境...${NC}"
+
+# 获取本地架构
+LOCAL_ARCH=$(uname -m)
+case $LOCAL_ARCH in
+    x86_64) LOCAL_ARCH_NORMALIZED="amd64" ;;
+    amd64)  LOCAL_ARCH_NORMALIZED="amd64" ;;
+    arm64)  LOCAL_ARCH_NORMALIZED="arm64" ;;
+    aarch64) LOCAL_ARCH_NORMALIZED="arm64" ;;
+    *)      LOCAL_ARCH_NORMALIZED="amd64" ;;
+esac
+
+# 获取服务器架构
+SERVER_ARCH_RAW=$(ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "uname -m" 2>/dev/null || echo "unknown")
+case $SERVER_ARCH_RAW in
+    x86_64) SERVER_ARCH_NORMALIZED="amd64" ;;
+    amd64)  SERVER_ARCH_NORMALIZED="amd64" ;;
+    arm64)  SERVER_ARCH_NORMALIZED="arm64" ;;
+    aarch64) SERVER_ARCH_NORMALIZED="arm64" ;;
+    *)      SERVER_ARCH_NORMALIZED="amd64" ;;
+esac
+
+echo "   本地架构: $LOCAL_ARCH ($LOCAL_ARCH_NORMALIZED)"
+echo "   服务器架构: $SERVER_ARCH_RAW ($SERVER_ARCH_NORMALIZED)"
+echo ""
+
+# 根据架构是否一致决定构建方式
+if [ "$LOCAL_ARCH_NORMALIZED" = "$SERVER_ARCH_NORMALIZED" ]; then
+    # 架构一致，直接本地构建
+    echo -e "${GREEN}   ✅ 架构一致，直接本地构建镜像${NC}"
+    BUILD_LOCALLY=true
+    SKIP_BUILDX=true
+    TARGET_PLATFORM="linux/$LOCAL_ARCH_NORMALIZED"
+else
+    # 架构不一致，提供选项
+    echo -e "${CYAN}   架构不一致，请选择构建方式：${NC}"
+    echo ""
+    echo "   1) 本地跨架构构建 (使用 Docker Buildx，需要良好的网络)"
+    echo "   2) 在服务器上构建 (推荐，避免跨架构构建问题)"
+    echo ""
+    
+    read -p "   请输入选项 [1-2] (默认: 2): " BUILD_CHOICE
+    BUILD_CHOICE=${BUILD_CHOICE:-2}
+    
+    case $BUILD_CHOICE in
+        1)
+            echo "   选择: 本地跨架构构建"
+            BUILD_LOCALLY=true
+            SKIP_BUILDX=false
+            TARGET_PLATFORM="linux/$SERVER_ARCH_NORMALIZED"
+            ;;
+        2|*)
+            echo "   选择: 在服务器上构建镜像"
+            BUILD_LOCALLY=false
+            SKIP_BUILDX=true
+            ;;
+    esac
+fi
+
+# 执行构建
+if [ "$BUILD_LOCALLY" = true ]; then
+    echo "   目标平台: $TARGET_PLATFORM"
+    if [ "$SKIP_BUILDX" = true ]; then
+        # 架构一致，直接构建
+        docker build -t pmsy-api:latest .
+    else
+        # 跨架构构建
+        docker buildx build --platform $TARGET_PLATFORM -t pmsy-api:latest --load .
+    fi
+    echo -e "${GREEN}   ✅ Docker 镜像构建完成${NC}"
+else
+    echo -e "${YELLOW}   跳过本地构建，将在服务器上构建镜像${NC}"
+fi
+cd "$PROJECT_DIR"
 echo ""
 
 # ==========================================
@@ -627,13 +707,159 @@ case $DEPLOY_MODE in
         echo -e "${GREEN}   ✅ SSH 配置完成${NC}"
         echo ""
         
+        # 根据构建方式准备部署包
+        if [ "$BUILD_LOCALLY" = true ]; then
+            echo -e "${YELLOW}   导出 Docker 镜像...${NC}"
+            docker save pmsy-api:latest > /tmp/pmsy-api.tar
+            echo -e "${GREEN}   ✅ Docker 镜像导出完成${NC}"
+            echo ""
+        fi
+        
         echo -e "${YELLOW}   准备部署包...${NC}"
         DEPLOY_TMP=$(mktemp -d)
         mkdir -p "$DEPLOY_TMP/pmsy"
         
         cp -r dist "$DEPLOY_TMP/pmsy/"
-        cp -r api-new "$DEPLOY_TMP/pmsy/"
-        cp config/docker/docker-compose.yml "$DEPLOY_TMP/pmsy/"
+        
+        # 本地构建时复制镜像，服务器构建时复制 Dockerfile 和必要文件
+        if [ "$BUILD_LOCALLY" = true ]; then
+            cp /tmp/pmsy-api.tar "$DEPLOY_TMP/pmsy/"
+        else
+            mkdir -p "$DEPLOY_TMP/pmsy/api-new"
+            cp api-new/Dockerfile "$DEPLOY_TMP/pmsy/api-new/"
+            cp api-new/package*.json "$DEPLOY_TMP/pmsy/api-new/"
+            cp -r api-new/dist "$DEPLOY_TMP/pmsy/api-new/"
+            # 复制 database 目录（包含初始化脚本和种子数据）
+            if [ -d "api-new/database" ]; then
+                cp -r api-new/database "$DEPLOY_TMP/pmsy/api-new/"
+            fi
+        fi
+        
+        # 根据构建方式准备 docker-compose.yml
+        if [ "$BUILD_LOCALLY" = true ]; then
+            # 本地构建：直接使用镜像
+            cp config/docker/docker-compose.yml "$DEPLOY_TMP/pmsy/"
+        else
+            # 服务器构建：添加 build 配置
+            cat > "$DEPLOY_TMP/pmsy/docker-compose.yml" << 'COMPOSE_EOF'
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: pmsy-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-pmsy}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pmsy_prod_password}
+      POSTGRES_DB: ${DB_NAME:-pmsy}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./api-new/database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pmsy} -d ${DB_NAME:-pmsy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: pmsy-redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: pmsy-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+  api:
+    build:
+      context: ./api-new
+      dockerfile: Dockerfile
+    image: pmsy-api:latest
+    container_name: pmsy-api
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-pmsy}
+      - DB_PASSWORD=${DB_PASSWORD:-pmsy_prod_password}
+      - DB_NAME=${DB_NAME:-pmsy}
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_USE_SSL=false
+      - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME:-files}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_key_change_in_production}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      - JWT_ISSUER=${JWT_ISSUER:-pmsy-api}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-pmsy-client}
+      - PORT=3001
+      - API_URL=${API_URL:-http://localhost}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: pmsy-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dist:/usr/share/nginx/html:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pmsy-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  pmsy-network:
+    driver: bridge
+COMPOSE_EOF
+        fi
         cp config/nginx/nginx.conf "$DEPLOY_TMP/pmsy/nginx.conf"
         cp "$ENV_SOURCE" "$DEPLOY_TMP/pmsy/.env"
         
@@ -652,12 +878,16 @@ case $DEPLOY_MODE in
         echo -e "${YELLOW}   上传到服务器...${NC}"
         ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo mkdir -p $DEPLOY_REMOTE_DIR && sudo chown $DEPLOY_SERVER_USER:$DEPLOY_SERVER_USER $DEPLOY_REMOTE_DIR"
         rsync -avz --delete "$DEPLOY_TMP/pmsy/" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP:$DEPLOY_REMOTE_DIR/"
-        rm -rf "$DEPLOY_TMP"
+        rm -rf "$DEPLOY_TMP" /tmp/pmsy-api.tar 2>/dev/null || true
         echo -e "${GREEN}   ✅ 上传完成${NC}"
         echo ""
         
         echo -e "${YELLOW}   在服务器上执行部署...${NC}"
-        ssh -tt "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' DEPLOY_SERVER_IP='$DEPLOY_SERVER_IP' bash -s" << 'REMOTE_SCRIPT'
+
+        # 根据构建方式执行不同的远程脚本
+        if [ "$BUILD_LOCALLY" = true ]; then
+            # 本地构建：导入镜像
+            ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' DEPLOY_SERVER_IP='$DEPLOY_SERVER_IP' bash -s" << 'ENDSSH'
 set -e
 
 echo "   [服务器] 检查 sudo 权限..."
@@ -671,9 +901,46 @@ cd "$DEPLOY_REMOTE_DIR"
 echo "   [服务器] 更新配置..."
 sed -i "s|API_URL=.*|API_URL=http://$DEPLOY_SERVER_IP|" .env
 
-echo "   [服务器] 拉取镜像并启动..."
-sudo docker-compose pull
+echo "   [服务器] 导入 Docker 镜像..."
+sudo docker load < pmsy-api.tar
+rm -f pmsy-api.tar
+
+echo "   [服务器] 拉取基础镜像并启动..."
+sudo docker-compose pull postgres redis minio nginx
 sudo docker-compose up -d
+
+ENDSSH
+        else
+            # 服务器构建：在服务器上构建镜像
+            ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' DEPLOY_SERVER_IP='$DEPLOY_SERVER_IP' bash -s" << 'ENDSSH'
+set -e
+
+echo "   [服务器] 检查 sudo 权限..."
+if ! sudo -n true 2>/dev/null; then
+    echo "   请确保当前用户有免密码 sudo 权限"
+    sudo echo "   ✅ sudo 权限验证通过"
+fi
+
+cd "$DEPLOY_REMOTE_DIR"
+
+echo "   [服务器] 更新配置..."
+sed -i "s|API_URL=.*|API_URL=http://$DEPLOY_SERVER_IP|" .env
+
+echo "   [服务器] 构建 API Docker 镜像..."
+cd api-new
+sudo docker build -t pmsy-api:latest .
+cd ..
+
+echo "   [服务器] 拉取基础镜像并启动..."
+sudo docker-compose pull postgres redis minio nginx
+sudo docker-compose up -d
+
+ENDSSH
+        fi
+
+        # 继续执行公共的等待和初始化步骤
+        ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' bash -s" << 'ENDSSH'
+cd "$DEPLOY_REMOTE_DIR"
 
 echo "   [服务器] 等待服务启动..."
 sleep 10
@@ -697,16 +964,41 @@ for i in {1..30}; do
 done
 
 echo "   [服务器] 执行数据库初始化..."
-sudo docker-compose exec -T postgres psql -U postgres -d pmsy -f /docker-entrypoint-initdb.d/999_complete_schema.sql 2>/dev/null || echo "   注意: 数据库初始化可能已执行"
+# 首先检查数据库是否已初始化（通过检查profiles表是否存在）
+if sudo docker-compose exec -T postgres psql -U ${DB_USER:-pmsy} -d ${DB_NAME:-pmsy} -c "SELECT 1 FROM profiles LIMIT 1" > /dev/null 2>&1; then
+    echo "   ✅ 数据库已初始化，跳过"
+else
+    # 执行初始化脚本
+    if sudo docker-compose exec -T postgres psql -U ${DB_USER:-pmsy} -d ${DB_NAME:-pmsy} -f /docker-entrypoint-initdb.d/999_complete_schema.sql > /dev/null 2>&1; then
+        echo "   ✅ 数据库初始化成功"
+    else
+        echo "   ⚠️  数据库初始化失败，请手动检查"
+    fi
+fi
 
-echo "   [服务器] 执行种子数据..."
-sudo docker-compose exec -T api sh -c "cd /app && npm run db:seed" 2>/dev/null || echo "   注意: 种子数据可能已存在"
+echo "   [服务器] 执行管理员初始化..."
+# 只执行管理员用户种子数据，跳过示例项目数据
+SEED_OUTPUT=$(sudo docker-compose exec -T api sh -c "cd /app && npx knex seed:run --specific=001_seed_admin_user.ts" 2>&1)
+SEED_EXIT_CODE=$?
+
+if [ $SEED_EXIT_CODE -eq 0 ]; then
+    echo "   ✅ 管理员初始化成功"
+    # 显示管理员信息
+    echo "$SEED_OUTPUT" | grep -E "(管理员|admin|已创建|已更新)" | sed 's/^/     /'
+else
+    echo "   ⚠️  管理员初始化失败，请手动检查"
+fi
 
 echo "   [服务器] 检查服务状态..."
-sudo docker-compose ps
+if sudo docker-compose ps 2>/dev/null; then
+    echo ""
+    echo "   ✅ 所有服务运行正常"
+else
+    echo "   ⚠️  无法获取服务状态，请手动检查"
+fi
 
 echo "   [服务器] ✅ 部署完成"
-REMOTE_SCRIPT
+ENDSSH
         
         echo -e "${GREEN}   ✅ 服务器部署完成${NC}"
         echo ""
@@ -740,11 +1032,11 @@ REMOTE_SCRIPT
         echo -e "${YELLOW}   导出 Docker 镜像...${NC}"
         mkdir -p docker-images
         
+        # 导出基础镜像
         IMAGES=(
             "postgres:15-alpine"
             "redis:7-alpine"
             "minio/minio:latest"
-            "node:18-alpine"
             "nginx:alpine"
         )
         
@@ -755,7 +1047,12 @@ REMOTE_SCRIPT
             docker save "$image" > "docker-images/$filename" 2>/dev/null || echo "     警告: 无法导出 $image"
         done
         
+        # 导出自定义 API 镜像
+        echo "     导出 pmsy-api:latest..."
+        docker save pmsy-api:latest > docker-images/pmsy-api_latest.tar
+        
         printf "%s\n" "${IMAGES[@]}" > docker-images/IMAGES.txt
+        echo "pmsy-api:latest" >> docker-images/IMAGES.txt
         echo -e "${GREEN}   ✅ Docker 镜像导出完成${NC}"
         echo ""
         
@@ -764,7 +1061,6 @@ REMOTE_SCRIPT
         mkdir -p "$DEPLOY_TMP/pmsy"
         
         cp -r dist "$DEPLOY_TMP/pmsy/"
-        cp -r api-new "$DEPLOY_TMP/pmsy/"
         cp -r docker-images "$DEPLOY_TMP/pmsy/"
         cp config/docker/docker-compose.yml "$DEPLOY_TMP/pmsy/"
         cp config/nginx/nginx.conf "$DEPLOY_TMP/pmsy/nginx.conf"
@@ -790,7 +1086,9 @@ REMOTE_SCRIPT
         echo ""
         
         echo -e "${YELLOW}   在服务器上执行部署...${NC}"
-        ssh -tt "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' DEPLOY_SERVER_IP='$DEPLOY_SERVER_IP' bash -s" << 'REMOTE_SCRIPT'
+
+        # 执行远程脚本
+        ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' DEPLOY_SERVER_IP='$DEPLOY_SERVER_IP' bash -s" << 'ENDSSH'
 set -e
 
 echo "   [服务器] 检查 sudo 权限..."
@@ -803,10 +1101,11 @@ cd "$DEPLOY_REMOTE_DIR"
 echo "   [服务器] 导入 Docker 镜像..."
 for tarfile in docker-images/*.tar; do
     if [ -f "$tarfile" ]; then
-        echo "     导入 $(basename $tarfile)..."
+        echo "     导入 $(basename "$tarfile")..."
         sudo docker load < "$tarfile" || echo "     警告: 导入失败"
     fi
 done
+rm -rf docker-images
 
 echo "   [服务器] 更新配置..."
 sed -i "s|API_URL=.*|API_URL=http://$DEPLOY_SERVER_IP|" .env
@@ -838,15 +1137,16 @@ done
 echo "   [服务器] 执行数据库初始化..."
 sudo docker-compose exec -T postgres psql -U postgres -d pmsy -f /docker-entrypoint-initdb.d/999_complete_schema.sql 2>/dev/null || true
 
-echo "   [服务器] 执行种子数据..."
-sudo docker-compose exec -T api sh -c "cd /app && npm run db:seed" 2>/dev/null || true
+echo "   [服务器] 执行管理员初始化..."
+# 只执行管理员用户种子数据，跳过示例项目数据
+sudo docker-compose exec -T api sh -c "cd /app && npx knex seed:run --specific=001_seed_admin_user.ts" 2>/dev/null || true
 
 echo "   [服务器] ✅ 部署完成"
-REMOTE_SCRIPT
+ENDSSH
 
         echo -e "${GREEN}   ✅ 服务器部署完成${NC}"
         echo ""
-        
+
         rm -rf docker-images
         ;;
 
@@ -884,11 +1184,11 @@ REMOTE_SCRIPT
         echo -e "${YELLOW}   导出 Docker 镜像（$ARCH 架构）...${NC}"
         mkdir -p docker-images
         
+        # 导出基础镜像
         IMAGES=(
             "postgres:15-alpine"
             "redis:7-alpine"
             "minio/minio:latest"
-            "node:18-alpine"
             "nginx:alpine"
         )
         
@@ -899,7 +1199,12 @@ REMOTE_SCRIPT
             docker save "$image" > "docker-images/$filename" 2>/dev/null || echo "     警告: 无法导出 $image"
         done
         
+        # 导出自定义 API 镜像
+        echo "     导出 pmsy-api:latest ($ARCH)..."
+        docker save pmsy-api:latest > docker-images/pmsy-api_latest.tar
+        
         printf "%s\n" "${IMAGES[@]}" > docker-images/IMAGES.txt
+        echo "pmsy-api:latest" >> docker-images/IMAGES.txt
         echo -e "${GREEN}   ✅ Docker 镜像导出完成${NC}"
         echo ""
         
@@ -907,7 +1212,6 @@ REMOTE_SCRIPT
         mkdir -p "$OFFLINE_DIR"
         
         cp -r dist "$OFFLINE_DIR/"
-        cp -r api-new "$OFFLINE_DIR/"
         cp -r docker-images "$OFFLINE_DIR/"
         cp config/docker/docker-compose.yml "$OFFLINE_DIR/"
         cp config/nginx/nginx.conf "$OFFLINE_DIR/nginx.conf"
@@ -929,8 +1233,7 @@ REMOTE_SCRIPT
 
 此部署包包含：
 - ✅ 前端构建文件 (dist/)
-- ✅ API 服务代码 (api-new/)
-- ✅ Docker 镜像文件 (docker-images/)
+- ✅ Docker 镜像文件 (docker-images/) - 包含 API 服务镜像
 - ✅ 服务配置文件 (docker-compose.yml)
 - ✅ 部署脚本 (deploy/)
 
@@ -996,7 +1299,20 @@ sudo docker-compose exec api sh -c "cd /app && npm run db:seed"
 
 ## 默认账号
 
-- 管理员: admin@pmsy.com / Willyou@2026
+### 管理员账号
+- **用户名**: admin
+- **邮箱**: admin@pmsy.com
+- **密码**: Willyou@2026
+
+### 数据库配置
+- **数据库**: pmsy
+- **用户**: pmsy
+- **密码**: (见 .env 文件 DB_PASSWORD)
+
+### MinIO 配置
+- **Access Key**: minioadmin
+- **Secret Key**: (见 .env 文件 MINIO_SECRET_KEY)
+- **管理界面**: http://你的服务器IP:9001
 
 ## 故障排查
 
@@ -1068,20 +1384,35 @@ echo "[5/6] 执行数据库初始化..."
 sudo docker-compose exec -T postgres psql -U postgres -d pmsy -f /docker-entrypoint-initdb.d/999_complete_schema.sql 2>/dev/null || true
 echo ""
 
-echo "[6/6] 执行种子数据..."
-sudo docker-compose exec -T api sh -c "cd /app && npm run db:seed" 2>/dev/null || true
+echo "[6/6] 执行管理员初始化..."
+# 只执行管理员用户种子数据，跳过示例项目数据
+sudo docker-compose exec -T api sh -c "cd /app && npx knex seed:run --specific=001_seed_admin_user.ts" 2>/dev/null || true
 echo ""
 
 echo "=========================================="
 echo "✅ 部署完成!"
 echo "=========================================="
 echo ""
-echo "访问地址:"
+echo "📍 访问地址:"
 echo "  - 前端: http://<服务器IP>"
 echo "  - API: http://<服务器IP>/api/health"
 echo ""
-echo "默认账号:"
-echo "  - 管理员: admin@pmsy.com / Willyou@2026"
+echo "👤 默认管理员账号:"
+echo "  - 用户名: admin"
+echo "  - 邮箱: admin@pmsy.com"
+echo "  - 密码: Willyou@2026"
+echo ""
+echo "🗄️  数据库默认配置:"
+echo "  - 数据库: pmsy"
+echo "  - 用户: pmsy"
+echo "  - 密码: (见 .env 文件)"
+echo ""
+echo "📦 MinIO 默认配置:"
+echo "  - Access Key: minioadmin"
+echo "  - Secret Key: (见 .env 文件)"
+echo "  - 管理界面: http://<服务器IP>:9001"
+echo ""
+echo "⚠️  请保存以上信息！"
 echo ""
 SCRIPT_EOF
         chmod +x "$OFFLINE_DIR/deploy/scripts/offline-deploy.sh"
@@ -1136,14 +1467,29 @@ echo -e "${GREEN}==========================================${NC}"
 echo -e "${GREEN}🎉 全新部署完成!${NC}"
 echo -e "${GREEN}==========================================${NC}"
 echo ""
-echo "访问地址:"
+echo "📍 访问地址:"
 echo "  - 前端: http://$DEPLOY_SERVER_IP"
 echo "  - API: http://$DEPLOY_SERVER_IP/api/health"
 echo ""
-echo "默认账号:"
-echo "  - 管理员: admin@pmsy.com / Willyou@2026"
+echo "👤 默认管理员账号:"
+echo "  - 用户名: admin"
+echo "  - 邮箱: admin@pmsy.com"
+echo "  - 密码: Willyou@2026"
 echo ""
-echo -e "${YELLOW}请测试登录功能确认部署成功${NC}"
+echo "🗄️  数据库默认配置:"
+echo "  - 数据库: pmsy"
+echo "  - 用户: pmsy"
+echo "  - 密码: (见 .env 文件 DB_PASSWORD)"
+echo ""
+echo "📦 MinIO 默认配置:"
+echo "  - Access Key: minioadmin"
+echo "  - Secret Key: (见 .env 文件 MINIO_SECRET_KEY)"
+echo "  - 管理界面: http://$DEPLOY_SERVER_IP:9001"
+echo ""
+echo "📁 配置文件位置:"
+echo "  - 服务器: $DEPLOY_REMOTE_DIR/.env"
+echo ""
+echo -e "${YELLOW}⚠️  请保存以上信息，并测试登录功能确认部署成功${NC}"
 echo ""
 echo -e "${BLUE}查看日志:${NC}"
 echo "  ssh $DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP 'cd $DEPLOY_REMOTE_DIR && sudo docker-compose logs -f'"

@@ -72,7 +72,7 @@ export default function UserManagement() {
       username: '',
       full_name: '',
       email: '',
-      password: '',
+      password: 'POP-101-ada',
       role: 'user',
       is_active: true,
     });
@@ -143,10 +143,12 @@ export default function UserManagement() {
 
       try {
         setSubmitting(true);
+        // 如果用户填写了邮箱则使用，否则根据用户名自动生成
+        const email = formData.email || `${formData.username}@pmsy.com`;
         await adminUserService.createUser({
           username: formData.username,
           full_name: formData.full_name,
-          email: formData.email,
+          email: email,
           password: formData.password,
           role: formData.role,
         });
@@ -380,14 +382,15 @@ export default function UserManagement() {
                     密码 <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="password"
+                    type="text"
                     required
                     minLength={6}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="至少6位"
+                    placeholder="默认密码: POP-101-ada"
                     value={formData.password}
                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                   />
+                  <p className="text-xs text-gray-500 mt-1">默认密码为 POP-101-ada，可自行修改</p>
                 </div>
               )}
 

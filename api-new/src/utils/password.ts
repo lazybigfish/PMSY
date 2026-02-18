@@ -22,6 +22,9 @@ export async function hashPassword(password: string): Promise<string> {
  * @returns 是否匹配
  */
 export async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
+  if (!hashedPassword) {
+    return false;
+  }
   const isMatch = await bcrypt.compare(password, hashedPassword);
   return isMatch;
 }

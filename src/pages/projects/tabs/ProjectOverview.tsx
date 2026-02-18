@@ -190,7 +190,7 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
       // Tasks - 使用 taskService
       const tasks = await taskService.getTasksByProject(projectId);
       const tasksTotal = tasks?.length || 0;
-      const tasksCompleted = tasks?.filter(t => t.status === 'completed').length || 0;
+      const tasksCompleted = tasks?.filter(t => t.status === 'done').length || 0;
 
       // Risks - 使用 projectService
       const risks = await projectService.getProjectRisks(projectId);

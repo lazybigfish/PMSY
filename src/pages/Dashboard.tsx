@@ -4,24 +4,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Task } from '../types';
 import { 
-  Loader2, 
   CheckSquare, 
   Plus, 
   Calendar,
-  ExternalLink,
-  X,
-  Send,
   Sparkles,
-  TrendingUp,
-  Clock,
-  AlertCircle,
-  FolderOpen,
-  Zap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContextNew';
+import { useTheme } from '../context/ThemeContext';
 import { StatsCards } from './dashboard/components/StatsCards';
 import { MyTasks } from './dashboard/components/MyTasks';
 import { HotNews } from './dashboard/components/HotNews';
+import { ThemedButton } from '../components/theme/ThemedButton';
+import { ThemedSpinner } from '../components/theme/ThemedLoading';
 
 // 辅助函数：解析帖子内容
 const parseContent = (content: any): string => {
@@ -68,6 +62,9 @@ interface HotPostItem {
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { themeConfig } = useTheme();
+  const { colors } = themeConfig;
+  const isDark = colors.background.main === '#0A0A0F';
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     totalProjects: 0,
@@ -311,12 +308,25 @@ const Dashboard = () => {
     <div className="flex justify-center items-center h-[calc(100vh-4rem)]">
       <div className="text-center">
         <div className="relative">
-          <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glow animate-pulse">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center animate-pulse"
+            style={{
+              background: `linear-gradient(135deg, ${colors.primary[400]}, ${colors.primary[600]})`,
+              boxShadow: `0 0 30px ${colors.primary[500]}40`,
+            }}
+          >
             <Sparkles className="w-8 h-8 text-white" />
           </div>
-          <div className="absolute inset-0 w-16 h-16 rounded-2xl gradient-primary blur-xl opacity-50 animate-pulse"></div>
+          <div
+            className="absolute inset-0 w-16 h-16 rounded-2xl blur-xl opacity-50 animate-pulse"
+            style={{
+              background: `linear-gradient(135deg, ${colors.primary[400]}, ${colors.primary[600]})`,
+            }}
+          />
         </div>
-        <p className="text-dark-500 mt-4 font-medium">正在加载数据...</p>
+        <p className={`mt-4 font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          正在加载数据...
+        </p>
       </div>
     </div>
   );
@@ -326,23 +336,27 @@ const Dashboard = () => {
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-dark-900 flex items-center gap-3">
+          <h1 className={`text-3xl font-bold flex items-center gap-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {getGreeting()}，{user?.user_metadata?.full_name || user?.email?.split('@')[0]}
             <span className="text-3xl">👋</span>
           </h1>
-          <p className="mt-2 text-dark-500 flex items-center gap-2">
+          <p className={`mt-2 flex items-center gap-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             <Calendar className="w-4 h-4" />
             今天是 {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
           </p>
         </div>
         <div className="flex gap-3">
-          <Link to="/tasks" className="btn-secondary">
-            <CheckSquare className="w-4 h-4" />
-            我的任务
+          <Link to="/tasks">
+            <ThemedButton variant="secondary" size="sm">
+              <CheckSquare className="w-4 h-4" />
+              我的任务
+            </ThemedButton>
           </Link>
-          <Link to="/projects/new" className="btn-primary shadow-glow">
-            <Plus className="w-4 h-4" />
-            新建项目
+          <Link to="/projects/new">
+            <ThemedButton variant="primary" size="sm">
+              <Plus className="w-4 h-4" />
+              新建项目
+            </ThemedButton>
           </Link>
         </div>
       </div>

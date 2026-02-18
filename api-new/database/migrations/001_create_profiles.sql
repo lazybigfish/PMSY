@@ -35,19 +35,32 @@ CREATE TRIGGER update_profiles_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
--- 插入默认管理员用户
--- 注意：实际密码通过 seed 脚本设置，此处仅创建占位记录
--- 默认用户名: admin，密码: Willyou@2026
--- 登录时使用用户名（username）而非邮箱
-INSERT INTO profiles (id, email, username, password_hash, full_name, role, is_active, email_confirmed_at)
+-- ==========================================
+-- 初始化系统管理员用户
+-- ==========================================
+-- 默认用户名: admin
+-- 默认密码: Willyou@2026
+-- 登录时可以使用用户名或邮箱
+
+INSERT INTO profiles (id, email, username, password_hash, full_name, role, is_active, email_confirmed_at, created_at, updated_at)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'admin@pmsy.com',
     'admin',
-    '$2b$10$placeholder',  -- 占位符，真实密码通过 seed 脚本生成
+    '$2a$10$za3UpLuxe/vK739nAMuRmOhcQyN5YNO5MY5KOk.nk1iNDH3G1W.Ai',  -- Willyou@2026 的 bcrypt 哈希
     '系统管理员',
     'admin',
     true,
+    NOW(),
+    NOW(),
     NOW()
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+    password_hash = EXCLUDED.password_hash,
+    email = EXCLUDED.email,
+    username = EXCLUDED.username,
+    full_name = EXCLUDED.full_name,
+    role = EXCLUDED.role,
+    is_active = EXCLUDED.is_active,
+    email_confirmed_at = EXCLUDED.email_confirmed_at,
+    updated_at = NOW();

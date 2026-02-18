@@ -1,46 +1,38 @@
-# 构建阶段
-FROM node:18-alpine AS builder
+# PMSY API 服务镜像
+# 使用多阶段构建优化镜像大小
+
+# 阶段1：构建阶段
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# 复制 package.json 和 package-lock.json
+# 先复制 package.json，利用 Docker 缓存层
 COPY package*.json ./
+RUN npm ci --only=production
 
-# 安装依赖
-RUN npm ci
+# 阶段2：运行阶段
+FROM node:24-alpine
 
-# 复制源代码
-COPY . .
-
-# 编译 TypeScript
-RUN npm run build
-
-# 生产阶段
-FROM node:18-alpine
+# 安装必要的系统依赖
+RUN apk add --no-cache wget
 
 WORKDIR /app
 
-# 安装生产环境依赖
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+# 从构建阶段复制依赖
+COPY --from=builder /app/node_modules ./node_modules
 
-# 从构建阶段复制编译后的代码
-COPY --from=builder /app/dist ./dist
+# 复制应用代码
+COPY dist ./dist
 
-# 创建非 root 用户
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
-
-# 更改文件所有者
-RUN chown -R nodejs:nodejs /app
-USER nodejs
+# 注意：数据库迁移文件不再打包进镜像
+# 迁移文件通过开发机上传到服务器，在宿主机上执行
 
 # 暴露端口
 EXPOSE 3001
 
 # 健康检查
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:3001/health || exit 1
 
-# 启动命令
+# 启动应用
 CMD ["node", "dist/index.js"]

@@ -510,7 +510,7 @@ const TaskDetailPage = () => {
     }
     switch (task?.status) {
       case 'done': return 100;
-      case 'in_progress': return 50;
+      case 'in_progress': return 5;
       case 'todo': return 0;
       default: return 0;
     }

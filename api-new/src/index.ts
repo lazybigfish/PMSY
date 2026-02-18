@@ -19,6 +19,8 @@ import authRouter from './routes/auth';
 import restRouter from './routes/rest';
 import storageRouter from './routes/storage';
 import projectsRouter from './routes/projects';
+import projectSuppliersRouter from './routes/projectSuppliers';
+import duplicateCheckRouter from './routes/duplicateCheck';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -38,12 +40,25 @@ if (NODE_ENV === 'development') {
   app.use(morgan('combined', { stream: { write: (message) => logger.info(message.trim()) } }));
 }
 
-// 路由
+// 路由（兼容直接访问）
 app.use('/health', healthRouter);
 app.use('/auth/v1', authRouter);
 app.use('/rest/v1', restRouter);
 app.use('/storage/v1', storageRouter);
 app.use('/api/projects', projectsRouter);
+app.use('/api/project-suppliers', projectSuppliersRouter);
+app.use('/api/duplicate-check', duplicateCheckRouter);
+
+// 路由（带 /api 前缀，兼容 Nginx 代理配置）
+app.use('/api/health', healthRouter);
+app.use('/api/auth/v1', authRouter);
+app.use('/api/rest/v1', restRouter);
+app.use('/api/storage/v1', storageRouter);
+
+// 路由（带双 /api 前缀，兼容 Nginx 代理后的自定义 API）
+app.use('/api/api/projects', projectsRouter);
+app.use('/api/api/project-suppliers', projectSuppliersRouter);
+app.use('/api/api/duplicate-check', duplicateCheckRouter);
 
 // 根路由
 app.get('/', (req, res) => {

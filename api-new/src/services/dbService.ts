@@ -233,12 +233,13 @@ export async function update(
 ): Promise<any[]> {
   // 如果需要设置当前用户ID，使用事务确保在同一个连接中执行
   if (currentUserId && table === 'tasks') {
-    return await db.transaction(async (trx) => {
+    return await db.transaction(async (trx): Promise<any[]> => {
       await trx.raw(`SET LOCAL "app.current_user_id" = '${currentUserId}'`);
-      return await trx(table)
+      const result = await trx(table)
         .where(conditions)
         .update({ ...data, updated_at: new Date() })
         .returning(select ? select.split(',').map(f => f.trim()) : '*');
+      return result || [];
     });
   }
 
@@ -266,21 +267,21 @@ export async function updateById(
 ): Promise<any | null> {
   // 如果需要设置当前用户ID，使用事务确保在同一个连接中执行
   if (currentUserId && table === 'tasks') {
-    const [result] = await db.transaction(async (trx) => {
+    const results = await db.transaction(async (trx) => {
       await trx.raw(`SET LOCAL "app.current_user_id" = '${currentUserId}'`);
       return await trx(table)
         .where({ id })
         .update({ ...data, updated_at: new Date() })
         .returning(select ? select.split(',').map(f => f.trim()) : '*');
     });
-    return result || null;
+    return results?.[0] || null;
   }
 
-  const [result] = await db(table)
+  const results = await db(table)
     .where({ id })
     .update({ ...data, updated_at: new Date() })
     .returning(select ? select.split(',').map(f => f.trim()) : '*');
-  return result || null;
+  return results?.[0] || null;
 }
 
 /**
@@ -359,6 +360,14 @@ export async function getTableColumns(table: string): Promise<string[]> {
   return result.rows.map((row: any) => row.column_name);
 }
 
+/**
+ * 获取原始 Knex 实例（用于复杂查询）
+ * @returns Knex 实例
+ */
+export function getDb(): Knex {
+  return db;
+}
+
 export default {
   query,
   queryOne,
@@ -369,8 +378,10 @@ export default {
   updateById,
   remove,
   removeById,
+  delete: remove, // 别名，兼容旧代码
   count,
   transaction,
   tableExists,
   getTableColumns,
+  getDb,
 };

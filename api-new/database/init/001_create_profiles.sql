@@ -1,4 +1,5 @@
 -- 创建 profiles 表（替代 Supabase auth.users）
+-- 合并自 migrations/026_add_force_password_change.sql
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT UNIQUE NOT NULL,
@@ -9,11 +10,15 @@ CREATE TABLE IF NOT EXISTS profiles (
     role TEXT DEFAULT 'user' CHECK (role IN ('admin', 'user', 'manager', 'project_manager', 'team_member')),
     phone TEXT,
     is_active BOOLEAN DEFAULT true,
+    force_password_change BOOLEAN DEFAULT false,
     email_confirmed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     last_sign_in_at TIMESTAMPTZ
 );
+
+-- 添加字段注释
+COMMENT ON COLUMN profiles.force_password_change IS '是否强制用户修改密码，true表示用户下次登录时必须修改密码';
 
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);

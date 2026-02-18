@@ -641,7 +641,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     // Auto-update status based on progress
     if (newProgress === 100 && selectedModule.status !== 'completed') {
       updates.status = 'completed';
-    } else if (newProgress > 0 && selectedModule.status === 'not_started') {
+    } else if (newProgress > 0 && (selectedModule.status === 'not_started' || selectedModule.status === 'pending')) {
       updates.status = 'in_progress';
     }
 
@@ -869,7 +869,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
                     {associatedTasks.map(t => (
                       <li key={t.id} className="px-3 py-2 text-sm">
                         <span className="font-medium text-gray-900">{t.title}</span>
-                        <span className="ml-2 text-gray-500">{t.status === 'completed' ? '已完成' : t.status === 'in_progress' ? '进行中' : '未开始'}</span>
+                        <span className="ml-2 text-gray-500">{t.status === 'done' ? '已完成' : t.status === 'in_progress' ? '进行中' : '未开始'}</span>
                       </li>
                     ))}
                   </ul>

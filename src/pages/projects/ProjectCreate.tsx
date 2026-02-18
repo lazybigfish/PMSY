@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, apiClient } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
+import { useTheme } from '../../context/ThemeContext';
 import { Loader2 } from 'lucide-react';
 import { Client } from '../../types';
 import { numberToChinese } from '../../lib/utils';
+import { ThemedModal } from '../../components/theme/ThemedModal';
+import { ThemedButton } from '../../components/theme/ThemedButton';
 
 // 表单数据接口
 interface ProjectFormData {
@@ -27,7 +30,10 @@ interface TemplateVersion {
 const ProjectCreate = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+  const { themeConfig } = useTheme();
+  const { colors } = themeConfig;
+  const isDark = colors.background.main === '#0A0A0F';
+
   // 状态管理
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
@@ -41,6 +47,17 @@ const ProjectCreate = () => {
     description: '',
     is_public: false,
     client_id: '',
+  });
+
+  // 错误弹窗状态
+  const [errorModal, setErrorModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
   });
 
   // 初始化：获取客户列表和模板版本信息
@@ -68,24 +85,15 @@ const ProjectCreate = () => {
   // 获取当前激活的模板版本信息（仅用于展示）
   const fetchTemplateVersion = async () => {
     try {
-      const response = await fetch('/rest/v1/milestone-templates/active', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTemplateVersion(data.version);
-      } else if (response.status === 404) {
+      const data = await apiClient.get<{ version: TemplateVersion | null }>('/rest/v1/milestone-templates/active');
+      setTemplateVersion(data.version);
+    } catch (error: any) {
+      if (error?.message?.includes('404')) {
         // 没有激活的模板版本，这是正常的
         console.log('没有激活的里程碑模板版本');
-        setTemplateVersion(null);
       } else {
-        console.error('获取模板版本失败:', response.status, response.statusText);
+        console.error('获取模板版本失败:', error);
       }
-    } catch (error) {
-      console.error('获取模板版本失败:', error);
       // 静默处理，不影响用户创建项目
       setTemplateVersion(null);
     }
@@ -102,22 +110,31 @@ const ProjectCreate = () => {
     setShowClientSelect(false);
   };
 
+  // 显示错误弹窗
+  const showError = (title: string, message: string) => {
+    setErrorModal({
+      isOpen: true,
+      title,
+      message,
+    });
+  };
+
   // 提交表单
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user) {
-      alert('请先登录');
+      showError('未登录', '请先登录后再创建项目');
       return;
     }
 
     // 表单验证
     if (!formData.name.trim()) {
-      alert('请输入项目名称');
+      showError('验证失败', '请输入项目名称');
       return;
     }
     if (!formData.customer_name.trim()) {
-      alert('请选择客户');
+      showError('验证失败', '请选择客户');
       return;
     }
 
@@ -125,40 +142,31 @@ const ProjectCreate = () => {
 
     try {
       // 调用新的项目创建 API
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          customer_name: formData.customer_name.trim(),
-          amount: parseFloat(formData.amount) || 0,
-          description: formData.description.trim(),
-          is_public: formData.is_public,
-          client_id: formData.client_id || undefined,
-        }),
+      const project = await apiClient.post<{
+        id: string;
+        warning?: string;
+      }>('/api/projects', {
+        name: formData.name.trim(),
+        customer_name: formData.customer_name.trim(),
+        amount: parseFloat(formData.amount) || 0,
+        description: formData.description.trim(),
+        is_public: formData.is_public,
+        client_id: formData.client_id || undefined,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `创建项目失败: ${response.status}`);
-      }
-
-      const project = await response.json();
 
       // 检查是否有警告信息（里程碑初始化失败）
       if (project.warning) {
         console.warn('项目创建警告:', project.warning);
-        alert(`项目创建成功，但里程碑初始化出现问题：${project.warning}`);
+        showError('创建成功但有警告', `项目创建成功，但里程碑初始化出现问题：${project.warning}`);
       }
 
       // 跳转到项目详情页
       navigate(`/projects/${project.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('创建项目失败:', error);
-      alert(error instanceof Error ? error.message : '创建项目失败，请重试');
+      // 处理后端返回的错误信息
+      const errorMessage = error?.message || '创建项目失败，请重试';
+      showError('创建失败', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -322,6 +330,36 @@ const ProjectCreate = () => {
           </button>
         </div>
       </form>
+
+      {/* 错误提示弹窗 */}
+      <ThemedModal
+        isOpen={errorModal.isOpen}
+        onClose={() => setErrorModal(prev => ({ ...prev, isOpen: false }))}
+        title={errorModal.title}
+        size="sm"
+        footer={
+          <ThemedButton
+            variant="primary"
+            onClick={() => setErrorModal(prev => ({ ...prev, isOpen: false }))}
+          >
+            知道了
+          </ThemedButton>
+        }
+      >
+        <div className="flex items-start gap-4">
+          <div
+            className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center"
+            style={{
+              backgroundColor: isDark ? 'rgba(239,68,68,0.2)' : '#fef2f2',
+            }}
+          >
+            <span style={{ color: isDark ? '#f87171' : '#ef4444', fontSize: '1.25rem' }}>✕</span>
+          </div>
+          <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+            {errorModal.message}
+          </p>
+        </div>
+      </ThemedModal>
     </div>
   );
 };

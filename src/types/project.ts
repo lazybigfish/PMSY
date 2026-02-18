@@ -46,7 +46,7 @@ export interface ProjectModule {
   children?: ProjectModule[];
   level?: number;
   progress?: number;
-  status?: 'pending' | 'in_progress' | 'completed' | 'delayed';
+  status?: 'not_started' | 'pending' | 'in_progress' | 'completed' | 'delayed';
 }
 
 // 项目里程碑

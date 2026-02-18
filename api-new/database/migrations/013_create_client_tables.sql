@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS clients (
     industry TEXT,
     scale TEXT,
     address TEXT,
+    location TEXT,
     website TEXT,
     description TEXT,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),

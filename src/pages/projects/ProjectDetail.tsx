@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Project } from '../../types';
-import { ArrowLeft, Edit2, Package, Flag, AlertTriangle, FileText, Layers, BarChart3, Sparkles, X, Check, Eye } from 'lucide-react';
+import { ArrowLeft, Edit2, Package, Flag, AlertTriangle, FileText, Layers, BarChart3, Sparkles, X, Check, Eye, Wallet, FilePlus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContextNew';
 import ProjectOverview from './tabs/ProjectOverview';
 import FunctionalModules from './tabs/FunctionalModules';
@@ -11,6 +11,8 @@ import Milestones from './tabs/Milestones';
 import Risks from './tabs/Risks';
 import Reports from './tabs/Reports';
 import Suppliers from './tabs/Suppliers';
+import ClientPayments from './tabs/ClientPayments';
+import ExtraRequirements from './tabs/ExtraRequirements';
 
 // 项目权限级别类型
 export type ProjectPermissionLevel = 'none' | 'viewer' | 'member' | 'manager' | 'admin';
@@ -208,6 +210,8 @@ const ProjectDetail = () => {
     { id: 'milestones', label: '里程碑', icon: Flag, color: 'mint' },
     { id: 'risks', label: '风险', icon: AlertTriangle, color: 'sun' },
     { id: 'suppliers', label: '供应商', icon: Package, color: 'dark' },
+    { id: 'payments', label: '回款管理', icon: Wallet, color: 'primary' },
+    { id: 'extra', label: '合同外需求', icon: FilePlus, color: 'violet' },
     { id: 'reports', label: '周日报', icon: FileText, color: 'primary' },
   ];
 
@@ -412,6 +416,18 @@ const ProjectDetail = () => {
         )}
         {activeTab === 'reports' && canViewAll && (
           <Reports
+            projectId={id!}
+            canEdit={canEdit}
+          />
+        )}
+        {activeTab === 'payments' && canViewAll && (
+          <ClientPayments
+            projectId={id!}
+            canEdit={canEdit}
+          />
+        )}
+        {activeTab === 'extra' && canViewAll && (
+          <ExtraRequirements
             projectId={id!}
             canEdit={canEdit}
           />

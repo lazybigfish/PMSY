@@ -1,4 +1,5 @@
 import { IStorageProvider, UploadOptions, UploadResult, DownloadResult, FileMetadata, StorageQuota } from './StorageInterface';
+import { apiClient } from '../api';
 
 export class LocalStorageProvider implements IStorageProvider {
   private config: Record<string, unknown> = {};
@@ -10,8 +11,8 @@ export class LocalStorageProvider implements IStorageProvider {
 
     // 检查基础目录是否存在
     try {
-      const response = await fetch(`/api/storage/check?path=${encodeURIComponent(this.basePath)}`);
-      return response.ok;
+      const result = await apiClient.get<{ exists: boolean }>(`/api/storage/check?path=${encodeURIComponent(this.basePath)}`);
+      return result.exists;
     } catch (error) {
       console.error('Failed to initialize local storage:', error);
       return false;
@@ -37,23 +38,18 @@ export class LocalStorageProvider implements IStorageProvider {
       formData.append('folder', options.folder || '');
       formData.append('metadata', JSON.stringify(options.metadata || {}));
 
-      const response = await fetch('/api/storage/upload', {
-        method: 'POST',
-        body: formData,
+      const result = await apiClient.post<{
+        path: string;
+        url: string;
+        size: number;
+        checksum?: string;
+        message?: string;
+      }>('/api/storage/upload', formData, {
+        headers: {
+          // 不设置 Content-Type，让浏览器自动设置 multipart/form-data
+        }
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        return {
-          success: false,
-          path: '',
-          url: '',
-          size: 0,
-          error: error.message || 'Upload failed',
-        };
-      }
-
-      const result = await response.json();
       return {
         success: true,
         path: result.path,
@@ -74,17 +70,12 @@ export class LocalStorageProvider implements IStorageProvider {
   }
 
   async initiateMultipartUpload(fileName: string, mimeType: string): Promise<{ uploadId: string; key: string }> {
-    const response = await fetch('/api/storage/multipart/initiate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName, mimeType }),
-    });
+    const result = await apiClient.post<{
+      uploadId: string;
+      key: string;
+    }>('/api/storage/multipart/initiate', { fileName, mimeType });
 
-    if (!response.ok) {
-      throw new Error('Failed to initiate multipart upload');
-    }
-
-    return await response.json();
+    return result;
   }
 
   async uploadPart(uploadId: string, key: string, partNumber: number, data: Buffer): Promise<{ etag: string }> {
@@ -94,16 +85,15 @@ export class LocalStorageProvider implements IStorageProvider {
     formData.append('partNumber', partNumber.toString());
     formData.append('data', new Blob([new Uint8Array(data)]));
 
-    const response = await fetch('/api/storage/multipart/upload', {
-      method: 'POST',
-      body: formData,
+    const result = await apiClient.post<{
+      etag: string;
+    }>('/api/storage/multipart/upload', formData, {
+      headers: {
+        // 不设置 Content-Type，让浏览器自动设置 multipart/form-data
+      }
     });
 
-    if (!response.ok) {
-      throw new Error('Failed to upload part');
-    }
-
-    return await response.json();
+    return result;
   }
 
   async completeMultipartUpload(
@@ -111,36 +101,42 @@ export class LocalStorageProvider implements IStorageProvider {
     key: string,
     parts: { partNumber: number; etag: string }[]
   ): Promise<UploadResult> {
-    const response = await fetch('/api/storage/multipart/complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uploadId, key, parts }),
-    });
+    try {
+      const result = await apiClient.post<{
+        path: string;
+        url: string;
+        size: number;
+        checksum?: string;
+        message?: string;
+      }>('/api/storage/multipart/complete', { uploadId, key, parts });
 
-    if (!response.ok) {
-      const error = await response.json();
+      return {
+        success: true,
+        path: result.path,
+        url: result.url,
+        size: result.size,
+        checksum: result.checksum,
+      };
+    } catch (error: unknown) {
+      const err = error as Error;
       return {
         success: false,
         path: '',
         url: '',
         size: 0,
-        error: error.message || 'Failed to complete multipart upload',
+        error: err.message || 'Failed to complete multipart upload',
       };
     }
-
-    const result = await response.json();
-    return {
-      success: true,
-      path: result.path,
-      url: result.url,
-      size: result.size,
-      checksum: result.checksum,
-    };
   }
 
   async download(path: string): Promise<DownloadResult> {
     try {
-      const response = await fetch(`/api/storage/download?path=${encodeURIComponent(path)}`);
+      // 使用 fetch 下载文件（二进制数据）
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/storage/download?path=${encodeURIComponent(path)}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+        },
+      });
       
       if (!response.ok) {
         return {
@@ -170,13 +166,8 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async delete(path: string): Promise<boolean> {
     try {
-      const response = await fetch('/api/storage/delete', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path }),
-      });
-
-      return response.ok;
+      await apiClient.delete(`/api/storage/delete?path=${encodeURIComponent(path)}`);
+      return true;
     } catch (error) {
       console.error('Failed to delete file:', error);
       return false;
@@ -185,10 +176,7 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async exists(path: string): Promise<boolean> {
     try {
-      const response = await fetch(`/api/storage/exists?path=${encodeURIComponent(path)}`);
-      if (!response.ok) return false;
-      
-      const result = await response.json();
+      const result = await apiClient.get<{ exists: boolean }>(`/api/storage/exists?path=${encodeURIComponent(path)}`);
       return result.exists;
     } catch {
       return false;
@@ -197,10 +185,7 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async getMetadata(path: string): Promise<FileMetadata | null> {
     try {
-      const response = await fetch(`/api/storage/metadata?path=${encodeURIComponent(path)}`);
-      if (!response.ok) return null;
-      
-      return await response.json();
+      return await apiClient.get<FileMetadata>(`/api/storage/metadata?path=${encodeURIComponent(path)}`);
     } catch {
       return null;
     }
@@ -208,15 +193,9 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async generateThumbnail(path: string, width: number, height: number): Promise<string | null> {
     try {
-      const response = await fetch('/api/storage/thumbnail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, width, height }),
-      });
-
-      if (!response.ok) return null;
-      
-      const result = await response.json();
+      const result = await apiClient.post<{
+        thumbnailUrl: string;
+      }>('/api/storage/thumbnail', { path, width, height });
       return result.thumbnailUrl;
     } catch {
       return null;
@@ -225,12 +204,7 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async getQuota(): Promise<StorageQuota> {
     try {
-      const response = await fetch('/api/storage/quota');
-      if (!response.ok) {
-        return { total: 0, used: 0, available: 0 };
-      }
-      
-      return await response.json();
+      return await apiClient.get<StorageQuota>('/api/storage/quota');
     } catch {
       return { total: 0, used: 0, available: 0 };
     }
@@ -238,8 +212,8 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch('/api/storage/test');
-      return response.ok;
+      await apiClient.get('/api/storage/test');
+      return true;
     } catch {
       return false;
     }

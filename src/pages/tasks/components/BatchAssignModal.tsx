@@ -90,7 +90,7 @@ export const BatchAssignModal: React.FC<BatchAssignModalProps> = ({
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="md">
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="md">
       <div className="p-6">
         {/* 标题 */}
         <div className="mb-6">

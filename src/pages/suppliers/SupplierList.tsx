@@ -129,19 +129,19 @@ export default function SupplierList() {
 
         const [projectsResult, acceptancesResult] = await Promise.all([
           api.db.from('projects').select('id, name, status').in('id', projectIds),
-          api.db.from('supplier_acceptances').select('project_supplier_id, result').in('project_supplier_id', projectSupplierIds)
+          api.db.from('supplier_acceptances').select('project_supplier_id, status').in('project_supplier_id', projectSupplierIds)
         ]);
 
         if (projectsResult.error) throw projectsResult.error;
         if (acceptancesResult.error) throw acceptancesResult.error;
 
         const projectsMap = new Map((projectsResult.data || []).map(p => [p.id, p]));
-        const acceptancesMap = new Map<string, { result: string }[]>();
+        const acceptancesMap = new Map<string, { status: string }[]>();
         (acceptancesResult.data || []).forEach(a => {
           if (!acceptancesMap.has(a.project_supplier_id)) {
             acceptancesMap.set(a.project_supplier_id, []);
           }
-          acceptancesMap.get(a.project_supplier_id)!.push({ result: a.result });
+          acceptancesMap.get(a.project_supplier_id)!.push({ status: a.status });
         });
 
         const projects = projectSuppliersData.map(ps => ({
@@ -160,7 +160,7 @@ export default function SupplierList() {
               projectName: p.project?.name || '未知项目',
               amount: p.contract_amount || 0,
               acceptanceStatus: p.acceptances?.length > 0
-                  ? `${p.acceptances.filter((a: { result: string }) => a.result === 'pass').length} 通过 / ${p.acceptances.length} 总计`
+                  ? `${p.acceptances.filter((a: { status: string }) => a.status === 'passed').length} 通过 / ${p.acceptances.length} 总计`
                   : '暂无验收'
           }))
         });
@@ -388,8 +388,23 @@ export default function SupplierList() {
       )}
 
       {isDetailModalOpen && (
-        <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in">
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4 z-[100] animate-fade-in"
+          style={{
+            background: `radial-gradient(circle at center,
+              rgba(0,0,0,0.5) 0%,
+              rgba(0,0,0,0.35) 15%,
+              rgba(0,0,0,0.2) 30%,
+              rgba(0,0,0,0.05) 50%,
+              transparent 70%
+            )`,
+          }}
+          onClick={() => setIsDetailModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-5 border-b border-dark-100 flex items-center justify-between bg-gradient-to-r from-sun-50/50 to-transparent rounded-t-2xl">
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${currentSupplier.status === 'active' ? 'bg-sun-100' : 'bg-dark-100'}`}>

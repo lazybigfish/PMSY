@@ -160,7 +160,7 @@ function validateTableName(table: string): boolean {
  * 获取当前激活的里程碑模板（包含任务）
  * 用于新建项目时初始化里程碑
  */
-router.get('/milestone-templates/active', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/milestone-templates/active', requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { db } = await import('../config/database');
 
@@ -170,7 +170,8 @@ router.get('/milestone-templates/active', requireAuth, async (req: Request, res:
       .first();
 
     if (!activeVersion) {
-      return res.status(404).json({ error: '没有激活的里程碑模板版本' });
+      res.status(404).json({ error: '没有激活的里程碑模板版本' });
+      return;
     }
 
     // 2. 获取该版本的所有里程碑模板
@@ -265,7 +266,7 @@ router.get('/:table', requireAuth, async (req: Request, res: Response, next: Nex
       // 非管理员只能看到公开项目或自己参与的项目
       if (!isAdmin) {
         // 获取用户可访问的项目ID列表
-        const accessibleProjectIds = await getUserAccessibleProjects(userId, userRole);
+        const accessibleProjectIds = await getUserAccessibleProjects(userId!, userRole);
 
         if (accessibleProjectIds.length === 0) {
           // 用户没有可访问的项目，返回空数组

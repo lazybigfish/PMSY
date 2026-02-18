@@ -1,5 +1,16 @@
 import { Knex } from 'knex';
-import bcrypt from 'bcryptjs';
+
+/**
+ * 管理员用户初始化脚本
+ * 
+ * 【注意】管理员用户现在已在迁移脚本中直接初始化
+ * 此脚本保留用于幂等性检查和密码重置（如需要）
+ * 
+ * 默认管理员信息：
+ * - 用户名: admin
+ * - 邮箱: admin@pmsy.com
+ * - 密码: Willyou@2026
+ */
 
 export async function seed(knex: Knex): Promise<void> {
   // 检查管理员是否已存在
@@ -7,36 +18,12 @@ export async function seed(knex: Knex): Promise<void> {
     .where('id', '00000000-0000-0000-0000-000000000001')
     .first();
 
-  // 生成密码哈希 - 使用标准密码 Willyou@2026
-  const passwordHash = await bcrypt.hash('Willyou@2026', 10);
-
   if (existingAdmin) {
-    // 如果管理员已存在，更新密码为统一密码
-    await knex('profiles')
-      .where('id', '00000000-0000-0000-0000-000000000001')
-      .update({
-        password_hash: passwordHash,
-        email: 'admin@pmsy.com',
-        username: 'admin',
-        updated_at: new Date(),
-      });
-    console.log('✅ 管理员用户密码已更新为: Willyou@2026');
+    console.log('✅ 管理员用户已存在，跳过初始化');
+    console.log('   用户名: admin');
+    console.log('   邮箱: admin@pmsy.com');
     return;
   }
 
-  // 插入默认管理员用户
-  await knex('profiles').insert({
-    id: '00000000-0000-0000-0000-000000000001',
-    email: 'admin@pmsy.com',
-    username: 'admin',
-    password_hash: passwordHash,
-    full_name: '系统管理员',
-    role: 'admin',
-    is_active: true,
-    email_confirmed_at: new Date(),
-    created_at: new Date(),
-    updated_at: new Date(),
-  });
-
-  console.log('✅ 默认管理员用户已创建: admin@pmsy.com / Willyou@2026');
+  console.log('⚠️  警告: 管理员用户不存在，请检查迁移脚本是否已执行');
 }

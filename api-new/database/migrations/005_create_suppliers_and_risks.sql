@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS suppliers (
     contact_person TEXT,
     phone TEXT,
     email TEXT,
+    address TEXT,
+    category TEXT,
     description TEXT,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,

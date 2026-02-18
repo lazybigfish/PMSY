@@ -15,6 +15,16 @@ import {
 } from '../types/auth';
 import { v4 as uuidv4 } from 'uuid';
 
+// 管理员创建用户请求类型
+export interface AdminCreateUserRequest {
+  email: string;
+  password: string;
+  full_name?: string;
+  username?: string;
+  role?: string;
+  phone?: string;
+}
+
 /**
  * 认证服务
  * 处理用户注册、登录、信息管理等认证相关逻辑
@@ -136,8 +146,14 @@ export async function register(data: SignUpRequest): Promise<AuthResponse> {
 export async function login(data: LoginRequest): Promise<AuthResponse> {
   const { email, password } = data;
 
-  // 查找用户
-  const user = await findUserByEmail(email);
+  // 查找用户 - 支持邮箱或用户名登录
+  let user = await findUserByEmail(email);
+  
+  // 如果邮箱找不到，尝试用用户名查找
+  if (!user) {
+    user = await findUserByUsername(email);
+  }
+  
   if (!user) {
     throw new Error('邮箱或密码错误');
   }
@@ -380,6 +396,142 @@ export async function deactivateUser(userId: string): Promise<void> {
     });
 }
 
+/**
+ * 管理员创建用户
+ * @param data - 创建用户请求数据
+ * @returns 创建的用户信息
+ */
+export async function adminCreateUser(data: AdminCreateUserRequest): Promise<User> {
+  const { email, password, full_name, username, role = 'user', phone } = data;
+
+  // 检查邮箱是否已存在
+  const existingUser = await findUserByEmail(email);
+  if (existingUser) {
+    throw new Error('该邮箱已被注册');
+  }
+
+  // 如果提供了用户名，检查是否已存在
+  if (username) {
+    const existingUsername = await findUserByUsername(username);
+    if (existingUsername) {
+      throw new Error('该用户名已被使用');
+    }
+  }
+
+  // 哈希密码
+  const passwordHash = await hashPassword(password);
+
+  // 创建用户
+  const newUser = {
+    id: uuidv4(),
+    email: email.toLowerCase(),
+    username: username ? username.toLowerCase() : null,
+    password_hash: passwordHash,
+    full_name: full_name || null,
+    avatar_url: null,
+    role: role,
+    is_active: true,
+    email_confirmed_at: new Date(),
+    created_at: new Date(),
+    updated_at: new Date(),
+    last_sign_in_at: null,
+    phone: phone || null,
+  };
+
+  await db('profiles').insert(newUser);
+
+  // 返回用户信息（不包含密码，并将 Date 转换为 string）
+  const { password_hash, ...userWithoutPassword } = newUser;
+  return {
+    ...userWithoutPassword,
+    email_confirmed_at: userWithoutPassword.email_confirmed_at?.toISOString() || null,
+    created_at: userWithoutPassword.created_at.toISOString(),
+    updated_at: userWithoutPassword.updated_at.toISOString(),
+  } as User;
+}
+
+/**
+ * 生成随机密码
+ * @param length - 密码长度
+ * @returns 随机密码
+ */
+function generateRandomPassword(length: number = 12): string {
+  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+  const numbers = '0123456789';
+  const special = '!@#$%^&*';
+  const all = uppercase + lowercase + numbers + special;
+
+  let password = '';
+  // 确保至少包含每种类型的字符
+  password += uppercase[Math.floor(Math.random() * uppercase.length)];
+  password += lowercase[Math.floor(Math.random() * lowercase.length)];
+  password += numbers[Math.floor(Math.random() * numbers.length)];
+  password += special[Math.floor(Math.random() * special.length)];
+
+  // 填充剩余长度
+  for (let i = 4; i < length; i++) {
+    password += all[Math.floor(Math.random() * all.length)];
+  }
+
+  // 打乱顺序
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+}
+
+/**
+ * 重置用户密码（管理员功能）
+ * @param userId - 用户 ID
+ * @param mode - 重置模式：'random' 随机密码 / 'fixed' 固定密码
+ * @param fixedPassword - 固定密码（mode='fixed' 时使用）
+ * @returns 新密码
+ */
+export async function resetPassword(
+  userId: string,
+  mode: 'random' | 'fixed',
+  fixedPassword?: string
+): Promise<string> {
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new Error('用户不存在');
+  }
+
+  // 生成新密码
+  const newPassword = mode === 'fixed' && fixedPassword
+    ? fixedPassword
+    : generateRandomPassword();
+
+  // 哈希新密码
+  const passwordHash = await hashPassword(newPassword);
+
+  await db('profiles')
+    .where({ id: userId })
+    .update({
+      password_hash: passwordHash,
+      updated_at: new Date(),
+    });
+
+  return newPassword;
+}
+
+/**
+ * 设置强制改密状态（管理员功能）
+ * @param userId - 用户 ID
+ * @param force - 是否强制改密
+ */
+export async function setForcePasswordChange(userId: string, force: boolean): Promise<void> {
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new Error('用户不存在');
+  }
+
+  await db('profiles')
+    .where({ id: userId })
+    .update({
+      force_password_change: force,
+      updated_at: new Date(),
+    });
+}
+
 export default {
   findUserByEmail,
   findUserById,
@@ -392,4 +544,7 @@ export default {
   adminUpdateUser,
   listUsers,
   deactivateUser,
+  adminCreateUser,
+  resetPassword,
+  setForcePasswordChange,
 };

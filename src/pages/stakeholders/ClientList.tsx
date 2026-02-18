@@ -357,8 +357,23 @@ const ClientDetailModal: React.FC<ClientDetailModalProps> = ({ client, onClose }
   };
 
   return (
-    <div className="fixed inset-0 bg-dark-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-fade-in">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in">
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4 z-[100] animate-fade-in"
+      style={{
+        background: `radial-gradient(circle at center,
+          rgba(0,0,0,0.5) 0%,
+          rgba(0,0,0,0.35) 15%,
+          rgba(0,0,0,0.2) 30%,
+          rgba(0,0,0,0.05) 50%,
+          transparent 70%
+        )`,
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-6 py-5 border-b border-dark-100 flex items-center justify-between bg-gradient-to-r from-primary-50/50 to-transparent">
           <div className="flex items-center gap-3">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${client.status === 'active' ? 'bg-primary-100' : 'bg-dark-100'}`}>

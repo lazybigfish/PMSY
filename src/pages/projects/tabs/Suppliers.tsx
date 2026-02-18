@@ -5,6 +5,8 @@ import { Plus, FileText, X, ChevronRight, ChevronDown } from 'lucide-react';
 import { FileUploadButton } from '../../../components/FileUploadButton';
 import { SupplierDetailModal } from '../components/SupplierDetailModal';
 import { ModalForm } from '../../../components/Modal';
+import { ProcurementStatsCard } from '../../../components/ProcurementStatsCard';
+import { useProjectFinance } from '../../../hooks/useProjectFinance';
 import { numberToChinese } from '../../../lib/utils';
 
 // 模块树形选择组件
@@ -187,30 +189,17 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
     contract_amount: 0,
     contract_file_url: ''
   });
+  const [contractAmountError, setContractAmountError] = useState<string>('');
 
   // Detail Modal State
   const [selectedProjectSupplier, setSelectedProjectSupplier] = useState<ProjectSupplier | null>(null);
 
-  const [projectAmount, setProjectAmount] = useState(0);
+  // 使用项目财务 Hook
+  const { stats, isLoading: statsLoading, refresh: refreshStats, isLowBudget } = useProjectFinance({ projectId });
 
   useEffect(() => {
     fetchData();
-    fetchProjectAmount();
   }, [projectId]);
-
-  const fetchProjectAmount = async () => {
-    try {
-        const { data, error } = await api.db
-            .from('projects')
-            .select('amount')
-            .eq('id', projectId)
-            .single();
-        if (error) throw error;
-        setProjectAmount(data?.amount || 0);
-    } catch (error) {
-        console.error('Error fetching project amount:', error);
-    }
-  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -307,16 +296,29 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
 
   const fetchAvailableSuppliers = async () => {
     try {
-      const existingIds = projectSuppliers.map(ps => ps.supplier_id);
-      let query = api.db.from('suppliers').select('*').eq('status', 'active');
-      
-      if (existingIds.length > 0) {
-        query = query.not('id', 'in', `(${existingIds.join(',')})`);
-      }
+      // 获取已关联的供应商ID列表
+      const existingIds = projectSuppliers.map(ps => ps.supplier_id).filter(Boolean);
 
-      const { data, error } = await query;
+      // 获取所有活跃的供应商
+      const { data: allSuppliers, error } = await api.db
+        .from('suppliers')
+        .select('*')
+        .eq('status', 'active')
+        .order('name');
+
       if (error) throw error;
-      setAvailableSuppliers(data || []);
+
+      // 过滤掉已关联的供应商
+      const availableSuppliers = (allSuppliers || []).filter(
+        (supplier: Supplier) => !existingIds.includes(supplier.id)
+      );
+
+      setAvailableSuppliers(availableSuppliers);
+
+      // 如果没有可用供应商，给出提示
+      if (availableSuppliers.length === 0 && (allSuppliers || []).length > 0) {
+        alert('所有可用供应商已关联到该项目，如需调整请前往已关联供应商详情页修改。');
+      }
     } catch (error) {
       console.error('Error fetching available suppliers:', error);
     }
@@ -325,18 +327,18 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
   const handleAddSupplier = async () => {
     if (!selectedSupplierId) return;
 
+    const projectAmount = stats?.projectAmount || 0;
+    const remainingAmount = stats?.remainingAmount || 0;
+
     // 1. Check if contract amount exceeds total project amount
     if (addForm.contract_amount > projectAmount) {
         alert(`合同金额 (¥${addForm.contract_amount.toLocaleString()}) 不能超过项目总金额 (¥${projectAmount.toLocaleString()})。`);
         return;
     }
 
-    // 2. Check if total contract amount of all suppliers exceeds project amount
-    const currentTotalContractAmount = projectSuppliers.reduce((sum, ps) => sum + (Number(ps.contract_amount) || 0), 0);
-    const newTotal = currentTotalContractAmount + addForm.contract_amount;
-    
-    if (newTotal > projectAmount) {
-        alert(`添加失败：所有供应商合同总额 (¥${newTotal.toLocaleString()}) 将超过项目总金额 (¥${projectAmount.toLocaleString()})。\n当前已用金额：¥${currentTotalContractAmount.toLocaleString()}\n剩余可用金额：¥${(projectAmount - currentTotalContractAmount).toLocaleString()}`);
+    // 2. Check if contract amount exceeds remaining amount
+    if (addForm.contract_amount > remainingAmount) {
+        alert(`合同金额 (¥${addForm.contract_amount.toLocaleString()}) 超出剩余可外采金额 (¥${remainingAmount.toLocaleString()})。\n请调整合同金额或联系项目经理。`);
         return;
     }
 
@@ -352,10 +354,12 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
       if (error) throw error;
       setIsAddModalOpen(false);
       fetchData();
+      refreshStats(); // 刷新外采统计
       // Reset form
       setSelectedSupplierId('');
       setSelectedModuleIds([]);
       setAddForm({ contract_amount: 0, contract_file_url: '' });
+      setContractAmountError('');
     } catch (error: unknown) {
       console.error('Error adding supplier:', error);
       const err = error as Error;
@@ -369,13 +373,53 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
       const { error } = await api.db.from('project_suppliers').delete().eq('id', id);
       if (error) throw error;
       setProjectSuppliers(prev => prev.filter(p => p.id !== id));
+      refreshStats(); // 刷新外采统计
     } catch (error) {
       console.error('Error removing supplier:', error);
       alert('移除失败');
     }
   };
 
+  // 检查是否可以关联供应商
+  const canAssociateSupplier = (): { canAdd: boolean; message?: string } => {
+    // 1. 检查项目是否有功能模块
+    if (projectModules.length === 0) {
+      return {
+        canAdd: false,
+        message: '该项目暂无功能模块，请先创建功能模块后再关联供应商。'
+      };
+    }
+
+    // 2. 获取所有已关联的模块ID
+    const allAssociatedModuleIds = new Set<string>();
+    projectSuppliers.forEach(ps => {
+      (ps.module_ids || []).forEach((moduleId: string) => {
+        allAssociatedModuleIds.add(moduleId);
+      });
+    });
+
+    // 3. 检查是否所有模块都已关联供应商
+    const allModuleIds = projectModules.map(m => m.id);
+    const allModulesAssociated = allModuleIds.every(id => allAssociatedModuleIds.has(id));
+
+    if (allModulesAssociated) {
+      return {
+        canAdd: false,
+        message: '所有功能模块已关联供应商，无法继续添加。如需调整，请先移除现有供应商或修改模块分配。'
+      };
+    }
+
+    return { canAdd: true };
+  };
+
   const openAddModal = () => {
+    // 检查是否可以关联供应商
+    const checkResult = canAssociateSupplier();
+    if (!checkResult.canAdd) {
+      alert(checkResult.message);
+      return;
+    }
+
     fetchAvailableSuppliers();
     setIsAddModalOpen(true);
   };
@@ -385,8 +429,24 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
     return ids.map(id => projectModules.find(m => m.id === id)?.name).filter(Boolean).join(', ');
   };
 
+  // 合同金额变更时实时校验
+  const handleContractAmountChange = (value: string) => {
+    const numValue = value === '' ? 0 : parseFloat(value);
+    setAddForm({ ...addForm, contract_amount: numValue });
+    
+    const remainingAmount = stats?.remainingAmount || 0;
+    if (numValue > remainingAmount) {
+      setContractAmountError(`合同金额超出剩余可外采金额 ¥${remainingAmount.toLocaleString('zh-CN')}`);
+    } else {
+      setContractAmountError('');
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* 外采统计卡片 */}
+      <ProcurementStatsCard stats={stats} isLoading={statsLoading} />
+
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-medium text-gray-900">供应商列表</h2>
         {canEdit && (
@@ -488,13 +548,17 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
       {/* Add Modal */}
       <ModalForm
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setContractAmountError('');
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           handleAddSupplier();
         }}
         title="关联新供应商"
         maxWidth="lg"
+        submitDisabled={!!contractAmountError || !selectedSupplierId}
       >
         <div className="space-y-4 max-h-[70vh] overflow-y-auto">
           <div>
@@ -521,7 +585,14 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">合同金额</label>
+            <label className="block text-sm font-medium text-gray-700">
+              合同金额
+              {stats && (
+                <span className="ml-2 text-xs text-gray-500">
+                  (剩余可外采: ¥{stats.remainingAmount.toLocaleString('zh-CN')})
+                </span>
+              )}
+            </label>
             <div className="mt-1 relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <span className="text-gray-500 sm:text-sm">¥</span>
@@ -530,7 +601,9 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
                 type="text"
                 inputMode="decimal"
                 pattern="[0-9]*\.?[0-9]*"
-                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
+                className={`focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm rounded-md ${
+                  contractAmountError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
+                }`}
                 placeholder="0.00"
                 value={addForm.contract_amount === 0 ? '' : addForm.contract_amount}
                 onFocus={(e) => {
@@ -542,12 +615,17 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
                   const value = e.target.value;
                   // 只允许数字和小数点
                   if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                    setAddForm({ ...addForm, contract_amount: value === '' ? 0 : parseFloat(value) });
+                    handleContractAmountChange(value);
                   }
                 }}
               />
             </div>
-            {addForm.contract_amount > 0 && (
+            {contractAmountError && (
+              <p className="mt-1 text-xs text-red-600">
+                {contractAmountError}
+              </p>
+            )}
+            {addForm.contract_amount > 0 && !contractAmountError && (
               <p className="mt-1 text-xs text-indigo-600">
                 大写：{numberToChinese(addForm.contract_amount)}
               </p>
@@ -600,12 +678,13 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
       </ModalForm>
 
       {selectedProjectSupplier && (
-         <SupplierDetailModal 
-            projectSupplier={selectedProjectSupplier} 
+         <SupplierDetailModal
+            projectSupplier={selectedProjectSupplier}
             projectModules={projectModules}
-            onClose={() => setSelectedProjectSupplier(null)} 
+            onClose={() => setSelectedProjectSupplier(null)}
             onUpdate={() => {
                 fetchData();
+                refreshStats(); // 刷新外采统计
             }}
          />
       )}

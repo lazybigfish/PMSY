@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContextNew';
+import { useTheme } from '../context/ThemeContext';
 import { api } from '../lib/api';
 import {
   LayoutDashboard,
@@ -24,6 +25,7 @@ import { Avatar } from './Avatar';
 
 const Layout = () => {
   const { signOut, profile } = useAuth();
+  const { logoStyle } = useTheme();
   const location = useLocation();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
   const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set());
@@ -127,10 +129,23 @@ const Layout = () => {
               {/* Logo */}
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/" className="flex items-center gap-2 group">
-                  <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow group-hover:scale-105 transition-transform">
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform"
+                    style={{
+                      background: logoStyle.background,
+                      boxShadow: logoStyle.shadow,
+                    }}
+                  >
                     <Sparkles className="w-5 h-5 text-white" />
                   </div>
-                  <span className="text-xl font-display font-bold text-gradient">
+                  <span 
+                    className="text-xl font-display font-bold"
+                    style={{
+                      background: logoStyle.textGradient,
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                    }}
+                  >
                     PMSY
                   </span>
                 </Link>

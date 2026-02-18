@@ -54,20 +54,26 @@ interface PostgrestResponse<T> {
 }
 
 /**
+ * 基础过滤器操作接口（用于构建器内部）
+ */
+interface BaseFilterOperations<T> {
+  eq: (column: string, value: any) => T;
+  neq: (column: string, value: any) => T;
+  gt: (column: string, value: any) => T;
+  gte: (column: string, value: any) => T;
+  lt: (column: string, value: any) => T;
+  lte: (column: string, value: any) => T;
+  like: (column: string, pattern: string) => T;
+  ilike: (column: string, pattern: string) => T;
+  in: (column: string, values: any[]) => T;
+  is: (column: string, value: any) => T;
+  not: (column: string, operator: string, value: any) => T;
+}
+
+/**
  * PostgREST 过滤器构建器
  */
-interface PostgrestFilterBuilder<T = any> {
-  eq: (column: string, value: any) => PostgrestFilterBuilder<T>;
-  neq: (column: string, value: any) => PostgrestFilterBuilder<T>;
-  gt: (column: string, value: any) => PostgrestFilterBuilder<T>;
-  gte: (column: string, value: any) => PostgrestFilterBuilder<T>;
-  lt: (column: string, value: any) => PostgrestFilterBuilder<T>;
-  lte: (column: string, value: any) => PostgrestFilterBuilder<T>;
-  like: (column: string, pattern: string) => PostgrestFilterBuilder<T>;
-  ilike: (column: string, pattern: string) => PostgrestFilterBuilder<T>;
-  in: (column: string, values: any[]) => PostgrestFilterBuilder<T>;
-  is: (column: string, value: any) => PostgrestFilterBuilder<T>;
-  not: (column: string, operator: string, value: any) => PostgrestFilterBuilder<T>;
+interface PostgrestFilterBuilder<T = any> extends BaseFilterOperations<PostgrestFilterBuilder<T>> {
   order: (column: string, options?: { ascending?: boolean }) => PostgrestTransformBuilder<T>;
   limit: (count: number) => Promise<PostgrestResponse<T[]>>;
   single: () => Promise<PostgrestResponse<T>>;
@@ -76,24 +82,36 @@ interface PostgrestFilterBuilder<T = any> {
 }
 
 /**
- * PostgREST 转换构建器
+ * PostgREST 转换构建器（在 order 之后使用）
  */
-interface PostgrestTransformBuilder<T = any> {
-  eq: (column: string, value: any) => PostgrestTransformBuilder<T>;
-  neq: (column: string, value: any) => PostgrestTransformBuilder<T>;
-  gt: (column: string, value: any) => PostgrestTransformBuilder<T>;
-  gte: (column: string, value: any) => PostgrestTransformBuilder<T>;
-  lt: (column: string, value: any) => PostgrestTransformBuilder<T>;
-  lte: (column: string, value: any) => PostgrestTransformBuilder<T>;
-  like: (column: string, pattern: string) => PostgrestTransformBuilder<T>;
-  ilike: (column: string, pattern: string) => PostgrestTransformBuilder<T>;
-  in: (column: string, values: any[]) => PostgrestTransformBuilder<T>;
-  is: (column: string, value: any) => PostgrestTransformBuilder<T>;
-  not: (column: string, operator: string, value: any) => PostgrestTransformBuilder<T>;
+interface PostgrestTransformBuilder<T = any> extends BaseFilterOperations<PostgrestTransformBuilder<T>> {
   limit: (count: number) => Promise<PostgrestResponse<T[]>>;
   single: () => Promise<PostgrestResponse<T>>;
   range: (from: number, to: number) => Promise<PostgrestResponse<T[]>>;
   then: (onFulfilled?: (value: PostgrestResponse<T[]>) => any, onRejected?: (reason: any) => any) => Promise<any>;
+}
+
+/**
+ * Insert 构建器
+ */
+interface PostgrestInsertBuilder<T = any> {
+  select: (columns?: string) => Promise<PostgrestResponse<T[]>>;
+  // 支持直接 await 获取结果
+  then: (onFulfilled?: (value: PostgrestResponse<T[]>) => any, onRejected?: (reason: any) => any) => Promise<any>;
+}
+
+/**
+ * Update 构建器
+ */
+interface PostgrestUpdateBuilder<T = any> extends BaseFilterOperations<PostgrestUpdateBuilder<T>> {
+  then: (onFulfilled?: (value: PostgrestResponse<T[]>) => any, onRejected?: (reason: any) => any) => Promise<any>;
+}
+
+/**
+ * Delete 构建器
+ */
+interface PostgrestDeleteBuilder<T = any> extends BaseFilterOperations<PostgrestDeleteBuilder<T>> {
+  then: (onFulfilled?: (value: PostgrestResponse<null>) => any, onRejected?: (reason: any) => any) => Promise<any>;
 }
 
 /**
@@ -209,9 +227,9 @@ export const db = {
    */
   from: <T = any>(table: string): {
     select: (columns?: string) => PostgrestFilterBuilder<T>;
-    insert: (data: any | any[]) => Promise<PostgrestResponse<T[]>>;
-    update: (data: any) => { eq: (column: string, value: any) => Promise<PostgrestResponse<T[]>> };
-    delete: () => { eq: (column: string, value: any) => Promise<PostgrestResponse<null>> };
+    insert: (data: any | any[]) => PostgrestInsertBuilder<T>;
+    update: (data: any) => PostgrestUpdateBuilder<T>;
+    delete: () => PostgrestDeleteBuilder<T>;
   } => {
     const buildQuery = (
       columns: string,
@@ -264,51 +282,23 @@ export const db = {
     };
 
     const createFilterBuilder = (columns: string, filters: Record<string, any> = {}): PostgrestFilterBuilder<T> => {
+      const addFilter = (builder: any, key: string, value: any) => {
+        filters[key] = value;
+        return builder;
+      };
+
       const builder: PostgrestFilterBuilder<T> = {
-        eq: (column: string, value: any) => {
-          filters[`eq.${column}`] = value;
-          return builder;
-        },
-        neq: (column: string, value: any) => {
-          filters[`neq.${column}`] = value;
-          return builder;
-        },
-        gt: (column: string, value: any) => {
-          filters[`gt.${column}`] = value;
-          return builder;
-        },
-        gte: (column: string, value: any) => {
-          filters[`gte.${column}`] = value;
-          return builder;
-        },
-        lt: (column: string, value: any) => {
-          filters[`lt.${column}`] = value;
-          return builder;
-        },
-        lte: (column: string, value: any) => {
-          filters[`lte.${column}`] = value;
-          return builder;
-        },
-        like: (column: string, pattern: string) => {
-          filters[`like.${column}`] = pattern;
-          return builder;
-        },
-        ilike: (column: string, pattern: string) => {
-          filters[`ilike.${column}`] = pattern;
-          return builder;
-        },
-        in: (column: string, values: any[]) => {
-          filters[`in.${column}`] = values.join(',');
-          return builder;
-        },
-        is: (column: string, value: any) => {
-          filters[`is.${column}`] = value;
-          return builder;
-        },
-        not: (column: string, operator: string, value: any) => {
-          filters[`not.${column}`] = `${operator}.${value}`;
-          return builder;
-        },
+        eq: (column: string, value: any) => addFilter(builder, `eq.${column}`, value) as PostgrestFilterBuilder<T>,
+        neq: (column: string, value: any) => addFilter(builder, `neq.${column}`, value) as PostgrestFilterBuilder<T>,
+        gt: (column: string, value: any) => addFilter(builder, `gt.${column}`, value) as PostgrestFilterBuilder<T>,
+        gte: (column: string, value: any) => addFilter(builder, `gte.${column}`, value) as PostgrestFilterBuilder<T>,
+        lt: (column: string, value: any) => addFilter(builder, `lt.${column}`, value) as PostgrestFilterBuilder<T>,
+        lte: (column: string, value: any) => addFilter(builder, `lte.${column}`, value) as PostgrestFilterBuilder<T>,
+        like: (column: string, pattern: string) => addFilter(builder, `like.${column}`, pattern) as PostgrestFilterBuilder<T>,
+        ilike: (column: string, pattern: string) => addFilter(builder, `ilike.${column}`, pattern) as PostgrestFilterBuilder<T>,
+        in: (column: string, values: any[]) => addFilter(builder, `in.${column}`, values.join(',')) as PostgrestFilterBuilder<T>,
+        is: (column: string, value: any) => addFilter(builder, `is.${column}`, value) as PostgrestFilterBuilder<T>,
+        not: (column: string, operator: string, value: any) => addFilter(builder, `not.${column}`, `${operator}.${value}`) as PostgrestFilterBuilder<T>,
         order: (column: string, options?: { ascending?: boolean }) => {
           return createTransformBuilder(columns, filters, column, options?.ascending !== false);
         },
@@ -326,51 +316,23 @@ export const db = {
       orderColumn?: string,
       orderAsc?: boolean
     ): PostgrestTransformBuilder<T> => {
+      const addFilter = (builder: any, key: string, value: any) => {
+        filters[key] = value;
+        return builder;
+      };
+
       const builder: PostgrestTransformBuilder<T> = {
-        eq: (column: string, value: any) => {
-          filters[`eq.${column}`] = value;
-          return builder;
-        },
-        neq: (column: string, value: any) => {
-          filters[`neq.${column}`] = value;
-          return builder;
-        },
-        gt: (column: string, value: any) => {
-          filters[`gt.${column}`] = value;
-          return builder;
-        },
-        gte: (column: string, value: any) => {
-          filters[`gte.${column}`] = value;
-          return builder;
-        },
-        lt: (column: string, value: any) => {
-          filters[`lt.${column}`] = value;
-          return builder;
-        },
-        lte: (column: string, value: any) => {
-          filters[`lte.${column}`] = value;
-          return builder;
-        },
-        like: (column: string, pattern: string) => {
-          filters[`like.${column}`] = pattern;
-          return builder;
-        },
-        ilike: (column: string, pattern: string) => {
-          filters[`ilike.${column}`] = pattern;
-          return builder;
-        },
-        in: (column: string, values: any[]) => {
-          filters[`in.${column}`] = values.join(',');
-          return builder;
-        },
-        is: (column: string, value: any) => {
-          filters[`is.${column}`] = value;
-          return builder;
-        },
-        not: (column: string, operator: string, value: any) => {
-          filters[`not.${column}`] = `${operator}.${value}`;
-          return builder;
-        },
+        eq: (column: string, value: any) => addFilter(builder, `eq.${column}`, value) as PostgrestTransformBuilder<T>,
+        neq: (column: string, value: any) => addFilter(builder, `neq.${column}`, value) as PostgrestTransformBuilder<T>,
+        gt: (column: string, value: any) => addFilter(builder, `gt.${column}`, value) as PostgrestTransformBuilder<T>,
+        gte: (column: string, value: any) => addFilter(builder, `gte.${column}`, value) as PostgrestTransformBuilder<T>,
+        lt: (column: string, value: any) => addFilter(builder, `lt.${column}`, value) as PostgrestTransformBuilder<T>,
+        lte: (column: string, value: any) => addFilter(builder, `lte.${column}`, value) as PostgrestTransformBuilder<T>,
+        like: (column: string, pattern: string) => addFilter(builder, `like.${column}`, pattern) as PostgrestTransformBuilder<T>,
+        ilike: (column: string, pattern: string) => addFilter(builder, `ilike.${column}`, pattern) as PostgrestTransformBuilder<T>,
+        in: (column: string, values: any[]) => addFilter(builder, `in.${column}`, values.join(',')) as PostgrestTransformBuilder<T>,
+        is: (column: string, value: any) => addFilter(builder, `is.${column}`, value) as PostgrestTransformBuilder<T>,
+        not: (column: string, operator: string, value: any) => addFilter(builder, `not.${column}`, `${operator}.${value}`) as PostgrestTransformBuilder<T>,
         limit: (count: number) => buildQuery(columns, filters, orderColumn, orderAsc, count),
         single: () => buildQuery(columns, filters, orderColumn, orderAsc).then(r => ({ data: r.data?.[0] || null, error: r.error })),
         range: (from: number, to: number) => buildQuery(columns, filters, orderColumn, orderAsc, undefined, from, to),
@@ -379,35 +341,121 @@ export const db = {
       return builder;
     };
 
-    return {
-      select: (columns: string = '*') => createFilterBuilder(columns),
-      insert: (data: any | any[]): Promise<PostgrestResponse<T[]>> =>
-        request<T[]>(`/rest/v1/${table}`, {
-          method: 'POST',
-          body: JSON.stringify(data),
-        }).then(data => ({ data, error: null })).catch(error => {
-          console.error(`[API] Insert error to ${table}:`, error);
-          throw error;
-        }),
-      update: (data: any) => ({
-        eq: (column: string, value: any): Promise<PostgrestResponse<T[]>> =>
-          request<T[]>(`/rest/v1/${table}?eq.${column}=${value}`, {
+    // 构建过滤条件字符串
+    const buildFilterString = (filters: Record<string, any>): string => {
+      return Object.entries(filters)
+        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+        .join('&');
+    };
+
+    // 创建 Update 构建器
+    const createUpdateBuilder = (data: any): PostgrestUpdateBuilder<T> => {
+      const filters: Record<string, any> = {};
+
+      const executeUpdate = async (): Promise<PostgrestResponse<T[]>> => {
+        const filterStr = buildFilterString(filters);
+        const endpoint = `/rest/v1/${table}${filterStr ? '?' + filterStr : ''}`;
+        
+        try {
+          const result = await request<T[]>(endpoint, {
             method: 'PATCH',
             body: JSON.stringify(data),
-          }).then(data => ({ data, error: null })).catch(error => {
-            console.error(`[API] Update error to ${table}:`, error);
-            throw error;
-          }),
-      }),
-      delete: () => ({
-        eq: (column: string, value: any): Promise<PostgrestResponse<null>> =>
-          request(`/rest/v1/${table}?eq.${column}=${value}`, {
+          });
+          return { data: result, error: null };
+        } catch (error: any) {
+          console.error(`[API] Update error to ${table}:`, error);
+          return { data: null, error };
+        }
+      };
+
+      const addFilter = (key: string, value: any) => {
+        filters[key] = value;
+        return builder;
+      };
+
+      const builder: PostgrestUpdateBuilder<T> = {
+        eq: (column: string, value: any) => addFilter(`eq.${column}`, value) as PostgrestUpdateBuilder<T>,
+        neq: (column: string, value: any) => addFilter(`neq.${column}`, value) as PostgrestUpdateBuilder<T>,
+        gt: (column: string, value: any) => addFilter(`gt.${column}`, value) as PostgrestUpdateBuilder<T>,
+        gte: (column: string, value: any) => addFilter(`gte.${column}`, value) as PostgrestUpdateBuilder<T>,
+        lt: (column: string, value: any) => addFilter(`lt.${column}`, value) as PostgrestUpdateBuilder<T>,
+        lte: (column: string, value: any) => addFilter(`lte.${column}`, value) as PostgrestUpdateBuilder<T>,
+        like: (column: string, pattern: string) => addFilter(`like.${column}`, pattern) as PostgrestUpdateBuilder<T>,
+        ilike: (column: string, pattern: string) => addFilter(`ilike.${column}`, pattern) as PostgrestUpdateBuilder<T>,
+        in: (column: string, values: any[]) => addFilter(`in.${column}`, values.join(',')) as PostgrestUpdateBuilder<T>,
+        is: (column: string, value: any) => addFilter(`is.${column}`, value) as PostgrestUpdateBuilder<T>,
+        not: (column: string, operator: string, value: any) => addFilter(`not.${column}`, `${operator}.${value}`) as PostgrestUpdateBuilder<T>,
+        then: (onFulfilled?: any, onRejected?: any) => executeUpdate().then(onFulfilled, onRejected),
+      };
+
+      return builder;
+    };
+
+    // 创建 Delete 构建器
+    const createDeleteBuilder = (): PostgrestDeleteBuilder<T> => {
+      const filters: Record<string, any> = {};
+
+      const executeDelete = async (): Promise<PostgrestResponse<null>> => {
+        const filterStr = buildFilterString(filters);
+        const endpoint = `/rest/v1/${table}${filterStr ? '?' + filterStr : ''}`;
+        
+        try {
+          await request(endpoint, {
             method: 'DELETE',
-          }).then(() => ({ data: null, error: null })).catch(error => {
-            console.error(`[API] Delete error from ${table}:`, error);
-            throw error;
-          }),
-      }),
+          });
+          return { data: null, error: null };
+        } catch (error: any) {
+          console.error(`[API] Delete error from ${table}:`, error);
+          return { data: null, error };
+        }
+      };
+
+      const addFilter = (key: string, value: any) => {
+        filters[key] = value;
+        return builder;
+      };
+
+      const builder: PostgrestDeleteBuilder<T> = {
+        eq: (column: string, value: any) => addFilter(`eq.${column}`, value) as PostgrestDeleteBuilder<T>,
+        neq: (column: string, value: any) => addFilter(`neq.${column}`, value) as PostgrestDeleteBuilder<T>,
+        gt: (column: string, value: any) => addFilter(`gt.${column}`, value) as PostgrestDeleteBuilder<T>,
+        gte: (column: string, value: any) => addFilter(`gte.${column}`, value) as PostgrestDeleteBuilder<T>,
+        lt: (column: string, value: any) => addFilter(`lt.${column}`, value) as PostgrestDeleteBuilder<T>,
+        lte: (column: string, value: any) => addFilter(`lte.${column}`, value) as PostgrestDeleteBuilder<T>,
+        like: (column: string, pattern: string) => addFilter(`like.${column}`, pattern) as PostgrestDeleteBuilder<T>,
+        ilike: (column: string, pattern: string) => addFilter(`ilike.${column}`, pattern) as PostgrestDeleteBuilder<T>,
+        in: (column: string, values: any[]) => addFilter(`in.${column}`, values.join(',')) as PostgrestDeleteBuilder<T>,
+        is: (column: string, value: any) => addFilter(`is.${column}`, value) as PostgrestDeleteBuilder<T>,
+        not: (column: string, operator: string, value: any) => addFilter(`not.${column}`, `${operator}.${value}`) as PostgrestDeleteBuilder<T>,
+        then: (onFulfilled?: any, onRejected?: any) => executeDelete().then(onFulfilled, onRejected),
+      };
+
+      return builder;
+    };
+
+    return {
+      select: (columns: string = '*') => createFilterBuilder(columns),
+      insert: (data: any | any[]): PostgrestInsertBuilder<T> => {
+        const executeInsert = async (): Promise<PostgrestResponse<T[]>> => {
+          try {
+            const result = await request<T[]>(`/rest/v1/${table}`, {
+              method: 'POST',
+              body: JSON.stringify(data),
+            });
+            return { data: result, error: null };
+          } catch (error: any) {
+            console.error(`[API] Insert error to ${table}:`, error);
+            return { data: null, error };
+          }
+        };
+
+        return {
+          select: (columns?: string) => executeInsert(),
+          then: (onFulfilled?: any, onRejected?: any) => executeInsert().then(onFulfilled, onRejected),
+        };
+      },
+      update: (data: any) => createUpdateBuilder(data),
+      delete: () => createDeleteBuilder(),
     };
   },
 
@@ -532,7 +580,7 @@ export const api = {
 // API 客户端
 // 使用 axios 风格的 API 调用方式
 export const apiClient = {
-  get: async (endpoint: string, options?: { params?: any }) => {
+  get: async <T = any>(endpoint: string, options?: { params?: any }): Promise<T> => {
     const url = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
     if (options?.params) {
       Object.entries(options.params).forEach(([key, value]) => {
@@ -549,14 +597,14 @@ export const apiClient = {
       if (!r.ok) {
         // 404 视为空数据
         if (r.status === 404) {
-          return [];
+          return [] as T;
         }
         throw new Error(`HTTP ${r.status}`);
       }
       return r.json();
     });
   },
-  post: async (endpoint: string, data?: any, options?: any) => {
+  post: async <T = any>(endpoint: string, data?: any, options?: any): Promise<T> => {
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${getAccessToken() || ''}`,
       ...options?.headers, // 合并传入的 headers
@@ -574,12 +622,15 @@ export const apiClient = {
       method: 'POST',
       headers,
       body,
-    }).then(r => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    }).then(async r => {
+      if (!r.ok) {
+        const errorData = await r.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${r.status}`);
+      }
       return r.json();
     });
   },
-  put: async (endpoint: string, data?: any) => {
+  put: async <T = any>(endpoint: string, data?: any): Promise<T> => {
     return fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
       headers: {
@@ -592,7 +643,20 @@ export const apiClient = {
       return r.json();
     });
   },
-  delete: async (endpoint: string) => {
+  patch: async <T = any>(endpoint: string, data?: any): Promise<T> => {
+    return fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getAccessToken() || ''}`,
+      },
+      body: data ? JSON.stringify(data) : undefined,
+    }).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    });
+  },
+  delete: async <T = any>(endpoint: string): Promise<T> => {
     return fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
       headers: {
@@ -602,11 +666,11 @@ export const apiClient = {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       // 处理空响应的情况
       const text = await r.text();
-      if (!text) return { deleted: 0 };
+      if (!text) return { deleted: 0 } as T;
       try {
         return JSON.parse(text);
       } catch {
-        return { deleted: 0 };
+        return { deleted: 0 } as T;
       }
     });
   },

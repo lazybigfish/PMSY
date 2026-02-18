@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
-import { Risk, Profile } from '../../../types';
+import { Risk, Profile, RiskStatus } from '../../../types';
 import { Loader2, Plus, AlertTriangle, X, History, User } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 import { Modal, ModalForm } from '../../../components/Modal';
@@ -27,7 +27,7 @@ const Risks: React.FC<RisksProps> = ({ projectId, canEdit = true }) => {
   const [showForm, setShowForm] = useState(false);
   const [selectedRisk, setSelectedRisk] = useState<RiskWithRecords | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'handling' | 'closed'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'mitigated' | 'closed'>('all');
   const [filterLevel, setFilterLevel] = useState<'all' | 'low' | 'medium' | 'high'>('all');
   const [users, setUsers] = useState<Profile[]>([]);
   
@@ -195,13 +195,13 @@ const Risks: React.FC<RisksProps> = ({ projectId, canEdit = true }) => {
       if (error) throw error;
 
       // 更新本地状态时使用数组格式（不是 JSON 字符串）
-      const localUpdates = {
+      const localUpdates: Partial<RiskWithRecords> = {
         handling_records: updatedRecords,
-        ...(newRecord.newStatus && { status: newRecord.newStatus })
+        ...(newRecord.newStatus && { status: newRecord.newStatus as RiskStatus })
       };
 
       setRisks(risks.map(r => r.id === selectedRisk.id ? { ...r, ...localUpdates } : r));
-      setSelectedRisk({ ...selectedRisk, ...localUpdates });
+      setSelectedRisk({ ...selectedRisk, ...localUpdates } as RiskWithRecords);
       setNewRecord({ content: '', newStatus: '' });
     } catch (error) {
       console.error('Error adding record:', error);

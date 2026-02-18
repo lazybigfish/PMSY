@@ -152,20 +152,23 @@ export default function ClientFormPage() {
         clientId = data?.[0]?.id;
       }
 
-      const contactsToInsert = validContacts.map((c, index) => ({
-        client_id: clientId,
-        name: c.name.trim(),
-        phone: c.phone!.trim(),
-        position: c.position?.trim() || null,
-        email: c.email?.trim() || null,
-        is_primary: index === 0
-      }));
+      // 只有在有有效联系人时才插入
+      if (validContacts.length > 0) {
+        const contactsToInsert = validContacts.map((c, index) => ({
+          client_id: clientId,
+          name: c.name.trim(),
+          phone: c.phone!.trim(),
+          position: c.position?.trim() || null,
+          email: c.email?.trim() || null,
+          is_primary: index === 0
+        }));
 
-      const { error: contactsError } = await api.db
-        .from('client_contacts')
-        .insert(contactsToInsert);
-      
-      if (contactsError) throw contactsError;
+        const { error: contactsError } = await api.db
+          .from('client_contacts')
+          .insert(contactsToInsert);
+        
+        if (contactsError) throw contactsError;
+      }
       
       navigate('/stakeholders/clients');
     } catch (error) {

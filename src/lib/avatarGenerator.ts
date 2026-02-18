@@ -31,6 +31,7 @@ const DARK_COLORS = [
 
 // 几何形状类型
 const SHAPE_TYPES = ['circle', 'rect', 'triangle', 'ellipse', 'polygon'] as const;
+type ShapeType = typeof SHAPE_TYPES[number];
 
 interface AvatarConfig {
   seed: string;
@@ -39,7 +40,7 @@ interface AvatarConfig {
 }
 
 interface Shape {
-  type: typeof SHAPE_TYPES[number];
+  type: ShapeType;
   x: number;
   y: number;
   size: number;
@@ -74,7 +75,7 @@ function createRandom(seed: number) {
 /**
  * 从数组中随机选择
  */
-function randomPick<T>(arr: T[], random: () => number): T {
+function randomPick<T>(arr: readonly T[], random: () => number): T {
   return arr[Math.floor(random() * arr.length)];
 }
 

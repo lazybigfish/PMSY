@@ -8,6 +8,9 @@ import {
   listUsers,
   adminUpdateUser,
   deactivateUser,
+  adminCreateUser,
+  resetPassword,
+  setForcePasswordChange,
 } from '../services/authService';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { ValidationError } from '../middleware/errorHandler';
@@ -213,6 +216,41 @@ router.post('/user/password', requireAuth, async (req: Request, res: Response, n
 // ============== 管理员接口 ==============
 
 /**
+ * POST /auth/v1/admin/users
+ * 创建用户（管理员权限）
+ */
+router.post('/admin/users', requireAuth, requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password, full_name, username, role, phone } = req.body;
+
+    if (!password) {
+      throw new ValidationError('密码不能为空');
+    }
+
+    if (password.length < 6) {
+      throw new ValidationError('密码长度不能少于 6 位');
+    }
+
+    const newUser = await adminCreateUser({
+      email,
+      password,
+      full_name,
+      username,
+      role,
+      phone,
+    });
+
+    res.status(201).json({
+      success: true,
+      user: newUser,
+      message: '用户创建成功',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /auth/v1/admin/users
  * 列出所有用户（管理员权限）
  */
@@ -301,6 +339,59 @@ router.delete('/admin/users/:id', requireAuth, requireAdmin, async (req: Request
     res.json({
       success: true,
       message: '用户已禁用',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /auth/v1/admin/users/:id/reset-password
+ * 重置用户密码（管理员权限）
+ */
+router.post('/admin/users/:id/reset-password', requireAuth, requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { mode, fixedPassword } = req.body;
+
+    if (!mode || !['random', 'fixed'].includes(mode)) {
+      throw new ValidationError('mode 参数必须为 "random" 或 "fixed"');
+    }
+
+    if (mode === 'fixed' && !fixedPassword) {
+      throw new ValidationError('使用固定密码模式时必须提供 fixedPassword');
+    }
+
+    const newPassword = await resetPassword(id, mode, fixedPassword);
+
+    res.json({
+      success: true,
+      newPassword,
+      message: '密码重置成功',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /auth/v1/admin/users/:id/force-password-change
+ * 设置强制改密状态（管理员权限）
+ */
+router.post('/admin/users/:id/force-password-change', requireAuth, requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { force } = req.body;
+
+    if (typeof force !== 'boolean') {
+      throw new ValidationError('force 参数必须为布尔值');
+    }
+
+    await setForcePasswordChange(id, force);
+
+    res.json({
+      success: true,
+      message: force ? '已开启强制改密' : '已关闭强制改密',
     });
   } catch (error) {
     next(error);

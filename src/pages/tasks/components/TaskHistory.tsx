@@ -124,7 +124,6 @@ export const TaskHistory: React.FC<TaskHistoryProps> = ({ taskId }) => {
                 userId={record.creator.id}
                 avatarUrl={record.creator.avatar_url}
                 name={record.creator.full_name}
-                email={record.creator.email}
                 size="md"
               />
             ) : (

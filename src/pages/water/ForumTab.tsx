@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Loader2, MessageSquare, Filter } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
+import { useTheme } from '../../context/ThemeContext';
 import { ForumPost, ForumCategory } from '../../types';
 import { ForumPostList } from './components/ForumPostList';
 import { ModalForm } from '../../components/Modal';
 import { LikeButton } from '../../components/LikeButton';
 import { Avatar } from '../../components/Avatar';
+import { ThemedButton } from '../../components/theme/ThemedButton';
+import { ThemedCard } from '../../components/theme/ThemedCard';
 
 // 辅助函数：解析帖子内容
 const parseContent = (content: any): string => {
@@ -39,6 +42,9 @@ const categories: { key: ForumCategory; label: string; color: string; bgColor: s
 export default function ForumTab() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const { themeConfig } = useTheme();
+  const { colors } = themeConfig;
+  const isDark = colors.background.main === '#0A0A0F';
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -283,11 +289,27 @@ export default function ForumTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="relative">
-          <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glow animate-pulse">
-            <MessageSquare className="w-8 h-8 text-white" />
+        <div className="text-center">
+          <div className="relative">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center animate-pulse"
+              style={{
+                background: `linear-gradient(135deg, ${colors.primary[400]}, ${colors.primary[600]})`,
+                boxShadow: `0 0 30px ${colors.primary[500]}40`,
+              }}
+            >
+              <MessageSquare className="w-8 h-8 text-white" />
+            </div>
+            <div
+              className="absolute inset-0 w-16 h-16 rounded-2xl blur-xl opacity-50 animate-pulse"
+              style={{
+                background: `linear-gradient(135deg, ${colors.primary[400]}, ${colors.primary[600]})`,
+              }}
+            />
           </div>
-          <div className="absolute inset-0 w-16 h-16 rounded-2xl gradient-primary blur-xl opacity-50 animate-pulse"></div>
+          <p className={`mt-4 font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            正在加载帖子...
+          </p>
         </div>
       </div>
     );

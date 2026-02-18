@@ -51,11 +51,38 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
     }
   };
 
-  const handleCopy = () => {
-    if (newPassword) {
-      navigator.clipboard.writeText(newPassword);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    if (!newPassword) return;
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(newPassword);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        // 降级方案：使用传统的复制方法
+        const textArea = document.createElement('textarea');
+        textArea.value = newPassword;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+          const successful = document.execCommand('copy');
+          if (successful) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          }
+        } catch (err) {
+          console.error('复制失败:', err);
+        }
+
+        document.body.removeChild(textArea);
+      }
+    } catch (error) {
+      console.error('复制到剪贴板失败:', error);
     }
   };
 

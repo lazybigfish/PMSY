@@ -30,7 +30,7 @@ export const BatchDeleteModal: React.FC<BatchDeleteModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="sm">
       <div className="p-6">
         {/* 标题 */}
         <div className="flex items-center gap-3 mb-4">

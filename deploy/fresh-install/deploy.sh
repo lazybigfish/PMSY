@@ -356,23 +356,40 @@ if [ "$ENV_STATUS" != "CLEAN" ]; then
     echo -e "${YELLOW}   正在清空服务器环境...${NC}"
     
     ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "
-        echo '   停止现有容器...'
-        cd $DEPLOY_REMOTE_DIR 2>/dev/null && sudo docker-compose down 2>/dev/null || true
+        echo '   停止并删除所有 PMSY 相关容器...'
+        cd $DEPLOY_REMOTE_DIR 2>/dev/null && sudo docker-compose down -v 2>/dev/null || true
         
-        echo '   删除 PMSY 容器...'
+        echo '   强制删除 PMSY 容器（包括未停止的）...'
         sudo docker rm -f \$(sudo docker ps -aq --filter 'name=pmsy' 2>/dev/null) 2>/dev/null || true
         
-        echo '   删除数据卷...'
+        echo '   强制删除 PMSY 数据卷...'
+        # 先尝试正常删除
         sudo docker volume rm \$(sudo docker volume ls -q --filter 'name=pmsy' 2>/dev/null) 2>/dev/null || true
+        # 如果还有残留，强制删除
+        for vol in \$(sudo docker volume ls -q --filter 'name=pmsy' 2>/dev/null); do
+            echo "   强制删除数据卷: \$vol"
+            sudo docker volume rm -f \$vol 2>/dev/null || true
+        done
+        
+        echo '   删除 PMSY 网络...'
+        sudo docker network rm \$(sudo docker network ls -q --filter 'name=pmsy' 2>/dev/null) 2>/dev/null || true
         
         echo '   清理部署目录...'
         sudo rm -rf $DEPLOY_REMOTE_DIR
+        
+        echo '   清理 Docker 系统（可选）...'
+        sudo docker system prune -f 2>/dev/null || true
         
         echo '   创建新目录...'
         sudo mkdir -p $DEPLOY_REMOTE_DIR
         sudo chown $DEPLOY_SERVER_USER:$DEPLOY_SERVER_USER $DEPLOY_REMOTE_DIR
         
         echo '   ✅ 环境清理完成'
+        
+        echo '   验证清理结果:'
+        echo '   - 容器:' \$(sudo docker ps -a --filter 'name=pmsy' --format '{{.Names}}' 2>/dev/null | wc -l) '个'
+        echo '   - 数据卷:' \$(sudo docker volume ls --filter 'name=pmsy' --format '{{.Name}}' 2>/dev/null | wc -l) '个'
+        echo '   - 网络:' \$(sudo docker network ls --filter 'name=pmsy' --format '{{.Name}}' 2>/dev/null | wc -l) '个'
     "
     
     echo -e "${GREEN}   ✅ 服务器环境已重置${NC}"
@@ -442,30 +459,33 @@ echo -e "${BLUE}[步骤 4/5] 构建前端和后端...${NC}"
 echo ""
 
 echo -e "${YELLOW}   构建前端...${NC}"
+
+# 保存原始 .env 文件内容（如果存在）
+ORIGINAL_ENV=""
 if [ -f ".env" ]; then
-    cp .env .env.backup.development
+    ORIGINAL_ENV=$(cat .env)
+    echo "   已保存原始 .env 配置"
 fi
 
+# 使用生产环境配置进行构建
 if [ -f "config/env/.env.production" ]; then
     cp config/env/.env.production .env
+    echo "   使用 config/env/.env.production 进行构建"
 else
     cp config/env/.env.example .env
+    echo "   使用 config/env/.env.example 进行构建"
 fi
 
-if [ -f ".env.local" ]; then
-    mv .env.local .env.local.backup
-fi
-
+# 构建前端
 npm run build
 
-if [ -f ".env.local.backup" ]; then
-    mv .env.local.backup .env.local
-fi
-
-if [ -f ".env.backup.development" ]; then
-    mv .env.backup.development .env
+# 恢复原始 .env 文件
+if [ -n "$ORIGINAL_ENV" ]; then
+    echo "$ORIGINAL_ENV" > .env
+    echo "   已恢复原始 .env 配置"
 else
     rm -f .env
+    echo "   已删除临时 .env 文件"
 fi
 
 echo -e "${GREEN}   ✅ 前端构建完成${NC}"
@@ -531,12 +551,26 @@ case $DEPLOY_MODE in
         DEPLOY_TMP=$(mktemp -d)
         mkdir -p "$DEPLOY_TMP/pmsy"
         
+        # 前端构建产物
         cp -r dist "$DEPLOY_TMP/pmsy/"
-        cp -r api-new "$DEPLOY_TMP/pmsy/"
+        
+        # 后端构建产物（只复制 dist，不复制整个 api-new）
+        mkdir -p "$DEPLOY_TMP/pmsy/api-new"
+        cp -r api-new/dist "$DEPLOY_TMP/pmsy/api-new/"
+        cp api-new/package*.json "$DEPLOY_TMP/pmsy/api-new/"
+        cp api-new/Dockerfile "$DEPLOY_TMP/pmsy/api-new/"
+        
+        # Docker 和 Nginx 配置
         cp config/docker/docker-compose.yml "$DEPLOY_TMP/pmsy/"
         cp config/nginx/nginx.conf "$DEPLOY_TMP/pmsy/nginx.conf"
         cp "$ENV_SOURCE" "$DEPLOY_TMP/pmsy/.env"
         
+        # 【新增】数据库迁移文件（不再打包进镜像，独立上传）
+        mkdir -p "$DEPLOY_TMP/pmsy/api-new/database/migrations"
+        cp -r api-new/database/migrations/*.sql "$DEPLOY_TMP/pmsy/api-new/database/migrations/" 2>/dev/null || echo "   注意: 没有 SQL 迁移文件"
+        cp api-new/knexfile.ts "$DEPLOY_TMP/pmsy/api-new/" 2>/dev/null || echo "   注意: knexfile.ts 不存在"
+        
+        # 部署脚本
         mkdir -p "$DEPLOY_TMP/pmsy/deploy"
         for item in deploy/*; do
             if [ -d "$item" ] && [ "$(basename "$item")" != "cache" ]; then
@@ -557,8 +591,11 @@ case $DEPLOY_MODE in
         echo ""
         
         echo -e "${YELLOW}   在服务器上执行部署...${NC}"
-        ssh -tt "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' DEPLOY_SERVER_IP='$DEPLOY_SERVER_IP' bash -s" << 'REMOTE_SCRIPT'
+        ssh -tt "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" << REMOTE_SCRIPT
 set -e
+
+export DEPLOY_REMOTE_DIR="$DEPLOY_REMOTE_DIR"
+export DEPLOY_SERVER_IP="$DEPLOY_SERVER_IP"
 
 echo "   [服务器] 检查 sudo 权限..."
 if ! sudo -n true 2>/dev/null; then
@@ -566,41 +603,76 @@ if ! sudo -n true 2>/dev/null; then
     sudo echo "   ✅ sudo 权限验证通过"
 fi
 
-cd "$DEPLOY_REMOTE_DIR"
+cd "\$DEPLOY_REMOTE_DIR"
 
 echo "   [服务器] 更新配置..."
-sed -i "s|API_URL=.*|API_URL=http://$DEPLOY_SERVER_IP|" .env
+sed -i "s|API_URL=.*|API_URL=http://\$DEPLOY_SERVER_IP|" .env
 
-echo "   [服务器] 拉取镜像并启动..."
-sudo docker-compose pull
-sudo docker-compose up -d
+echo "   [服务器] 检查 PostgreSQL 数据卷状态..."
+# 如果数据卷已存在，可能是之前失败的部署残留，需要清理
+if sudo docker volume ls --format '{{.Name}}' | grep -q "pmsy_postgres_data"; then
+    echo "   ⚠️  检测到已存在 PostgreSQL 数据卷"
+    echo "   检查是否需要重新初始化..."
+fi
 
-echo "   [服务器] 等待服务启动..."
-sleep 10
+echo "   [服务器] 启动 PostgreSQL..."
+sudo docker-compose up -d postgres
 
+echo "   [服务器] 等待 PostgreSQL 就绪..."
 for i in {1..30}; do
-    if sudo docker-compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+    if sudo docker-compose exec -T postgres pg_isready -U "\${POSTGRES_USER:-pmsy}" -d "\${POSTGRES_DB:-pmsy}" > /dev/null 2>&1; then
         echo "   ✅ PostgreSQL 就绪"
         break
     fi
-    echo "   等待 PostgreSQL... ($i/30)"
+    echo "   等待 PostgreSQL... (\$i/30)"
     sleep 2
 done
 
+echo "   [服务器] 检查数据库初始化状态..."
+# 等待几秒让 PostgreSQL 完成初始化脚本执行
+sleep 5
+
+DB_INITIALIZED=\$(sudo docker-compose exec -T postgres psql -U "\${POSTGRES_USER:-pmsy}" -d "\${POSTGRES_DB:-pmsy}" -tAc "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'profiles')" 2>/dev/null || echo "f")
+
+echo "   数据库初始化状态: \$DB_INITIALIZED"
+
+if [ "\$DB_INITIALIZED" = "t" ]; then
+    echo "   ✅ 数据库已初始化"
+    
+    # 检查关键表是否存在
+    TABLE_COUNT=\$(sudo docker-compose exec -T postgres psql -U "\${POSTGRES_USER:-pmsy}" -d "\${POSTGRES_DB:-pmsy}" -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'" 2>/dev/null || echo "0")
+    echo "   数据库表数量: \$TABLE_COUNT"
+    
+    if [ "\$TABLE_COUNT" -lt 10 ]; then
+        echo "   ⚠️  警告: 数据库表数量不足，可能初始化不完整"
+        echo "   建议: 如果需要重新初始化，请清空数据卷后重新部署"
+    fi
+else
+    echo "   ❌ 数据库未初始化或初始化失败"
+    echo "   检查 PostgreSQL 日志..."
+    sudo docker-compose logs postgres | tail -20
+    echo ""
+    echo "   可能原因:"
+    echo "   1. 数据卷已存在，PostgreSQL 跳过了初始化"
+    echo "   2. 迁移文件执行出错"
+    echo ""
+    echo "   解决方案: 清空数据卷后重新部署"
+    exit 1
+fi
+
+echo "   [服务器] 拉取并启动其他服务..."
+sudo docker-compose pull
+sudo docker-compose up -d
+
+echo "   [服务器] 等待 API 服务就绪..."
 for i in {1..30}; do
     if curl -s http://localhost:3001/health > /dev/null 2>&1; then
         echo "   ✅ API 服务就绪"
         break
     fi
-    echo "   等待 API 服务... ($i/30)"
+    echo "   等待 API 服务... (\$i/30)"
     sleep 2
 done
-
-echo "   [服务器] 执行数据库迁移..."
-sudo docker-compose exec -T api sh -c "cd /app && npm run db:migrate" 2>/dev/null || echo "   注意: 数据库迁移可能已执行"
-
-echo "   [服务器] 执行种子数据..."
-sudo docker-compose exec -T api sh -c "cd /app && npm run db:seed" 2>/dev/null || echo "   注意: 种子数据可能已存在"
 
 echo "   [服务器] 检查服务状态..."
 sudo docker-compose ps
@@ -690,26 +762,29 @@ REMOTE_SCRIPT
         echo ""
         
         echo -e "${YELLOW}   在服务器上执行部署...${NC}"
-        ssh -tt "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' DEPLOY_SERVER_IP='$DEPLOY_SERVER_IP' bash -s" << 'REMOTE_SCRIPT'
+        ssh -tt "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" << REMOTE_SCRIPT
 set -e
+
+export DEPLOY_REMOTE_DIR="$DEPLOY_REMOTE_DIR"
+export DEPLOY_SERVER_IP="$DEPLOY_SERVER_IP"
 
 echo "   [服务器] 检查 sudo 权限..."
 if ! sudo -n true 2>/dev/null; then
     sudo echo "   ✅ sudo 权限验证通过"
 fi
 
-cd "$DEPLOY_REMOTE_DIR"
+cd "\$DEPLOY_REMOTE_DIR"
 
 echo "   [服务器] 导入 Docker 镜像..."
 for tarfile in docker-images/*.tar; do
-    if [ -f "$tarfile" ]; then
-        echo "     导入 $(basename $tarfile)..."
-        sudo docker load < "$tarfile" || echo "     警告: 导入失败"
+    if [ -f "\$tarfile" ]; then
+        echo "     导入 \$(basename \$tarfile)..."
+        sudo docker load < "\$tarfile" || echo "     警告: 导入失败"
     fi
 done
 
 echo "   [服务器] 更新配置..."
-sed -i "s|API_URL=.*|API_URL=http://$DEPLOY_SERVER_IP|" .env
+sed -i "s|API_URL=.*|API_URL=http://\$DEPLOY_SERVER_IP|" .env
 
 echo "   [服务器] 启动服务..."
 sudo docker-compose up -d
@@ -722,7 +797,7 @@ for i in {1..30}; do
         echo "   ✅ PostgreSQL 就绪"
         break
     fi
-    echo "   等待 PostgreSQL... ($i/30)"
+    echo "   等待 PostgreSQL... (\$i/30)"
     sleep 2
 done
 
@@ -731,7 +806,7 @@ for i in {1..30}; do
         echo "   ✅ API 服务就绪"
         break
     fi
-    echo "   等待 API 服务... ($i/30)"
+    echo "   等待 API 服务... (\$i/30)"
     sleep 2
 done
 
@@ -746,7 +821,7 @@ REMOTE_SCRIPT
 
         echo -e "${GREEN}   ✅ 服务器部署完成${NC}"
         echo ""
-        
+
         rm -rf docker-images
         ;;
 

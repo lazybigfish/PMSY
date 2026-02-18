@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS project_milestones (
     end_date DATE,
     phase_order INTEGER NOT NULL,
     is_current BOOLEAN DEFAULT false,
+    created_by UUID REFERENCES profiles(id),
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
@@ -33,6 +34,10 @@ CREATE INDEX IF NOT EXISTS idx_project_milestones_project_id ON project_mileston
 CREATE INDEX IF NOT EXISTS idx_project_milestones_status ON project_milestones(status);
 CREATE INDEX IF NOT EXISTS idx_project_milestones_phase_order ON project_milestones(phase_order);
 CREATE INDEX IF NOT EXISTS idx_project_milestones_is_current ON project_milestones(is_current);
+CREATE INDEX IF NOT EXISTS idx_project_milestones_created_by ON project_milestones(created_by);
+
+-- 添加注释
+COMMENT ON COLUMN project_milestones.created_by IS '里程碑创建者ID';
 
 -- 创建更新时间戳触发器
 CREATE TRIGGER update_project_milestones_updated_at

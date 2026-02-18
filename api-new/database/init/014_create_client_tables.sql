@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS clients (
     industry TEXT,
     scale TEXT,
     address TEXT,
+    location TEXT,
     website TEXT,
     description TEXT,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS project_clients (
     client_id UUID REFERENCES clients(id) ON DELETE CASCADE NOT NULL,
     contact_id UUID REFERENCES client_contacts(id),
     role TEXT DEFAULT 'primary' CHECK (role IN ('primary', 'secondary')),
+    created_by UUID REFERENCES profiles(id),
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     UNIQUE(project_id, client_id)
 );
@@ -66,3 +68,7 @@ CREATE TABLE IF NOT EXISTS project_clients (
 CREATE INDEX IF NOT EXISTS idx_project_clients_project_id ON project_clients(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_clients_client_id ON project_clients(client_id);
 CREATE INDEX IF NOT EXISTS idx_project_clients_contact_id ON project_clients(contact_id);
+CREATE INDEX IF NOT EXISTS idx_project_clients_created_by ON project_clients(created_by);
+
+-- 添加注释
+COMMENT ON COLUMN project_clients.created_by IS '项目-客户关联创建者ID';

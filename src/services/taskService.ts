@@ -525,6 +525,40 @@ export async function recordTaskModuleChange(
   });
 }
 
+/**
+ * 获取任务依赖列表
+ */
+export async function getTaskDependencies(taskId: string): Promise<any> {
+  const response = await apiClient.get(`/api/task-dependencies/${taskId}`);
+  return response;
+}
+
+/**
+ * 添加任务依赖
+ */
+export async function addTaskDependency(
+  taskId: string,
+  data: { depends_on_task_id: string; dependency_type?: string }
+): Promise<any> {
+  const response = await apiClient.post(`/api/task-dependencies/${taskId}`, data);
+  return response.data;
+}
+
+/**
+ * 删除任务依赖
+ */
+export async function removeTaskDependency(taskId: string, dependencyId: string): Promise<void> {
+  await apiClient.delete(`/api/task-dependencies/${taskId}/${dependencyId}`);
+}
+
+/**
+ * 获取可选的依赖任务列表
+ */
+export async function getAvailableDependencies(taskId: string): Promise<any[]> {
+  const response = await apiClient.get(`/api/task-dependencies/${taskId}/options`);
+  return response;
+}
+
 // 导出服务对象
 export const taskService = {
   getTasks,
@@ -549,4 +583,8 @@ export const taskService = {
   batchAssignTasks,
   getTaskHistory,
   recordTaskAssigneeChange,
+  getTaskDependencies,
+  addTaskDependency,
+  removeTaskDependency,
+  getAvailableDependencies,
 };

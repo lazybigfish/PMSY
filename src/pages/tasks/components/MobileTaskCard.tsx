@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckSquare, Square, Eye, EyeOff, Trash2, AlertCircle, Clock } from 'lucide-react';
 import { TaskWithDetails } from './TaskTable';
 import { Avatar } from '../../../components/Avatar';
+import { formatDateTime } from '../../../lib/utils';
 
 interface MobileTaskCardProps {
   task: TaskWithDetails;
@@ -138,7 +139,7 @@ export function MobileTaskCard({
         )}
       </div>
 
-      {/* 底部：责任人 + 处理人 */}
+      {/* 底部：责任人 + 完成时间 + 创建时间 */}
       <div className="flex items-center justify-between mt-2 pl-7">
         <div className="flex items-center gap-3">
           {task.creator && (
@@ -147,22 +148,18 @@ export function MobileTaskCard({
               <Avatar userId={task.creator.id} size="xs" />
             </div>
           )}
-          {task.assignees && task.assignees.length > 0 && (
+          {task.status === 'done' && task.completed_at && (
             <div className="flex items-center gap-1">
-              <span className="text-xs text-dark-400">处:</span>
-              <div className="flex -space-x-1">
-                {task.assignees.slice(0, 2).map((assignee) => (
-                  <Avatar key={assignee.user_id} userId={assignee.user_id} size="xs" />
-                ))}
-                {task.assignees.length > 2 && (
-                  <span className="w-5 h-5 rounded-full bg-dark-200 dark:bg-dark-600 flex items-center justify-center text-xs text-dark-600 dark:text-dark-400">
-                    +{task.assignees.length - 2}
-                  </span>
-                )}
-              </div>
+              <span className="text-xs text-green-600">完成:</span>
+              <span className="text-xs text-green-600">
+                {new Date(task.completed_at).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+              </span>
             </div>
           )}
         </div>
+        {task.created_at && (
+          <span className="text-xs text-dark-400">{formatDateTime(task.created_at)}</span>
+        )}
       </div>
     </div>
   );

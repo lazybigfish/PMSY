@@ -21,6 +21,7 @@ import storageRouter from './routes/storage';
 import projectsRouter from './routes/projects';
 import projectSuppliersRouter from './routes/projectSuppliers';
 import duplicateCheckRouter from './routes/duplicateCheck';
+import taskDependenciesRouter from './routes/taskDependencies';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -48,6 +49,7 @@ app.use('/storage/v1', storageRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/project-suppliers', projectSuppliersRouter);
 app.use('/api/duplicate-check', duplicateCheckRouter);
+app.use('/api/task-dependencies', taskDependenciesRouter);
 
 // 路由（带 /api 前缀，兼容 Nginx 代理配置）
 app.use('/api/health', healthRouter);
@@ -59,6 +61,7 @@ app.use('/api/storage/v1', storageRouter);
 app.use('/api/api/projects', projectsRouter);
 app.use('/api/api/project-suppliers', projectSuppliersRouter);
 app.use('/api/api/duplicate-check', duplicateCheckRouter);
+app.use('/api/api/task-dependencies', taskDependenciesRouter);
 
 // 根路由
 app.get('/', (req, res) => {

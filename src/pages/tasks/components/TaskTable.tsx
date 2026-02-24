@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckSquare, Square, Eye, EyeOff, Trash2, ArrowUpDown, AlertCircle, Clock } from 'lucide-react';
 import { Task, Profile, Project } from '../../../types';
 import { Avatar } from '../../../components/Avatar';
+import { formatDateTime } from '../../../lib/utils';
 
 export interface TaskWithDetails extends Task {
   project?: Project;
@@ -169,7 +170,10 @@ export function TaskTable({
               责任人
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-dark-500 uppercase tracking-wider">
-              处理人
+              完成时间
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-dark-500 uppercase tracking-wider">
+              创建时间
             </th>
             <th className="px-4 py-3 text-right text-xs font-semibold text-dark-500 uppercase tracking-wider">
               操作
@@ -254,25 +258,15 @@ export function TaskTable({
                   <span className="text-sm text-dark-700">{task.creator?.full_name || '未知'}</span>
                 </div>
               </td>
-              <td className="px-4 py-3">
-                {/* 处理人 */}
-                <div className="flex -space-x-2">
-                  {task.assignee_profiles?.slice(0, 3).map((profile, idx) => (
-                    <Avatar
-                      key={idx}
-                      userId={profile.id}
-                      avatarUrl={profile.avatar_url}
-                      name={profile.full_name}
-                      size="sm"
-                      className="border-2 border-white"
-                    />
-                  ))}
-                  {(task.assignee_profiles?.length || 0) > 3 && (
-                    <div className="w-8 h-8 rounded-full bg-dark-100 flex items-center justify-center border-2 border-white text-xs text-dark-600">
-                      +{task.assignee_profiles!.length - 3}
-                    </div>
-                  )}
-                </div>
+              <td className="px-4 py-3 text-sm text-dark-600">
+                {task.status === 'done' && task.completed_at ? (
+                  <span className="text-green-600">{formatDateTime(task.completed_at)}</span>
+                ) : (
+                  '-'
+                )}
+              </td>
+              <td className="px-4 py-3 text-sm text-dark-600">
+                {task.created_at ? formatDateTime(task.created_at) : '-'}
               </td>
               <td className="px-4 py-3 text-right">
                 <button
@@ -291,7 +285,7 @@ export function TaskTable({
           ))}
           {tasks.length === 0 && (
             <tr>
-              <td colSpan={9} className="px-4 py-12 text-center text-dark-500">
+              <td colSpan={10} className="px-4 py-12 text-center text-dark-500">
                 <div className="flex flex-col items-center">
                   <div className="w-16 h-16 rounded-2xl bg-dark-100 flex items-center justify-center mb-4">
                     <CheckSquare className="h-8 w-8 text-dark-400" />

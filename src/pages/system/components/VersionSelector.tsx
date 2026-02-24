@@ -3,7 +3,8 @@ import { Plus } from 'lucide-react';
 
 interface TemplateVersion {
   id: string;
-  version_name: string;
+  name: string;
+  version_number: string;
   description: string;
   is_active: boolean;
   created_at: string;
@@ -43,7 +44,7 @@ export function VersionSelector({
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h4 className="font-medium text-gray-900">{version.version_name}</h4>
+                <h4 className="font-medium text-gray-900">{version.name}</h4>
                 {version.is_active && (
                   <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
                     当前使用

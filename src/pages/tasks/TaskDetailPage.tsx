@@ -3,13 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { taskService, userService, projectService, notificationService } from '../../services';
 import { recordTaskAssigneeChange, recordTaskModuleChange } from '../../services/taskService';
 import { api, apiClient } from '../../lib/api';
+import { formatCreatedAtWithWeek } from '../../lib/utils';
 import { Task, Profile, Project, TaskComment, TaskProgressLog, ProjectModule, TaskModule } from '../../types';
-import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp, Edit2, Trash2, Calendar, Folder, User, Users, Tag, Clock, XCircle } from 'lucide-react';
+import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp, Edit2, Trash2, Calendar, Folder, User, Users, Tag, Clock, XCircle, Link2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContextNew';
 import { TaskComments } from './components/TaskComments';
 import { TaskProgressUpdateModal } from './components/TaskProgressUpdateModal';
 import { TaskHistory } from './components/TaskHistory';
 import { Avatar } from '../../components/Avatar';
+import { TaskDependencyModal } from '../../components/task/TaskDependencyModal';
 
 interface TaskWithRelations extends Task {
   project?: Project;
@@ -32,6 +34,8 @@ const TaskDetailPage = () => {
   const [availableModules, setAvailableModules] = useState<ProjectModule[]>([]);
   const [allUsers, setAllUsers] = useState<Profile[]>([]);
   const [showProgressModal, setShowProgressModal] = useState(false);
+  const [showDependencyModal, setShowDependencyModal] = useState(false);
+  const [taskDependencies, setTaskDependencies] = useState<any>(null);
   const [currentProgress, setCurrentProgress] = useState(0);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editedDescription, setEditedDescription] = useState('');
@@ -219,6 +223,15 @@ const TaskDetailPage = () => {
       };
       setTask(fullTaskData);
 
+      // 获取任务依赖
+      try {
+        const deps = await taskService.getTaskDependencies(id);
+        setTaskDependencies(deps || { dependencies: [], dependents: [] });
+      } catch (err) {
+        console.error('Failed to fetch task dependencies:', err);
+        setTaskDependencies({ dependencies: [], dependents: [] });
+      }
+
       // 获取评论和进度日志（不使用嵌入查询，后端不支持）
       const [
         { data: commentsData },
@@ -273,7 +286,7 @@ const TaskDetailPage = () => {
       } else if (taskData.status === 'done') {
         setCurrentProgress(100);
       } else if (taskData.status === 'in_progress') {
-        setCurrentProgress(50);
+        setCurrentProgress(5);
       } else {
         setCurrentProgress(0);
       }
@@ -893,6 +906,59 @@ const TaskDetailPage = () => {
                       </div>
                     </div>
 
+                    {/* 任务依赖 */}
+                    <div>
+                      <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
+                        <Link2 className="w-3.5 h-3.5" />
+                        任务依赖
+                        <button
+                          onClick={() => setShowDependencyModal(true)}
+                          className="ml-auto text-xs text-violet-600 hover:text-violet-800"
+                        >
+                          管理依赖
+                        </button>
+                      </label>
+                      <div className="space-y-2">
+                        {taskDependencies?.dependencies?.length > 0 && (
+                          <div>
+                            <span className="text-xs text-dark-400">前置任务：</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {taskDependencies.dependencies.map((dep: any) => (
+                                <button
+                                  key={dep.id}
+                                  onClick={() => navigate(`/tasks/${dep.depends_on_task_id}`)}
+                                  className="text-xs px-2 py-1 bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 rounded hover:bg-violet-100 dark:hover:bg-violet-900/40"
+                                >
+                                  {dep.depends_on_title}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {taskDependencies?.dependents?.length > 0 && (
+                          <div>
+                            <span className="text-xs text-dark-400">后续任务：</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {taskDependencies.dependents.map((dep: any) => (
+                                <button
+                                  key={dep.id}
+                                  onClick={() => navigate(`/tasks/${dep.task_id}`)}
+                                  className="text-xs px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                                >
+                                  {dep.dependent_title}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {(!taskDependencies?.dependencies?.length && !taskDependencies?.dependents?.length) && (
+                          <p className="text-xs text-dark-400">
+                            点击"管理依赖"添加任务的前置任务和后续任务
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
                     {/* 所属项目 */}
                     <div>
                       <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
@@ -930,13 +996,44 @@ const TaskDetailPage = () => {
                         <div className="flex items-center gap-2">
                           <span className="text-dark-700">
                             {task.due_date
-                              ? new Date(task.due_date).toLocaleDateString('zh-CN')
+                              ? formatCreatedAtWithWeek(task.due_date)
                               : '未设置'
                             }
                           </span>
                         </div>
                       )}
                     </div>
+
+                    {/* 创建时间 */}
+                    <div>
+                      <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        创建时间
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-dark-700">
+                          {task.created_at
+                            ? formatCreatedAtWithWeek(task.created_at)
+                            : '-'
+                          }
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 完成时间 - 仅在已完成状态下显示 */}
+                    {task.status === 'done' && task.completed_at && (
+                      <div>
+                        <label className="block text-sm font-medium text-dark-500 mb-2 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" />
+                          完成时间
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-green-600 font-medium">
+                            {formatCreatedAtWithWeek(task.completed_at)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 关联模块 */}
@@ -1083,6 +1180,17 @@ const TaskDetailPage = () => {
         onSubmit={handleProgressUpdate}
         currentProgress={getLatestProgress()}
         taskTitle={task.title}
+      />
+
+      {/* 任务依赖管理弹窗 */}
+      <TaskDependencyModal
+        isOpen={showDependencyModal}
+        onClose={() => setShowDependencyModal(false)}
+        taskId={id || ''}
+        taskTitle={task?.title || ''}
+        onSuccess={() => {
+          // 依赖添加成功后可以刷新任务数据
+        }}
       />
     </div>
   );

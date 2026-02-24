@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { Task, Profile, Project, TaskComment, TaskProgressLog, TaskAttachment, TaskModule, ProjectModule } from '../../../types';
-import { X, Send, Clock, Calendar, Paperclip, Plus, Edit2 } from 'lucide-react';
+import { X, Send, Clock, Calendar, Paperclip, Plus, Edit2, Link2 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Avatar } from '../../../components/Avatar';
+import { TaskDependencyModal } from '../../../components/task/TaskDependencyModal';
 
 interface TaskDetailProps {
   taskId: string | null;
@@ -28,6 +29,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [logs, setLogs] = useState<TaskProgressLog[]>([]);
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [showDependencyModal, setShowDependencyModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [newProgress, setNewProgress] = useState<number | null>(null);
@@ -552,6 +554,24 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                         )}
                       </div>
 
+                      {/* Dependency Section */}
+                      <div className="col-span-2 mt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
+                            任务依赖
+                          </label>
+                          <button
+                            onClick={() => setShowDependencyModal(true)}
+                            className="text-indigo-600 hover:text-indigo-800 flex items-center text-xs"
+                          >
+                            <Plus size={12} className="mr-0.5" /> 管理依赖
+                          </button>
+                        </div>
+                        <div className="text-sm text-gray-500 italic">
+                          点击"管理依赖"添加任务的前置任务和后续任务
+                        </div>
+                      </div>
+
                       <div className="col-span-2">
                         <div className="flex items-center justify-between mb-1">
                             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">处理人</label>
@@ -771,6 +791,16 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
           )}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
+
+      <TaskDependencyModal
+        isOpen={showDependencyModal}
+        onClose={() => setShowDependencyModal(false)}
+        taskId={taskId || ''}
+        taskTitle={task?.title || ''}
+        onSuccess={() => {
+          // 依赖添加成功后可以刷新任务数据
+        }}
+      />
     </DialogPrimitive.Root>
   );
 };

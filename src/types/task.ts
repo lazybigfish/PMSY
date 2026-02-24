@@ -229,3 +229,45 @@ export interface Risk {
   created_at: string;
   updated_at: string;
 }
+
+// 依赖类型
+export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF';
+
+// 任务依赖关系
+export interface TaskDependency {
+  id: string;
+  task_id: string;
+  depends_on_task_id: string;
+  dependency_type: DependencyType;
+  created_by: string;
+  created_at: string;
+  depends_on_title?: string;
+  depends_on_status?: TaskStatus;
+  depends_on_due_date?: string | null;
+  depends_on_priority?: TaskPriority;
+}
+
+// 任务依赖响应
+export interface TaskDependenciesResponse {
+  dependencies: TaskDependency[];
+  dependents: Array<{
+    id: string;
+    task_id: string;
+    depends_on_task_id: string;
+    dependency_type: DependencyType;
+    created_at: string;
+    dependent_title: string;
+    dependent_status: TaskStatus;
+    dependent_due_date: string | null;
+    dependent_priority: TaskPriority;
+  }>;
+}
+
+// 可选依赖任务（用于选择器）
+export interface AvailableDependencyTask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  due_date: string | null;
+}

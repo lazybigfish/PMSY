@@ -6,6 +6,8 @@ import { useAuth } from '../../context/AuthContextNew';
 import { useTheme } from '../../context/ThemeContext';
 import { Task, Profile, Project, TaskStatus } from '../../types';
 import { TaskTable, TaskWithDetails } from './components/TaskTable';
+import { TaskKanban } from './components/TaskKanban';
+import { TaskGantt } from '../../components/task/TaskGantt';
 import { MobileTaskCard } from './components/MobileTaskCard';
 import TaskFilterBar, { TaskFilterState } from './components/TaskFilterBar';
 import { BatchActionBar } from './components/BatchActionBar';
@@ -16,6 +18,7 @@ import { batchDeleteTasks, batchUpdateTaskStatus, batchAssignTasks } from '../..
 import { ThemedButton } from '../../components/theme/ThemedButton';
 import { ThemedCard } from '../../components/theme/ThemedCard';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { getWeekRange, getMonthRange, KanbanGroupBy } from '../../lib/utils';
 
 export default function TaskList() {
   const { user } = useAuth();
@@ -25,10 +28,12 @@ export default function TaskList() {
   const navigate = useNavigate();
   const { isMobile } = useBreakpoint();
   const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
+  const [taskDependencies, setTaskDependencies] = useState<Map<string, { dependencies: any[]; dependents: any[] }>>(new Map());
   const [users, setUsers] = useState<Profile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'week' | 'month' | 'gantt'>('list');
+  const [kanbanGroupBy, setKanbanGroupBy] = useState<KanbanGroupBy>('status');
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<'created_at' | 'due_date' | 'priority' | 'completed_at'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -186,6 +191,44 @@ export default function TaskList() {
       }));
 
       setTasks(tasksWithProfiles);
+
+      // 获取任务依赖关系
+      try {
+        const taskIds = tasksWithProfiles.map(t => t.id);
+        if (taskIds.length > 0) {
+          const { data: depsData } = await api.db
+            .from('task_dependencies')
+            .select('*')
+            .in('task_id', taskIds);
+
+          const { data: dependentsData } = await api.db
+            .from('task_dependencies')
+            .select('*')
+            .in('depends_on_task_id', taskIds);
+
+          const depsMap = new Map<string, { dependencies: any[]; dependents: any[] }>();
+
+          tasksWithProfiles.forEach(task => {
+            depsMap.set(task.id, { dependencies: [], dependents: [] });
+          });
+
+          (depsData || []).forEach((dep: any) => {
+            if (depsMap.has(dep.task_id)) {
+              depsMap.get(dep.task_id)!.dependencies.push(dep);
+            }
+          });
+
+          (dependentsData || []).forEach((dep: any) => {
+            if (depsMap.has(dep.depends_on_task_id)) {
+              depsMap.get(dep.depends_on_task_id)!.dependents.push(dep);
+            }
+          });
+
+          setTaskDependencies(depsMap);
+        }
+      } catch (depError) {
+        console.error('Error fetching dependencies:', depError);
+      }
     } catch (error) {
       console.error('Error fetching tasks:', error);
     } finally {
@@ -279,9 +322,11 @@ export default function TaskList() {
           break;
       }
     } else {
-      // 只在未激活统计卡片时应用过滤器筛选
-      if (filters.statuses.length > 0) {
-        result = result.filter(t => filters.statuses.includes(t.status));
+      // 周视图/月视图不受默认筛选条件影响，显示所有状态的任务
+      if (viewMode !== 'week' && viewMode !== 'month') {
+        if (filters.statuses.length > 0) {
+          result = result.filter(t => filters.statuses.includes(t.status));
+        }
       }
 
       if (filters.priorities.length > 0) {
@@ -303,6 +348,34 @@ export default function TaskList() {
       }
     }
 
+    // 周视图筛选：本周新建 OR 本周完成
+    if (viewMode === 'week') {
+      const now = new Date();
+      const { start: weekStart, end: weekEnd } = getWeekRange(now);
+      result = result.filter(t => {
+        const createdAt = t.created_at ? new Date(t.created_at) : null;
+        const completedAt = t.completed_at ? new Date(t.completed_at) : null;
+        
+        if (createdAt && createdAt >= weekStart && createdAt <= weekEnd) return true;
+        if (completedAt && completedAt >= weekStart && completedAt <= weekEnd) return true;
+        return false;
+      });
+    }
+
+    // 月视图筛选：当月新建 OR 当月完成
+    if (viewMode === 'month') {
+      const now = new Date();
+      const { start: monthStart, end: monthEnd } = getMonthRange(now);
+      result = result.filter(t => {
+        const createdAt = t.created_at ? new Date(t.created_at) : null;
+        const completedAt = t.completed_at ? new Date(t.completed_at) : null;
+        
+        if (createdAt && createdAt >= monthStart && createdAt <= monthEnd) return true;
+        if (completedAt && completedAt >= monthStart && completedAt <= monthEnd) return true;
+        return false;
+      });
+    }
+
     // 默认排序：按优先级降序，然后按截止日期升序（快到期的在前）
     // 只有当用户没有手动选择排序时才应用默认排序
     if (sortBy === 'created_at' && sortOrder === 'desc') {
@@ -321,7 +394,7 @@ export default function TaskList() {
     }
 
     return result;
-  }, [tasks, filters, activeStatCard, user?.id, sortBy, sortOrder, priorityWeight]);
+  }, [tasks, filters, activeStatCard, user?.id, sortBy, sortOrder, priorityWeight, viewMode]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -791,6 +864,26 @@ export default function TaskList() {
               <List className="w-5 h-5" />
             </button>
             <button
+              onClick={() => setViewMode('week')}
+              className="p-2 rounded-lg transition-colors text-xs font-medium"
+              style={{
+                backgroundColor: viewMode === 'week' ? (isDark ? `${colors.primary[500]}20` : colors.primary[100]) : 'transparent',
+                color: viewMode === 'week' ? colors.primary[600] : (isDark ? '#9ca3af' : '#6b7280')
+              }}
+            >
+              周视图
+            </button>
+            <button
+              onClick={() => setViewMode('month')}
+              className="p-2 rounded-lg transition-colors text-xs font-medium"
+              style={{
+                backgroundColor: viewMode === 'month' ? (isDark ? `${colors.primary[500]}20` : colors.primary[100]) : 'transparent',
+                color: viewMode === 'month' ? colors.primary[600] : (isDark ? '#9ca3af' : '#6b7280')
+              }}
+            >
+              月视图
+            </button>
+            <button
               onClick={() => setViewMode('kanban')}
               className="p-2 rounded-lg transition-colors"
               style={{
@@ -800,13 +893,57 @@ export default function TaskList() {
             >
               <LayoutGrid className="w-5 h-5" />
             </button>
+            {/* 甘特图视图暂时隐藏
+            <button
+              onClick={() => setViewMode('gantt')}
+              className="p-2 rounded-lg transition-colors"
+              style={{
+                backgroundColor: viewMode === 'gantt' ? (isDark ? `${colors.primary[500]}20` : colors.primary[100]) : 'transparent',
+                color: viewMode === 'gantt' ? colors.primary[600] : (isDark ? '#9ca3af' : '#6b7280')
+              }}
+              title="甘特图"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M3 12h12M3 18h6" />
+              </svg>
+            </button>
+            */}
           </div>
           <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             共 {filteredTasks.length} 条任务
           </div>
         </div>
 
-        {isMobile ? (
+        {viewMode === 'kanban' ? (
+          <TaskKanban
+            tasks={filteredTasks}
+            groupBy={kanbanGroupBy}
+            onGroupByChange={setKanbanGroupBy}
+            onTaskClick={(taskId) => navigate(`/tasks/${taskId}`)}
+            onStatusChange={async (taskId, status) => {
+              try {
+                const updates: any = { status };
+                if (status === 'done') {
+                  updates.completed_at = new Date().toISOString();
+                } else {
+                  updates.completed_at = null;
+                }
+                await api.db.from('tasks').update(updates).eq('id', taskId);
+                fetchTasks();
+              } catch (error) {
+                console.error('Error updating task status:', error);
+              }
+            }}
+            projects={projects}
+            users={users}
+          />
+        ) : /* viewMode === 'gantt' ? (
+          <TaskGantt
+            tasks={filteredTasks}
+            dependencies={taskDependencies}
+            onTaskClick={(taskId) => navigate(`/tasks/${taskId}`)}
+          />
+        ) : */ isMobile ? (
           // 移动端使用卡片式布局
           <div className="space-y-3">
             {filteredTasks.map((task) => (

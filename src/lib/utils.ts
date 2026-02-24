@@ -111,3 +111,63 @@ export function numberToChinese(num: number): string {
 
   return result;
 }
+
+export type KanbanGroupBy = 'status' | 'project' | 'priority' | 'assignee';
+
+export function getWeekRange(date: Date): { start: Date; end: Date } {
+  const now = new Date(date);
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+  const start = new Date(now);
+  start.setDate(diff);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+export function getMonthRange(date: Date): { start: Date; end: Date } {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+  return { start, end };
+}
+
+export function getWeekInfo(date: Date): { weekNumber: number; dayOfWeek: string } {
+  const year = date.getFullYear();
+  const firstDayOfYear = new Date(year, 0, 1);
+  const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
+  const weekNumber = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+
+  const dayOfWeekArr = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const dayOfWeek = dayOfWeekArr[date.getDay()];
+
+  return { weekNumber, dayOfWeek };
+}
+
+export function formatCreatedAtWithWeek(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '-';
+
+  const { weekNumber, dayOfWeek } = getWeekInfo(d);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+
+  return `${year}年${month}月${day}日 ${hours}:${minutes} ${dayOfWeek}（第${weekNumber}周）`;
+}
+
+export function formatDateTime(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '-';
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}

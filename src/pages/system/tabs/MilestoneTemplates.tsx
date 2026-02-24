@@ -8,7 +8,8 @@ import { MilestoneTemplateList } from '../components/MilestoneTemplateList';
 
 interface TemplateVersion {
   id: string;
-  version_name: string;
+  name: string;
+  version_number: string;
   description: string;
   is_active: boolean;
   created_at: string;
@@ -55,7 +56,8 @@ export default function MilestoneTemplates() {
   
   // Version Form State
   const [newVersionForm, setNewVersionForm] = useState({
-    version_name: '',
+    name: '',
+    version_number: '',
     description: '',
     copyFrom: ''
   });
@@ -142,7 +144,8 @@ export default function MilestoneTemplates() {
       const { data: newVersionData, error: vError } = await api.db
         .from('template_versions')
         .insert({
-          version_name: newVersionForm.version_name,
+          name: newVersionForm.name,
+          version_number: newVersionForm.version_number,
           description: newVersionForm.description,
           is_active: false
         })
@@ -168,7 +171,7 @@ export default function MilestoneTemplates() {
       }
       
       setShowVersionModal(false);
-      setNewVersionForm({ version_name: '', description: '', copyFrom: '' });
+      setNewVersionForm({ name: '', version_number: '', description: '', copyFrom: '' });
     } catch (error) {
       console.error('Error creating version:', error);
       alert('创建版本失败');
@@ -218,7 +221,7 @@ export default function MilestoneTemplates() {
   };
 
   const handleSetActiveVersion = async (version: TemplateVersion) => {
-    if (!confirm(`确定要将 "${version.version_name}" 设为当前生效版本吗？\n\n注意：这将影响后续新建的项目，已有项目不受影响。`)) return;
+    if (!confirm(`确定要将 "${version.name}" 设为当前生效版本吗？\n\n注意：这将影响后续新建的项目，已有项目不受影响。`)) return;
 
     try {
       setLoading(true);
@@ -231,7 +234,7 @@ export default function MilestoneTemplates() {
           setSelectedVersion({ ...updatedVersion, is_active: true });
         }
       }
-      alert(`"${version.version_name}" 已设为生效版本`);
+      alert(`"${version.name}" 已设为生效版本`);
     } catch (error) {
       console.error('Error setting active version:', error);
       alert('设置生效版本失败');
@@ -246,7 +249,7 @@ export default function MilestoneTemplates() {
       return;
     }
 
-    if (!confirm(`确定要删除版本 "${version.version_name}" 吗？\n\n警告：此操作将删除该版本下的所有里程碑模板和任务，且无法恢复！`)) return;
+    if (!confirm(`确定要删除版本 "${version.name}" 吗？\n\n警告：此操作将删除该版本下的所有里程碑模板和任务，且无法恢复！`)) return;
 
     try {
       setLoading(true);
@@ -286,7 +289,7 @@ export default function MilestoneTemplates() {
         setMilestones([]);
       }
 
-      alert(`版本 "${version.version_name}" 已删除`);
+      alert(`版本 "${version.name}" 已删除`);
     } catch (error) {
       console.error('Error deleting version:', error);
       alert('删除版本失败');
@@ -451,7 +454,8 @@ export default function MilestoneTemplates() {
       const { error: versionError } = await api.db
         .from('template_versions')
         .insert({
-          version_name: 'V1.0',
+          name: '标准项目里程碑模板 v1.0',
+          version_number: 'V1.0',
           description: '系统初始版本',
           is_active: true
         });
@@ -462,7 +466,7 @@ export default function MilestoneTemplates() {
       const { data: versionsData, error: fetchVersionError } = await api.db
         .from('template_versions')
         .select('*')
-        .eq('version_name', 'V1.0')
+        .eq('version_number', 'V1.0')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(1);
@@ -596,7 +600,7 @@ export default function MilestoneTemplates() {
             {activeVersion ? (
               <div className="flex items-center text-sm text-gray-500 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
                 <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
-                当前生效版本：<span className="font-medium text-gray-900 mx-1">{activeVersion.version_name}</span>
+                当前生效版本：<span className="font-medium text-gray-900 mx-1">{activeVersion.name}</span>
               </div>
             ) : (
               <div className="flex items-center text-sm text-red-500 bg-red-50 px-3 py-1 rounded-full border border-red-200">
@@ -654,7 +658,7 @@ export default function MilestoneTemplates() {
           <div className="bg-white border rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium text-gray-900">
-                {selectedVersion ? `${selectedVersion.version_name} - 阶段模板` : '请选择版本'}
+                {selectedVersion ? `${selectedVersion.name} - 阶段模板` : '请选择版本'}
               </h3>
               {selectedVersion && (
                 <button
@@ -723,7 +727,7 @@ export default function MilestoneTemplates() {
                         <CheckCircle className="w-5 h-5 text-green-500" />
                       )}
                       <div>
-                        <h4 className="font-medium text-gray-900">{version.version_name}</h4>
+                        <h4 className="font-medium text-gray-900">{version.name}</h4>
                         <p className="text-sm text-gray-500">{version.description || '无描述'}</p>
                         <p className="text-xs text-gray-400 mt-1">
                           创建于: {new Date(version.created_at).toLocaleString()}
@@ -795,8 +799,18 @@ export default function MilestoneTemplates() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">版本名称</label>
                 <input
                   type="text"
-                  value={newVersionForm.version_name}
-                  onChange={(e) => setNewVersionForm({ ...newVersionForm, version_name: e.target.value })}
+                  value={newVersionForm.name}
+                  onChange={(e) => setNewVersionForm({ ...newVersionForm, name: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="如：标准项目里程碑模板 v2.0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">版本号</label>
+                <input
+                  type="text"
+                  value={newVersionForm.version_number}
+                  onChange={(e) => setNewVersionForm({ ...newVersionForm, version_number: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2"
                   placeholder="如：V2.0"
                 />
@@ -819,7 +833,7 @@ export default function MilestoneTemplates() {
                 >
                   <option value="">不复制（空白版本）</option>
                   {versions.map(v => (
-                    <option key={v.id} value={v.id}>{v.version_name}</option>
+                    <option key={v.id} value={v.id}>{v.name}</option>
                   ))}
                 </select>
               </div>
@@ -833,7 +847,7 @@ export default function MilestoneTemplates() {
               </button>
               <button
                 onClick={handleCreateVersion}
-                disabled={!newVersionForm.version_name || loading}
+                disabled={!newVersionForm.name || !newVersionForm.version_number || loading}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
               >
                 创建

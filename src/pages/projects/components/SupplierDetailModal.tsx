@@ -694,7 +694,7 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
           project_supplier_id: projectSupplier.id,
           acceptance_type: type,
           acceptance_date: date,
-          result: 'pass',
+          result: 'passed',
           description: '',
           attachments: [],
           created_by: (await api.auth.getUser()).id
@@ -861,11 +861,11 @@ function SupplierAcceptancePaymentTab({ projectSupplier, onUpdate }: {
                               {typeConfig.label}
                             </span>
                             <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                              acceptance.result === 'pass'
+                              acceptance.result === 'passed'
                                 ? 'bg-green-100 text-green-800'
                                 : 'bg-red-100 text-red-800'
                             }`}>
-                              {acceptance.result === 'pass' ? '通过' : '不通过'}
+                              {acceptance.result === 'passed' ? '通过' : '不通过'}
                             </span>
                           </div>
                           <p className="text-sm text-gray-500 mt-1">

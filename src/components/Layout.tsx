@@ -142,7 +142,7 @@ const Layout = () => {
             : "bg-white"
         )}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl xl:max-w-8xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             {/* Logo and Navigation */}
             <div className="flex items-center gap-8">
@@ -255,7 +255,7 @@ const Layout = () => {
 
       {/* Main Content */}
       <main className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Outlet />
         </div>
       </main>

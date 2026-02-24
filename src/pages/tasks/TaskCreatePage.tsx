@@ -18,6 +18,7 @@ interface TaskFormData {
   due_date: string;
   creator_id: string;
   assignee_ids: string[];
+  dependency_task_ids: string[];
 }
 
 export default function TaskCreatePage() {
@@ -29,6 +30,8 @@ export default function TaskCreatePage() {
   const [loadingModules, setLoadingModules] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [availableDependencies, setAvailableDependencies] = useState<any[]>([]);
+  const [loadingDependencies, setLoadingDependencies] = useState(false);
 
   const [formData, setFormData] = useState<TaskFormData>({
     title: '',
@@ -39,7 +42,8 @@ export default function TaskCreatePage() {
     is_public: false,
     due_date: '',
     creator_id: user?.id || '',
-    assignee_ids: user?.id ? [user.id] : []
+    assignee_ids: user?.id ? [user.id] : [],
+    dependency_task_ids: []
   });
 
   useEffect(() => {
@@ -50,8 +54,10 @@ export default function TaskCreatePage() {
   useEffect(() => {
     if (formData.project_id) {
       fetchModules(formData.project_id);
+      fetchAvailableDependencies(formData.project_id);
     } else {
       setModules([]);
+      setAvailableDependencies([]);
       setFormData(prev => ({ ...prev, module_id: '' }));
     }
   }, [formData.project_id]);
@@ -86,6 +92,37 @@ export default function TaskCreatePage() {
     } finally {
       setLoadingModules(false);
     }
+  };
+
+  const fetchAvailableDependencies = async (projectId: string) => {
+    if (!projectId) {
+      setAvailableDependencies([]);
+      return;
+    }
+    setLoadingDependencies(true);
+    try {
+      const { data } = await api.db
+        .from('tasks')
+        .select('id, title, status, priority, due_date')
+        .eq('project_id', projectId)
+        .neq('status', 'done')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      setAvailableDependencies(data || []);
+    } catch (error) {
+      console.error('Error fetching dependencies:', error);
+    } finally {
+      setLoadingDependencies(false);
+    }
+  };
+
+  const toggleDependency = (taskId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      dependency_task_ids: prev.dependency_task_ids.includes(taskId)
+        ? prev.dependency_task_ids.filter(id => id !== taskId)
+        : [...prev.dependency_task_ids, taskId]
+    }));
   };
 
   const buildModuleHierarchy = (modules: ProjectModule[]): ProjectModule[] => {
@@ -158,6 +195,20 @@ export default function TaskCreatePage() {
         assignee_ids: sortedAssigneeIds,
         module_ids: formData.module_id ? [formData.module_id] : undefined
       });
+
+      // 创建任务依赖关系
+      if (formData.dependency_task_ids.length > 0) {
+        for (const dependsOnTaskId of formData.dependency_task_ids) {
+          try {
+            await taskService.addTaskDependency(task.id, {
+              depends_on_task_id: dependsOnTaskId,
+              dependency_type: 'FS'
+            });
+          } catch (depError) {
+            console.error('Error adding dependency:', depError);
+          }
+        }
+      }
 
       navigate(`/tasks/${task.id}`);
     } catch (error) {
@@ -405,6 +456,42 @@ export default function TaskCreatePage() {
                     placeholder="选择截止日期"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-dark-700 mb-2">
+                    前置任务
+                    <span className="text-xs font-normal text-dark-500 ml-2">设置此任务的前置任务</span>
+                  </label>
+                  {formData.project_id ? (
+                    loadingDependencies ? (
+                      <p className="text-xs text-dark-400">加载中...</p>
+                    ) : availableDependencies.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {availableDependencies.map(task => (
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => toggleDependency(task.id)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                              formData.dependency_task_ids.includes(task.id)
+                                ? 'bg-violet-100 text-violet-700 border-2 border-violet-500'
+                                : 'bg-dark-100 text-dark-700 border-2 border-transparent hover:bg-dark-200'
+                            }`}
+                          >
+                            <span className="truncate max-w-[150px]">{task.title}</span>
+                            {formData.dependency_task_ids.includes(task.id) && (
+                              <span className="text-xs">✓</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-dark-400">该项目暂无其他未完成的任务</p>
+                    )
+                  ) : (
+                    <p className="text-xs text-dark-400">请先选择所属项目</p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 p-4 bg-dark-50 rounded-xl">

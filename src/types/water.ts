@@ -38,7 +38,14 @@ export interface ForumReply {
   parent_id: string | null;
   created_at: string;
   updated_at: string;
+  floor_number?: string;
+  children?: ForumReply[];
   author?: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  };
+  parent_author?: {
     id: string;
     full_name: string | null;
     avatar_url: string | null;

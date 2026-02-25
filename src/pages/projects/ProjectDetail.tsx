@@ -389,6 +389,11 @@ const ProjectDetail = () => {
           <ProjectOverview
             projectId={id!}
             canEdit={canEdit}
+            isEditing={isEditing}
+            editForm={editForm}
+            onEditChange={setEditForm}
+            project={project}
+            onClientSelect={setSelectedClientId}
           />
         )}
         {activeTab === 'modules' && canViewAll && (

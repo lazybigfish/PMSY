@@ -257,8 +257,16 @@ const TaskDetailPage = () => {
       }
 
       // 映射字段名
-      const mappedComments = (commentsData || []).map((item: any) => ({ ...item, creator: usersMap[item.user_id] }));
-      const mappedLogs = (logsData || []).map((item: any) => ({ ...item, creator: usersMap[item.user_id] }));
+      const mappedComments = (commentsData || []).map((item: any) => ({ 
+        ...item, 
+        user: usersMap[item.user_id],
+        creator: usersMap[item.user_id] 
+      }));
+      const mappedLogs = (logsData || []).map((item: any) => ({ 
+        ...item, 
+        user: usersMap[item.user_id],
+        creator: usersMap[item.user_id] 
+      }));
 
       // 单独获取附件数据
       let logsWithAttachments = mappedLogs || [];
@@ -445,8 +453,9 @@ const TaskDetailPage = () => {
     try {
       const { error } = await api.db.from('task_comments').insert({
         task_id: task.id,
-        content,
-        created_by: user.id
+        user_id: user.id,
+        created_by: user.id,
+        content
       });
       if (error) throw error;
       fetchTaskDetails(true);
@@ -506,7 +515,20 @@ const TaskDetailPage = () => {
       }
       await taskService.updateTask(task.id, updateData);
 
-      // 4. 刷新数据
+      // 4. 手动记录进度更新描述到历史记录（触发器只记录数值变化，不记录描述内容）
+      if (content.trim()) {
+        await api.db.from('task_history').insert({
+          task_id: task.id,
+          user_id: user.id,
+          field_name: 'progress',
+          old_value: String(task.progress || 0),
+          new_value: String(progress),
+          change_type: 'update',
+          description: content.trim()
+        });
+      }
+
+      // 5. 刷新数据
       await fetchTaskDetails(true);
       setCurrentProgress(progress);
 

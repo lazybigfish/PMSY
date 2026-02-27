@@ -7,8 +7,11 @@ chcp 65001 | Out-Null
 # PMSY Development Environment Restart Script
 # ==========================================
 #
-# Function: Stop all services, compile code, then restart
-# Usage: .\deploy\windows\dev-scripts\restart-dev.ps1
+# Function: Stop all services (including Docker), compile code, then restart everything
+# Usage: .\deploy\windows\dev-scripts\restart-dev.ps1 [-KeepDocker]
+#
+# Parameters:
+#   -KeepDocker: Keep Docker services running (only restart frontend and backend)
 #
 # ==========================================
 
@@ -27,16 +30,35 @@ $Reset = [char]0x1B + "[0m"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $ScriptDir))
 
+# Parse parameters
+$KeepDocker = $false
+foreach ($arg in $args) {
+    if ($arg -eq "-KeepDocker" -or $arg -eq "--keep-docker" -or $arg -eq "-k") {
+        $KeepDocker = $true
+    }
+}
+
 Write-Host ""
 Write-Host "${Blue}==========================================${Reset}"
 Write-Host "${Blue}PMSY Development Environment Restart${Reset}"
 Write-Host "${Blue}==========================================${Reset}"
 Write-Host ""
 
+if ($KeepDocker) {
+    Write-Host "${Cyan}Mode: Keep Docker running (only restart frontend/backend)${Reset}"
+} else {
+    Write-Host "${Cyan}Mode: Full restart (including Docker services)${Reset}"
+}
+Write-Host ""
+
 # Step 1: Stop all services
 Write-Host "${Cyan}Step 1/3: Stopping all services${Reset}"
 try {
-    & "$ScriptDir\stop-dev.ps1"
+    if ($KeepDocker) {
+        & "$ScriptDir\stop-dev.ps1" -KeepDocker
+    } else {
+        & "$ScriptDir\stop-dev.ps1"
+    }
 } catch {
     Write-Host "${Red}Error: Failed to stop services: $($_.Exception.Message)${Reset}"
     exit 1
@@ -47,7 +69,7 @@ Write-Host "${Cyan}Waiting 2 seconds to ensure services are fully stopped...${Re
 Start-Sleep -Seconds 2
 Write-Host ""
 
-# Step 2: Compile backend
+# Step 2: Compile backend (only if not keeping Docker, or if explicitly needed)
 Write-Host "${Cyan}Step 2/3: Compiling backend code${Reset}"
 cd "$ProjectDir\api-new"
 

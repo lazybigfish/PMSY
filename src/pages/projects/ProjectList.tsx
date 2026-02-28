@@ -348,11 +348,11 @@ const ProjectList = () => {
     {
       key: 'amount',
       title: '项目金额',
-      width: '180px',
+      width: '240px',
       render: (project: ProjectWithDetails) => (
         <div className="text-right">
           <div className="text-sm font-mono font-semibold" style={{ color: colors.primary[600] }}>
-            {formatAmount(project.amount)}
+            <span className="font-normal mr-1" style={{ color: isDark ? '#9ca3af' : '#9ca3af' }}>合同额</span>{formatAmount(project.amount)}
           </div>
           <div className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             {numberToChinese(project.amount || 0)}
@@ -361,9 +361,8 @@ const ProjectList = () => {
           {project.total_payment > 0 && (
             <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : colors.border.light}` }}>
               <div className="flex items-center justify-end gap-2">
-                <Wallet className="w-3.5 h-3.5" style={{ color: isDark ? '#34d399' : '#059669' }} />
                 <span className="text-sm font-mono font-semibold" style={{ color: isDark ? '#34d399' : '#059669' }}>
-                  {formatAmount(project.total_payment)}
+                  <span className="font-normal mr-1" style={{ color: isDark ? '#6b7280' : '#9ca3af' }}>已回款</span>{formatAmount(project.total_payment)}
                 </span>
               </div>
               <div className="flex items-center justify-end gap-2 mt-1">

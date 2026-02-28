@@ -49,7 +49,7 @@ function App() {
               
               {/* 相关方模块 */}
               <Route path="/stakeholders" element={<StakeholderLayout />}>
-                <Route index element={<Navigate to="/stakeholders/suppliers" replace />} />
+                <Route index element={<Navigate to="/stakeholders/clients" replace />} />
                 <Route path="suppliers" element={<SupplierList />} />
                 <Route path="clients" element={<ClientList />} />
               </Route>

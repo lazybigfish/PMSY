@@ -141,7 +141,7 @@ export async function uploadFile(
       reject(new Error('上传失败'));
     });
     
-    xhr.open('POST', `${API_BASE_URL}/storage/v1/upload`);
+    xhr.open('POST', `${API_BASE_URL}/storage/v1/object/files/forum`);
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
@@ -161,7 +161,9 @@ export async function downloadFile(fileId: string): Promise<Blob> {
  */
 export function getFileUrl(filePath: string): string {
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  return `${API_BASE_URL}/storage/v1/object/public/files/${filePath}`;
+  // 从完整路径中提取文件名，因为上传到 forum 目录
+  const fileName = filePath.split('/').pop() || filePath;
+  return `${API_BASE_URL}/storage/v1/object/public/files/forum/${fileName}`;
 }
 
 /**

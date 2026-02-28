@@ -71,8 +71,9 @@ export async function uploadFile(
     'X-Upload-Date': new Date().toISOString(),
   });
 
-  // 生成文件 URL
-  const url = `${MINIO_CONFIG.useSSL ? 'https' : 'http'}://${MINIO_CONFIG.endPoint}:${MINIO_CONFIG.port}/${bucket}/${filePath}`;
+  // 生成文件 URL - 使用与 API 同源的地址
+  const API_PORT = process.env.API_PORT || process.env.PORT || 3001;
+  const url = `http://localhost:${API_PORT}/storage/v1/object/public/${bucket}/${filePath}`;
 
   return {
     filename: path.basename(filePath),

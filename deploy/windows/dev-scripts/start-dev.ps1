@@ -7,8 +7,10 @@ chcp 65001 | Out-Null
 # PMSY Development Environment Start Script
 # ==========================================
 #
-# Function: Start Docker services, compile and start backend API service and frontend dev server
+# Function: Compile and start backend API service and frontend dev server
 # Usage: .\deploy\windows\dev-scripts\start-dev.ps1
+#
+# Note: Docker services (PostgreSQL, Redis, MinIO) must be started separately
 #
 # ==========================================
 
@@ -37,103 +39,26 @@ cd $ProjectDir
 # Check port usage
 function Check-Port {
     param([int]$Port)
-    $TcpClient = New-Object System.Net.Sockets.TcpClient
+    # Check IPv4 first
     try {
-        $TcpClient.Connect("localhost", $Port)
+        $TcpClient = New-Object System.Net.Sockets.TcpClient
+        $TcpClient.Connect("127.0.0.1", $Port)
         $TcpClient.Close()
         return $true
-    } catch {
-        return $false
-    }
-}
-
-# Check if Docker is running
-function Check-Docker {
+    } catch {}
+    # Then check IPv6
     try {
-        $dockerInfo = docker info 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            return $true
-        }
-        return $false
-    } catch {
-        return $false
-    }
-}
-
-# Start Docker services
-function Start-DockerServices {
-    Write-Host "${Cyan}[1/4] Starting Docker services...${Reset}"
-
-    # Check Docker is running
-    if (!(Check-Docker)) {
-        Write-Host "${Red}Error: Docker is not running. Please start Docker Desktop first.${Reset}"
-        exit 1
-    }
-
-    # Check if docker-compose.yml exists
-    $DockerComposePath = "$ProjectDir\config\docker\docker-compose.yml"
-    if (!(Test-Path $DockerComposePath)) {
-        Write-Host "${Red}Error: Docker compose file not found at $DockerComposePath${Reset}"
-        exit 1
-    }
-
-    # Start Docker services
-    Write-Host "${Cyan}Starting PostgreSQL, Redis, MinIO...${Reset}"
-    try {
-        docker-compose -f "$DockerComposePath" up -d
-        if ($LASTEXITCODE -ne 0) {
-            throw "Docker compose up failed"
-        }
-    } catch {
-        Write-Host "${Red}Error: Failed to start Docker services: $($_.Exception.Message)${Reset}"
-        exit 1
-    }
-
-    # Wait for services to be healthy
-    Write-Host "${Cyan}Waiting for Docker services to be healthy...${Reset}"
-    $maxAttempts = 30
-    $attempt = 0
-    $servicesReady = $false
-
-    while ($attempt -lt $maxAttempts -and !$servicesReady) {
-        $attempt++
-        Start-Sleep -Seconds 2
-
-        # Check PostgreSQL
-        $pgReady = docker exec pmsy-postgres pg_isready -U pmsy 2>$null
-        $pgHealthy = $LASTEXITCODE -eq 0
-
-        # Check Redis
-        $redisHealthy = $false
-        try {
-            $redisPing = docker exec pmsy-redis redis-cli ping 2>$null
-            $redisHealthy = $redisPing -eq "PONG"
-        } catch {}
-
-        # Check MinIO
-        $minioHealthy = $false
-        try {
-            $minioResponse = Invoke-WebRequest -Uri "http://localhost:9000/minio/health/live" -UseBasicParsing -TimeoutSec 5 2>$null
-            $minioHealthy = $minioResponse.StatusCode -eq 200
-        } catch {}
-
-        if ($pgHealthy -and $redisHealthy -and $minioHealthy) {
-            $servicesReady = $true
-            Write-Host "${Green}All Docker services are ready${Reset}"
-        } else {
-            Write-Host "${Cyan}Waiting... (PostgreSQL: $pgHealthy, Redis: $redisHealthy, MinIO: $minioHealthy)${Reset}"
-        }
-    }
-
-    if (!$servicesReady) {
-        Write-Host "${Yellow}Warning: Docker services may not be fully ready, continuing anyway...${Reset}"
-    }
-    Write-Host ""
+        $TcpClient = New-Object System.Net.Sockets.TcpClient
+        $TcpClient.Connect("::1", $Port)
+        $TcpClient.Close()
+        return $true
+    } catch {}
+    return $false
 }
 
 # Compile backend service
 function Build-Backend {
-    Write-Host "${Cyan}[2/4] Compiling backend API service...${Reset}"
+    Write-Host "${Cyan}[1/3] Compiling backend API service...${Reset}"
     cd "$ProjectDir\api-new"
 
     if (!(Test-Path "node_modules")) {
@@ -154,7 +79,7 @@ function Build-Backend {
 
 # Start backend service
 function Start-Backend {
-    Write-Host "${Cyan}[3/4] Starting backend API service...${Reset}"
+    Write-Host "${Cyan}[2/3] Starting backend API service...${Reset}"
     if (Check-Port 3001) {
         Write-Host "${Yellow}Warning: Port 3001 is already in use, backend service may already be running${Reset}"
         Write-Host "${Yellow}Attempting to restart backend service...${Reset}"
@@ -196,7 +121,7 @@ function Start-Backend {
 # Start frontend service
 function Start-Frontend {
     Write-Host ""
-    Write-Host "${Cyan}[4/4] Starting frontend development server...${Reset}"
+    Write-Host "${Cyan}[3/3] Starting frontend development server...${Reset}"
     if (Check-Port 5173) {
         Write-Host "${Yellow}Warning: Port 5173 is already in use, frontend service may already be running${Reset}"
         Write-Host "${Yellow}Attempting to restart frontend service...${Reset}"
@@ -228,13 +153,13 @@ function Start-Frontend {
 
     # Wait for frontend to start
     Write-Host "${Cyan}Waiting for frontend service to start...${Reset}"
-    for ($i = 1; $i -le 30; $i++) {
+    for ($i = 1; $i -le 60; $i++) {
         if (Check-Port 5173) {
             Write-Host "${Green}Frontend service is ready${Reset}"
             break
         }
         Start-Sleep -Seconds 1
-        if ($i -eq 30) {
+        if ($i -eq 60) {
             Write-Host "${Red}Frontend service startup timeout, please check error messages${Reset}"
             exit 1
         }
@@ -251,9 +176,8 @@ function Show-Completion {
     Write-Host "Access addresses:"
     Write-Host "  - Frontend:    http://localhost:5173"
     Write-Host "  - Backend:     http://localhost:3001"
-    Write-Host "  - PostgreSQL:  localhost:5432"
-    Write-Host "  - Redis:       localhost:6379"
-    Write-Host "  - MinIO:       http://localhost:9000 (Console: 9001)"
+    Write-Host ""
+    Write-Host "Note: Docker services (PostgreSQL, Redis, MinIO) must be started separately"
     Write-Host ""
     Write-Host "Stop services:"
     Write-Host "  .\deploy\windows\dev-scripts\stop-dev.ps1"
@@ -262,9 +186,6 @@ function Show-Completion {
 
 # Main process
 function Main {
-    # Start Docker services
-    Start-DockerServices
-
     # Compile backend
     Build-Backend
 

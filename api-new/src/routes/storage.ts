@@ -138,6 +138,7 @@ router.get(
       // 设置响应头
       res.setHeader('Content-Type', stat.metaData['content-type'] || 'application/octet-stream');
       res.setHeader('Content-Length', stat.size);
+      res.setHeader('Access-Control-Allow-Origin', '*');
 
       // 获取文件流并返回
       const stream = await storageService.downloadFile(bucket, filePath);

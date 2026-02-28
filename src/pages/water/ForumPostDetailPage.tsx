@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Loader2, Trash2, Pin, Star, MessageSquare, Eye, Clock, ChevronDown, ChevronUp, Reply } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Trash2, Pin, Star, MessageSquare, Eye, Clock, ChevronDown, ChevronUp, Reply, Image as ImageIcon, ZoomIn } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { ForumPost, ForumReply, ForumCategory } from '../../types';
@@ -8,22 +8,30 @@ import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { LikeButton } from '../../components/LikeButton';
 import { Avatar } from '../../components/Avatar';
+import { ImagePreview } from '../../components/ImagePreview';
+import { PostImageUploader, PostImage } from './components/PostImageUploader';
 
 // 辅助函数：解析帖子内容
-const parseContent = (content: any): string => {
-  if (!content) return '';
+const parseContent = (content: any): { text: string; images: string[] } => {
+  if (!content) return { text: '', images: [] };
   if (typeof content === 'string') {
     try {
       const parsed = JSON.parse(content);
-      return parsed.text || parsed.content || content;
+      return {
+        text: parsed.text || parsed.content || '',
+        images: parsed.images || []
+      };
     } catch {
-      return content;
+      return { text: content, images: [] };
     }
   }
   if (typeof content === 'object') {
-    return content.text || content.content || '';
+    return {
+      text: content.text || content.content || '',
+      images: content.images || []
+    };
   }
-  return String(content);
+  return { text: String(content), images: [] };
 };
 
 const categories: { key: ForumCategory; label: string; color: string; bgColor: string; borderColor: string }[] = [
@@ -95,8 +103,28 @@ function ReplyItem({ reply, user, profile, onDelete, onReply, level = 0 }: Reply
             </div>
           </div>
           <p className="text-sm text-dark-700 leading-relaxed whitespace-pre-wrap mb-2">
-            {reply.content}
+            {reply.content?.text || reply.content}
           </p>
+          {/* 回复图片 */}
+          {reply.content?.images?.length > 0 && (
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {reply.content.images.map((imgUrl: string, idx: number) => (
+                <div 
+                  key={idx} 
+                  className="w-20 h-20 rounded-lg overflow-hidden bg-dark-100 flex-shrink-0"
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`回复图片 ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2">
             {level < maxLevel && (
               <button
@@ -158,6 +186,10 @@ export default function ForumPostDetailPage() {
   const [replies, setReplies] = useState<ForumReply[]>([]);
   const [loading, setLoading] = useState(true);
   const [replyContent, setReplyContent] = useState('');
+  const [replyImages, setReplyImages] = useState<PostImage[]>([]);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ForumReply | null>(null);
 
@@ -209,6 +241,7 @@ export default function ForumPostDetailPage() {
       }
 
       postWithAuthor.like_count = postWithAuthor.like_count || 0;
+      postWithAuthor.content = parseContent(postData?.content);
       setPost(postWithAuthor);
 
       // 增加浏览量
@@ -305,11 +338,14 @@ export default function ForumPostDetailPage() {
         authorsData?.forEach(a => authorMap.set(a.id, a));
       }
 
-      const repliesWithAuthors = (repliesData || []).map(reply => ({
-        ...reply,
-        author: authorMap.get(reply.author_id),
-        content: parseContent(reply.content)
-      }));
+      const repliesWithAuthors = (repliesData || []).map(reply => {
+        const parsed = parseContent(reply.content);
+        return {
+          ...reply,
+          author: authorMap.get(reply.author_id),
+          content: parsed
+        };
+      });
 
       // 构建嵌套结构
       const nestedReplies = buildReplyTree(repliesWithAuthors);
@@ -322,13 +358,18 @@ export default function ForumPostDetailPage() {
   const submitReply = async () => {
     if (!post || !user || !replyContent.trim()) return;
 
+    // 过滤出已上传成功的图片
+    const uploadedImages = replyImages
+      .filter(img => !img.uploading && !img.error)
+      .map(img => img.url);
+
     try {
       setSubmitting(true);
 
       const replyData: any = {
         post_id: post.id,
         author_id: user.id,
-        content: { text: replyContent.trim() }
+        content: { text: replyContent.trim(), images: uploadedImages }
       };
 
       // 如果是回复某条回复
@@ -349,6 +390,7 @@ export default function ForumPostDetailPage() {
         .eq('id', post.id);
 
       setReplyContent('');
+      setReplyImages([]);
       setReplyingTo(null);
       setPost(prev => prev ? { ...prev, reply_count: prev.reply_count + 1 } : null);
       await loadReplies(post.id);
@@ -558,10 +600,41 @@ export default function ForumPostDetailPage() {
           </div>
         </div>
 
-        {/* 正文内容 */}
+        {/* 帖子正文 */}
         <div className="prose prose-sm max-w-none text-dark-700 leading-relaxed whitespace-pre-wrap text-base mb-6">
-          {parseContent(post.content)}
+          {post.content?.text || post.content}
         </div>
+
+        {/* 帖子图片 */}
+        {post.content?.images?.length > 0 && (
+          <div className="mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {post.content.images.map((imgUrl: string, idx: number) => (
+                <div 
+                  key={idx} 
+                  className="relative aspect-square rounded-lg overflow-hidden bg-dark-100 cursor-pointer group"
+                  onClick={() => {
+                    setPreviewImages(post.content.images);
+                    setPreviewIndex(idx);
+                    setShowPreview(true);
+                  }}
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`图片 ${idx + 1}`}
+                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 点赞按钮 */}
         <div className="flex justify-center pt-4 border-t border-dark-100">
@@ -625,32 +698,47 @@ export default function ForumPostDetailPage() {
                 </button>
               </div>
             )}
-            <div className="flex gap-3">
+            <div className="space-y-3">
               <textarea
                 value={replyContent}
                 onChange={(e) => setReplyContent(e.target.value)}
-                placeholder={replyingTo ? `回复 ${replyingTo.author?.full_name}...` : '写下你的回复...'}
+                placeholder={replyingTo ? `回复 ${replyingTo.author?.full_name}...` : '写下你的回复，支持 Ctrl+V 粘贴图片'}
                 rows={3}
-                className="flex-1 input resize-none"
+                className="w-full input resize-none"
               />
-              <button
-                onClick={submitReply}
-                disabled={!replyContent.trim() || submitting}
-                className="btn-primary px-6 self-end"
-              >
-                {submitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    回复
-                  </>
-                )}
-              </button>
+              <PostImageUploader
+                images={replyImages}
+                onChange={setReplyImages}
+                maxImages={4}
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={submitReply}
+                  disabled={!replyContent.trim() || submitting}
+                  className="btn-primary px-6"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      回复
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* 图片预览 */}
+      <ImagePreview
+        images={previewImages}
+        initialIndex={previewIndex}
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+      />
     </div>
   );
 }

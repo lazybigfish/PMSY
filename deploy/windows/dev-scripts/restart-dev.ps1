@@ -7,11 +7,10 @@ chcp 65001 | Out-Null
 # PMSY Development Environment Restart Script
 # ==========================================
 #
-# Function: Stop all services (including Docker), compile code, then restart everything
-# Usage: .\deploy\windows\dev-scripts\restart-dev.ps1 [-KeepDocker]
+# Function: Stop frontend and backend, compile code, then restart
+# Usage: .\deploy\windows\dev-scripts\restart-dev.ps1
 #
-# Parameters:
-#   -KeepDocker: Keep Docker services running (only restart frontend and backend)
+# Note: Docker services (PostgreSQL, Redis, MinIO) must be started separately
 #
 # ==========================================
 
@@ -30,35 +29,16 @@ $Reset = [char]0x1B + "[0m"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $ScriptDir))
 
-# Parse parameters
-$KeepDocker = $false
-foreach ($arg in $args) {
-    if ($arg -eq "-KeepDocker" -or $arg -eq "--keep-docker" -or $arg -eq "-k") {
-        $KeepDocker = $true
-    }
-}
-
 Write-Host ""
 Write-Host "${Blue}==========================================${Reset}"
 Write-Host "${Blue}PMSY Development Environment Restart${Reset}"
 Write-Host "${Blue}==========================================${Reset}"
 Write-Host ""
 
-if ($KeepDocker) {
-    Write-Host "${Cyan}Mode: Keep Docker running (only restart frontend/backend)${Reset}"
-} else {
-    Write-Host "${Cyan}Mode: Full restart (including Docker services)${Reset}"
-}
-Write-Host ""
-
-# Step 1: Stop all services
-Write-Host "${Cyan}Step 1/3: Stopping all services${Reset}"
+# Step 1: Stop frontend and backend services
+Write-Host "${Cyan}Step 1/3: Stopping frontend and backend services${Reset}"
 try {
-    if ($KeepDocker) {
-        & "$ScriptDir\stop-dev.ps1" -KeepDocker
-    } else {
-        & "$ScriptDir\stop-dev.ps1"
-    }
+    & "$ScriptDir\stop-dev.ps1"
 } catch {
     Write-Host "${Red}Error: Failed to stop services: $($_.Exception.Message)${Reset}"
     exit 1
@@ -69,7 +49,7 @@ Write-Host "${Cyan}Waiting 2 seconds to ensure services are fully stopped...${Re
 Start-Sleep -Seconds 2
 Write-Host ""
 
-# Step 2: Compile backend (only if not keeping Docker, or if explicitly needed)
+# Step 2: Compile backend
 Write-Host "${Cyan}Step 2/3: Compiling backend code${Reset}"
 cd "$ProjectDir\api-new"
 
@@ -94,8 +74,8 @@ try {
 }
 Write-Host ""
 
-# Step 3: Start all services
-Write-Host "${Cyan}Step 3/3: Starting all services${Reset}"
+# Step 3: Start frontend and backend services
+Write-Host "${Cyan}Step 3/3: Starting frontend and backend services${Reset}"
 try {
     & "$ScriptDir\start-dev.ps1"
 } catch {
@@ -107,4 +87,6 @@ Write-Host ""
 Write-Host "${Green}==========================================${Reset}"
 Write-Host "${Green}Restart completed!${Reset}"
 Write-Host "${Green}==========================================${Reset}"
+Write-Host ""
+Write-Host "Note: Docker services (PostgreSQL, Redis, MinIO) must be started separately"
 Write-Host ""

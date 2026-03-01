@@ -526,7 +526,6 @@ export async function recordTaskModuleChange(
 }
 
 /**
-<<<<<<< Updated upstream
  * 获取任务依赖列表
  */
 export async function getTaskDependencies(taskId: string): Promise<any> {
@@ -558,7 +557,9 @@ export async function removeTaskDependency(taskId: string, dependencyId: string)
 export async function getAvailableDependencies(taskId: string): Promise<any[]> {
   const response = await apiClient.get(`/api/task-dependencies/${taskId}/options`);
   return response;
-=======
+}
+
+/**
  * 获取用户可访问的任务列表
  *
  * 权限规则：
@@ -691,7 +692,6 @@ export async function getUserAccessibleTasks(
     console.error('Error fetching user accessible tasks:', error);
     return [];
   }
->>>>>>> Stashed changes
 }
 
 // 导出服务对象
@@ -718,12 +718,9 @@ export const taskService = {
   batchAssignTasks,
   getTaskHistory,
   recordTaskAssigneeChange,
-<<<<<<< Updated upstream
   getTaskDependencies,
   addTaskDependency,
   removeTaskDependency,
   getAvailableDependencies,
-=======
   getUserAccessibleTasks,
->>>>>>> Stashed changes
 };

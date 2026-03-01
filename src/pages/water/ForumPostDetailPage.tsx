@@ -103,12 +103,12 @@ function ReplyItem({ reply, user, profile, onDelete, onReply, level = 0 }: Reply
             </div>
           </div>
           <p className="text-sm text-dark-700 leading-relaxed whitespace-pre-wrap mb-2">
-            {reply.content?.text || reply.content}
+            {parseContent(reply.content).text}
           </p>
           {/* 回复图片 */}
-          {reply.content?.images?.length > 0 && (
+          {parseContent(reply.content).images.length > 0 && (
             <div className="flex gap-2 mt-2 flex-wrap">
-              {reply.content.images.map((imgUrl: string, idx: number) => (
+              {parseContent(reply.content).images.map((imgUrl: string, idx: number) => (
                 <div 
                   key={idx} 
                   className="w-20 h-20 rounded-lg overflow-hidden bg-dark-100 flex-shrink-0"
@@ -602,19 +602,19 @@ export default function ForumPostDetailPage() {
 
         {/* 帖子正文 */}
         <div className="prose prose-sm max-w-none text-dark-700 leading-relaxed whitespace-pre-wrap text-base mb-6">
-          {post.content?.text || post.content}
+          {parseContent(post.content).text}
         </div>
 
         {/* 帖子图片 */}
-        {post.content?.images?.length > 0 && (
+        {parseContent(post.content).images.length > 0 && (
           <div className="mb-6">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {post.content.images.map((imgUrl: string, idx: number) => (
+              {parseContent(post.content).images.map((imgUrl: string, idx: number) => (
                 <div 
                   key={idx} 
                   className="relative aspect-square rounded-lg overflow-hidden bg-dark-100 cursor-pointer group"
                   onClick={() => {
-                    setPreviewImages(post.content.images);
+                    setPreviewImages(parseContent(post.content).images);
                     setPreviewIndex(idx);
                     setShowPreview(true);
                   }}

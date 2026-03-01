@@ -456,18 +456,18 @@ export default function ForumTab() {
 
                   {/* Content Preview */}
                   <p className="text-sm text-dark-600 mt-2 line-clamp-2 leading-relaxed">
-                    {post.content?.text || parseContent(post.content).text}
+                    {parseContent(post.content).text}
                   </p>
 
                   {/* 图片预览 */}
-                  {(post.content?.images?.length || parseContent(post.content).images.length) > 0 && (
+                  {parseContent(post.content).images.length > 0 && (
                     <div className="flex gap-2 mt-3 overflow-x-auto">
-                      {(post.content?.images || parseContent(post.content).images).slice(0, 4).map((imgUrl: string, idx: number) => (
+                      {parseContent(post.content).images.slice(0, 4).map((imgUrl: string, idx: number) => (
                         <div 
                           key={idx} 
                           className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-dark-100 cursor-pointer group"
                           onClick={() => {
-                            setPreviewImages(post.content?.images || parseContent(post.content).images);
+                            setPreviewImages(parseContent(post.content).images);
                             setPreviewIndex(idx);
                             setShowPreview(true);
                           }}
@@ -482,9 +482,9 @@ export default function ForumTab() {
                           />
                         </div>
                       ))}
-                      {(post.content?.images?.length || parseContent(post.content).images.length) > 4 && (
+                      {parseContent(post.content).images.length > 4 && (
                         <div className="flex-shrink-0 w-20 h-20 rounded-lg bg-dark-200 flex items-center justify-center text-dark-500 text-sm">
-                          +{(post.content?.images?.length || parseContent(post.content).images.length) - 4}
+                          +{parseContent(post.content).images.length - 4}
                         </div>
                       )}
                     </div>

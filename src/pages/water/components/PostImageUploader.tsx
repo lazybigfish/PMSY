@@ -13,7 +13,7 @@ interface PostImage {
 
 interface PostImageUploaderProps {
   images: PostImage[];
-  onChange: (images: PostImage[]) => void;
+  onChange: (images: PostImage[] | ((prev: PostImage[]) => PostImage[])) => void;
   maxImages?: number;
   maxFileSize?: number;
 }

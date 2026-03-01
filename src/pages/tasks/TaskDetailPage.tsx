@@ -19,6 +19,7 @@ interface TaskWithRelations extends Task {
   creator?: Profile;
   owner?: Profile;
   task_modules?: TaskModule[];
+  progress?: number;
 }
 
 const TaskDetailPage = () => {

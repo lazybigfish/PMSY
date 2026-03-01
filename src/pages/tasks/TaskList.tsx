@@ -28,11 +28,8 @@ export default function TaskList() {
   const navigate = useNavigate();
   const { isMobile } = useBreakpoint();
   const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
-<<<<<<< Updated upstream
   const [taskDependencies, setTaskDependencies] = useState<Map<string, { dependencies: any[]; dependents: any[] }>>(new Map());
   const [users, setUsers] = useState<Profile[]>([]);
-=======
->>>>>>> Stashed changes
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'week' | 'month' | 'gantt'>('list');

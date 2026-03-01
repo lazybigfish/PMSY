@@ -3,11 +3,18 @@
 // 论坛分类
 export type ForumCategory = 'tech' | 'experience' | 'help' | 'chat' | 'other';
 
+// 论坛帖子内容（支持纯文本和 JSON 格式）
+export type ForumPostContent = string | {
+  text?: string;
+  content?: string;
+  images?: string[];
+};
+
 // 论坛帖子
 export interface ForumPost {
   id: string;
   title: string;
-  content: string;
+  content: ForumPostContent;
   category_id: string;
   category?: ForumCategory;
   author_id: string;
@@ -28,12 +35,18 @@ export interface ForumPost {
   };
 }
 
+// 论坛回复内容（支持纯文本和 JSON 格式）
+export type ForumReplyContent = string | {
+  text?: string;
+  content?: string;
+  images?: string[];
+};
+
 // 论坛回复
 export interface ForumReply {
   id: string;
   post_id: string;
-  content: string;
-  text?: string;
+  content: ForumReplyContent;
   author_id: string;
   parent_id: string | null;
   created_at: string;

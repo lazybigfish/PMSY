@@ -526,6 +526,7 @@ export async function recordTaskModuleChange(
 }
 
 /**
+<<<<<<< Updated upstream
  * 获取任务依赖列表
  */
 export async function getTaskDependencies(taskId: string): Promise<any> {
@@ -557,6 +558,140 @@ export async function removeTaskDependency(taskId: string, dependencyId: string)
 export async function getAvailableDependencies(taskId: string): Promise<any[]> {
   const response = await apiClient.get(`/api/task-dependencies/${taskId}/options`);
   return response;
+=======
+ * 获取用户可访问的任务列表
+ *
+ * 权限规则：
+ * 1. 自己创建的任务 - 始终可见
+ * 2. 自己是处理人的任务 - 始终可见
+ * 3. 任务状态为"项目内公开"(is_public=true) 且 自己是项目组成员 - 可见
+ *
+ * @param userId - 用户ID
+ * @param options - 查询选项
+ * @returns 任务列表
+ */
+export async function getUserAccessibleTasks(
+  userId: string,
+  options?: {
+    excludeStatus?: string[];  // 排除的状态，如 ['done']
+    orderBy?: string;          // 排序字段，如 'due_date'
+    orderDirection?: 'asc' | 'desc';  // 排序方向
+  }
+): Promise<Task[]> {
+  try {
+    // 1. 获取用户是成员的项目ID列表
+    const { data: userMemberships } = await api.db
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', userId);
+
+    const memberProjectIds = (userMemberships || []).map((m: { project_id: string }) => m.project_id);
+
+    // 2. 获取用户作为项目经理的项目ID列表
+    const { data: managedProjects } = await api.db
+      .from('projects')
+      .select('id')
+      .eq('manager_id', userId);
+
+    const managedProjectIds = (managedProjects || []).map((p: { id: string }) => p.id);
+
+    // 3. 合并用户有权限的项目ID列表（去重）
+    const accessibleProjectIds = [...new Set([...memberProjectIds, ...managedProjectIds])];
+
+    // 4. 获取用户创建的任务
+    let createdTasksQuery = api.db
+      .from('tasks')
+      .select('*')
+      .eq('created_by', userId);
+
+    if (options?.excludeStatus && options.excludeStatus.length > 0) {
+      createdTasksQuery = createdTasksQuery.not('status', 'in', `(${options.excludeStatus.join(',')})`);
+    }
+
+    const { data: createdTasks } = await createdTasksQuery;
+
+    // 5. 获取用户作为处理人的任务ID
+    const { data: userAssignments } = await api.db
+      .from('task_assignees')
+      .select('task_id')
+      .eq('user_id', userId);
+
+    const assignedTaskIds = (userAssignments || []).map((a: { task_id: string }) => a.task_id);
+
+    // 6. 获取用户作为处理人的任务详情
+    let assignedTasks: Task[] = [];
+    if (assignedTaskIds.length > 0) {
+      let assignedTasksQuery = api.db
+        .from('tasks')
+        .select('*')
+        .in('id', assignedTaskIds);
+
+      if (options?.excludeStatus && options.excludeStatus.length > 0) {
+        assignedTasksQuery = assignedTasksQuery.not('status', 'in', `(${options.excludeStatus.join(',')})`);
+      }
+
+      const { data: assignedTasksData } = await assignedTasksQuery;
+      assignedTasks = assignedTasksData || [];
+    }
+
+    // 7. 获取用户是成员的项目中的公开任务
+    let publicTasks: Task[] = [];
+    if (accessibleProjectIds.length > 0) {
+      let publicTasksQuery = api.db
+        .from('tasks')
+        .select('*')
+        .in('project_id', accessibleProjectIds)
+        .eq('is_public', true);
+
+      if (options?.excludeStatus && options.excludeStatus.length > 0) {
+        publicTasksQuery = publicTasksQuery.not('status', 'in', `(${options.excludeStatus.join(',')})`);
+      }
+
+      const { data: publicTasksData } = await publicTasksQuery;
+      publicTasks = publicTasksData || [];
+    }
+
+    // 8. 合并所有可访问的任务（去重）
+    const allAccessibleTasks = new Map<string, Task>();
+
+    // 添加自己创建的任务
+    (createdTasks || []).forEach((task: Task) => {
+      allAccessibleTasks.set(task.id, task);
+    });
+
+    // 添加自己是处理人的任务
+    assignedTasks.forEach((task: Task) => {
+      allAccessibleTasks.set(task.id, task);
+    });
+
+    // 添加公开任务
+    publicTasks.forEach((task: Task) => {
+      allAccessibleTasks.set(task.id, task);
+    });
+
+    const accessibleTaskList = Array.from(allAccessibleTasks.values());
+
+    // 9. 应用排序
+    if (options?.orderBy) {
+      accessibleTaskList.sort((a, b) => {
+        const direction = options.orderDirection === 'desc' ? -1 : 1;
+
+        if (options.orderBy === 'due_date') {
+          const aDate = a.due_date ? new Date(a.due_date).getTime() : 0;
+          const bDate = b.due_date ? new Date(b.due_date).getTime() : 0;
+          return (aDate - bDate) * direction;
+        }
+
+        return 0;
+      });
+    }
+
+    return accessibleTaskList;
+  } catch (error) {
+    console.error('Error fetching user accessible tasks:', error);
+    return [];
+  }
+>>>>>>> Stashed changes
 }
 
 // 导出服务对象
@@ -583,8 +718,12 @@ export const taskService = {
   batchAssignTasks,
   getTaskHistory,
   recordTaskAssigneeChange,
+<<<<<<< Updated upstream
   getTaskDependencies,
   addTaskDependency,
   removeTaskDependency,
   getAvailableDependencies,
+=======
+  getUserAccessibleTasks,
+>>>>>>> Stashed changes
 };

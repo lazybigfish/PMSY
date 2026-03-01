@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Task } from '../types';
+import { getUserAccessibleTasks } from '../services/taskService';
 import { 
   CheckSquare, 
   Plus, 
@@ -138,54 +139,12 @@ const Dashboard = () => {
         .filter((p: any) => p.manager_id === user?.id)
         .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0;
 
-      // 2. 获取用户可访问的任务列表（使用与任务列表相同的权限逻辑）
-      // 2.1 获取用户创建的任务
-      const { data: createdTasks } = await api.db
-        .from('tasks')
-        .select('*')
-        .eq('created_by', user?.id)
-        .neq('status', 'done')
-        .order('due_date', { ascending: true });
-
-      // 2.2 获取用户作为处理人的任务
-      const { data: userAssignments } = await api.db
-        .from('task_assignees')
-        .select('task_id')
-        .eq('user_id', user?.id);
-
-      const assignedTaskIds = (userAssignments || []).map((a: { task_id: string }) => a.task_id);
-
-      let assignedTasks: any[] = [];
-      if (assignedTaskIds.length > 0) {
-        const { data: assignedTasksData } = await api.db
-          .from('tasks')
-          .select('*')
-          .in('id', assignedTaskIds)
-          .neq('status', 'done')
-          .order('due_date', { ascending: true });
-        assignedTasks = assignedTasksData || [];
-      }
-
-      // 2.3 获取用户是成员的项目中的公开任务
-      let publicTasks: any[] = [];
-      if (accessibleProjectIds.length > 0) {
-        const { data: publicTasksData } = await api.db
-          .from('tasks')
-          .select('*')
-          .in('project_id', accessibleProjectIds)
-          .eq('is_public', true)
-          .neq('status', 'done')
-          .order('due_date', { ascending: true });
-        publicTasks = publicTasksData || [];
-      }
-
-      // 合并任务（去重）
-      const allAccessibleTasks = new Map<string, any>();
-      (createdTasks || []).forEach((task: any) => allAccessibleTasks.set(task.id, task));
-      assignedTasks.forEach((task: any) => allAccessibleTasks.set(task.id, task));
-      publicTasks.forEach((task: any) => allAccessibleTasks.set(task.id, task));
-
-      const myTaskList = Array.from(allAccessibleTasks.values());
+      // 2. 获取用户可访问的任务列表（使用统一的服务函数）
+      const myTaskList = await getUserAccessibleTasks(user?.id || '', {
+        excludeStatus: ['done'],
+        orderBy: 'due_date',
+        orderDirection: 'asc'
+      });
       setMyTasks(myTaskList.slice(0, 6));
 
       // Calculate Stats from tasks

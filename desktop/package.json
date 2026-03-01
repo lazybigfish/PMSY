@@ -1,0 +1,106 @@
+{
+  "name": "pmsy-desktop",
+  "version": "1.0.0",
+  "description": "PMSY 项目管理系统 - 桌面离线版",
+  "main": "dist/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:preload && concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "tsc -p tsconfig.main.json --watch",
+    "dev:renderer": "vite",
+    "build": "npm run build:preload && npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:preload": "tsc -p tsconfig.preload.json",
+    "build:renderer": "vite build",
+    "build:electron": "npm run build && electron-builder",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "lint": "eslint .",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
+    "bcryptjs": "^2.4.3",
+    "uuid": "^11.0.3",
+    "winston": "^3.17.0",
+    "dotenv": "^17.2.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.1",
+    "@types/uuid": "^10.0.0",
+    "concurrently": "^9.2.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.7",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.1",
+    "@vitejs/plugin-react": "^4.4.1"
+  },
+  "build": {
+    "appId": "com.pmsy.desktop",
+    "productName": "PMSY 项目管理",
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "dist/**/*",
+      "resources/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../api-new/database/migrations",
+        "to": "migrations"
+      },
+      {
+        "from": "../api-new/database/seeds",
+        "to": "seeds"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "resources/icon.icns"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "keywords": [
+    "pmsy",
+    "project-management",
+    "desktop",
+    "offline"
+  ],
+  "author": "PMSY Team",
+  "license": "MIT"
+}

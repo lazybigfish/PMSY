@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, LayoutGrid, List, Calendar, User, Users, AlertCircle, CheckCircle, Sparkles, CheckSquare, Clock, Flame, Play } from 'lucide-react';
+import { Plus, LayoutGrid, List, Calendar, User, Users, CheckCircle, Sparkles, CheckSquare, Clock, Flame, Play } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { useTheme } from '../../context/ThemeContext';
-import { Task, Profile, Project, TaskStatus } from '../../types';
+import { Profile, Project, TaskStatus } from '../../types';
 import { TaskTable, TaskWithDetails } from './components/TaskTable';
 import { TaskKanban } from './components/TaskKanban';
 import { TaskGantt } from '../../components/task/TaskGantt';
@@ -14,7 +14,7 @@ import { BatchActionBar } from './components/BatchActionBar';
 import { BatchDeleteModal } from './components/BatchDeleteModal';
 import { BatchStatusModal } from './components/BatchStatusModal';
 import { BatchAssignModal } from './components/BatchAssignModal';
-import { batchDeleteTasks, batchUpdateTaskStatus, batchAssignTasks } from '../../services/taskService';
+import { batchDeleteTasks, batchUpdateTaskStatus, batchAssignTasks, getUserAccessibleTasks } from '../../services/taskService';
 import { ThemedButton } from '../../components/theme/ThemedButton';
 import { ThemedCard } from '../../components/theme/ThemedCard';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
@@ -28,8 +28,11 @@ export default function TaskList() {
   const navigate = useNavigate();
   const { isMobile } = useBreakpoint();
   const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
+<<<<<<< Updated upstream
   const [taskDependencies, setTaskDependencies] = useState<Map<string, { dependencies: any[]; dependents: any[] }>>(new Map());
   const [users, setUsers] = useState<Profile[]>([]);
+=======
+>>>>>>> Stashed changes
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'week' | 'month' | 'gantt'>('list');
@@ -68,7 +71,6 @@ export default function TaskList() {
 
   useEffect(() => {
     fetchTasks();
-    fetchUsers();
     fetchProjects();
   }, []);
 
@@ -76,75 +78,8 @@ export default function TaskList() {
     try {
       setLoading(true);
 
-      // 1. 获取用户是成员的项目ID列表
-      const { data: userMemberships } = await api.db
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', user?.id);
-
-      const memberProjectIds = (userMemberships || []).map((m: { project_id: string }) => m.project_id);
-
-      // 2. 获取用户作为项目经理的项目ID列表
-      const { data: managedProjects } = await api.db
-        .from('projects')
-        .select('id')
-        .eq('manager_id', user?.id);
-
-      const managedProjectIds = (managedProjects || []).map((p: { id: string }) => p.id);
-
-      // 3. 合并用户有权限的项目ID列表（去重）
-      const accessibleProjectIds = [...new Set([...memberProjectIds, ...managedProjectIds])];
-
-      // 4. 获取用户创建的任务
-      const { data: createdTasks } = await api.db
-        .from('tasks')
-        .select('*')
-        .eq('created_by', user?.id);
-
-      // 5. 获取用户作为处理人的任务
-      const { data: userAssignments } = await api.db
-        .from('task_assignees')
-        .select('task_id')
-        .eq('user_id', user?.id);
-
-      const assignedTaskIds = (userAssignments || []).map((a: { task_id: string }) => a.task_id);
-
-      // 6. 获取用户是成员的项目中的公开任务
-      let publicTasks: any[] = [];
-      if (accessibleProjectIds.length > 0) {
-        const { data: publicTasksData } = await api.db
-          .from('tasks')
-          .select('*')
-          .in('project_id', accessibleProjectIds)
-          .eq('is_public', true);
-        publicTasks = publicTasksData || [];
-      }
-
-      // 7. 合并所有可访问的任务（去重）
-      const allAccessibleTasks = new Map<string, any>();
-
-      // 添加自己创建的任务
-      (createdTasks || []).forEach((task: any) => {
-        allAccessibleTasks.set(task.id, task);
-      });
-
-      // 添加自己是处理人的任务
-      if (assignedTaskIds.length > 0) {
-        const { data: assignedTasksData } = await api.db
-          .from('tasks')
-          .select('*')
-          .in('id', assignedTaskIds);
-        (assignedTasksData || []).forEach((task: any) => {
-          allAccessibleTasks.set(task.id, task);
-        });
-      }
-
-      // 添加公开任务
-      publicTasks.forEach((task: any) => {
-        allAccessibleTasks.set(task.id, task);
-      });
-
-      const accessibleTaskList = Array.from(allAccessibleTasks.values());
+      // 使用统一的服务函数获取用户可访问的任务列表
+      const accessibleTaskList = await getUserAccessibleTasks(user?.id || '');
 
       // 如果没有可访问的任务，直接返回空数组
       if (accessibleTaskList.length === 0) {
@@ -153,7 +88,7 @@ export default function TaskList() {
         return;
       }
 
-      // 8. 获取关联数据
+      // 获取关联数据
       const projectIds = [...new Set(accessibleTaskList.map(t => t.project_id))];
       const taskIds = accessibleTaskList.map(t => t.id);
 
@@ -233,15 +168,6 @@ export default function TaskList() {
       console.error('Error fetching tasks:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchUsers = async () => {
-    try {
-      const { data } = await api.db.from('profiles').select('*');
-      setUsers(data || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
     }
   };
 

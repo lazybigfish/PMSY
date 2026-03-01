@@ -7,28 +7,36 @@ import { useTheme } from '../../context/ThemeContext';
 import { ForumPost, ForumCategory } from '../../types';
 import { ForumPostList } from './components/ForumPostList';
 import { ModalForm } from '../../components/Modal';
+import { ImagePreview } from '../../components/ImagePreview';
 import { LikeButton } from '../../components/LikeButton';
 import { Avatar } from '../../components/Avatar';
 import { ThemedButton } from '../../components/theme/ThemedButton';
 import { ThemedCard } from '../../components/theme/ThemedCard';
+import { PostImageUploader, PostImage } from './components/PostImageUploader';
 
 // 辅助函数：解析帖子内容
-const parseContent = (content: any): string => {
-  if (!content) return '';
+const parseContent = (content: any): { text: string; images: string[] } => {
+  if (!content) return { text: '', images: [] };
   // 如果是字符串，尝试解析为 JSON
   if (typeof content === 'string') {
     try {
       const parsed = JSON.parse(content);
-      return parsed.text || parsed.content || content;
+      return {
+        text: parsed.text || parsed.content || '',
+        images: parsed.images || []
+      };
     } catch {
-      return content;
+      return { text: content, images: [] };
     }
   }
   // 如果是对象，取 text 或 content 字段
   if (typeof content === 'object') {
-    return content.text || content.content || '';
+    return {
+      text: content.text || content.content || '',
+      images: content.images || []
+    };
   }
-  return String(content);
+  return { text: String(content), images: [] };
 };
 
 const categories: { key: ForumCategory; label: string; color: string; bgColor: string; borderColor: string }[] = [
@@ -55,6 +63,10 @@ export default function ForumTab() {
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [formCategory, setFormCategory] = useState<ForumCategory>('tech');
+  const [formImages, setFormImages] = useState<PostImage[]>([]);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const isAdmin = profile?.role === 'admin';
@@ -84,7 +96,7 @@ export default function ForumTab() {
         filteredPosts = filteredPosts.filter(
           (post: any) =>
             post.title?.toLowerCase().includes(searchLower) ||
-            parseContent(post.content).toLowerCase().includes(searchLower)
+            (post.content?.text || parseContent(post.content).text)?.toLowerCase().includes(searchLower)
         );
       }
 
@@ -118,12 +130,15 @@ export default function ForumTab() {
       const postsWithUsers = (filteredPosts || []).map((post: any) => {
         // 确保 like_count 是数字类型
         const likeCount = typeof post.like_count === 'number' ? post.like_count : 0;
+        // 预解析内容，提取文字和图片
+        const parsedContent = parseContent(post.content);
         return {
           ...post,
           author: userMap.get(post.author_id),
           last_reply_user: post.last_reply_by ? userMap.get(post.last_reply_by) : null,
           is_liked: likedPostIds.has(post.id),
-          like_count: likeCount
+          like_count: likeCount,
+          content: parsedContent // 直接存储解析后的对象
         };
       });
 
@@ -142,13 +157,27 @@ export default function ForumTab() {
       return;
     }
 
+    // 过滤出已上传成功的图片，转换 blob URL 为可存储的 MinIO URL
+    const uploadedImages = formImages
+      .filter(img => !img.uploading && !img.error)
+      .map(img => {
+        // 如果是 blob URL，从 id 中获取文件名，构造 MinIO URL
+        // 如果已经是 http URL，直接使用
+        let url = img.url;
+        if (url.startsWith('blob:')) {
+          const fileName = img.id.replace('forum/', '');
+          url = `http://localhost:9000/files/forum/${fileName}`;
+        }
+        return url;
+      });
+
     try {
       setSubmitting(true);
       const now = new Date().toISOString();
 
       const { data: newPostData } = await api.db.from('forum_posts').insert({
         title: formTitle.trim(),
-        content: { text: formContent.trim() },
+        content: { text: formContent.trim(), images: uploadedImages },
         author_id: user.id,
         category: formCategory,
         is_pinned: false,
@@ -162,6 +191,7 @@ export default function ForumTab() {
       setShowCreateModal(false);
       setFormTitle('');
       setFormContent('');
+      setFormImages([]);
       loadPosts();
       
       // 跳转到新创建的帖子详情页
@@ -426,8 +456,39 @@ export default function ForumTab() {
 
                   {/* Content Preview */}
                   <p className="text-sm text-dark-600 mt-2 line-clamp-2 leading-relaxed">
-                    {parseContent(post.content)}
+                    {post.content?.text || parseContent(post.content).text}
                   </p>
+
+                  {/* 图片预览 */}
+                  {(post.content?.images?.length || parseContent(post.content).images.length) > 0 && (
+                    <div className="flex gap-2 mt-3 overflow-x-auto">
+                      {(post.content?.images || parseContent(post.content).images).slice(0, 4).map((imgUrl: string, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-dark-100 cursor-pointer group"
+                          onClick={() => {
+                            setPreviewImages(post.content?.images || parseContent(post.content).images);
+                            setPreviewIndex(idx);
+                            setShowPreview(true);
+                          }}
+                        >
+                          <img 
+                            src={imgUrl} 
+                            alt={`预览图${idx + 1}`}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {(post.content?.images?.length || parseContent(post.content).images.length) > 4 && (
+                        <div className="flex-shrink-0 w-20 h-20 rounded-lg bg-dark-200 flex items-center justify-center text-dark-500 text-sm">
+                          +{(post.content?.images?.length || parseContent(post.content).images.length) - 4}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Meta Info */}
                   <div className="flex items-center justify-between mt-3">
@@ -499,12 +560,30 @@ export default function ForumTab() {
               onChange={(e) => setFormContent(e.target.value)}
               rows={6}
               className="input w-full resize-none"
-              placeholder="请输入内容"
+              placeholder="请输入内容，支持 Ctrl+V 粘贴图片"
               required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">
+              图片
+            </label>
+            <PostImageUploader
+              images={formImages}
+              onChange={setFormImages}
+              maxImages={9}
             />
           </div>
         </div>
       </ModalForm>
+
+      {/* 图片预览 */}
+      <ImagePreview
+        images={previewImages}
+        initialIndex={previewIndex}
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+      />
     </div>
   );
 }

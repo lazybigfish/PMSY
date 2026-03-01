@@ -235,8 +235,7 @@ export default function ClientPayments({ projectId, canEdit = true }: ClientPaym
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                      <Percent className="w-3 h-3 mr-1" />
-                      {getPaymentPercentage(payment.amount).toFixed(2)}%
+                      {getPaymentPercentage(payment.amount).toFixed(0)}%
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">

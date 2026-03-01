@@ -10,6 +10,8 @@ chcp 65001 | Out-Null
 # Function: Compile and start backend API service and frontend dev server
 # Usage: .\deploy\windows\dev-scripts\start-dev.ps1
 #
+# Note: Docker services (PostgreSQL, Redis, MinIO) must be started separately
+#
 # ==========================================
 
 # Set error handling
@@ -37,19 +39,26 @@ cd $ProjectDir
 # Check port usage
 function Check-Port {
     param([int]$Port)
-    $TcpClient = New-Object System.Net.Sockets.TcpClient
+    # Check IPv4 first
     try {
-        $TcpClient.Connect("localhost", $Port)
+        $TcpClient = New-Object System.Net.Sockets.TcpClient
+        $TcpClient.Connect("127.0.0.1", $Port)
         $TcpClient.Close()
         return $true
-    } catch {
-        return $false
-    }
+    } catch {}
+    # Then check IPv6
+    try {
+        $TcpClient = New-Object System.Net.Sockets.TcpClient
+        $TcpClient.Connect("::1", $Port)
+        $TcpClient.Close()
+        return $true
+    } catch {}
+    return $false
 }
 
 # Compile backend service
 function Build-Backend {
-    Write-Host "${Cyan}[0/2] Compiling backend API service...${Reset}"
+    Write-Host "${Cyan}[1/3] Compiling backend API service...${Reset}"
     cd "$ProjectDir\api-new"
 
     if (!(Test-Path "node_modules")) {
@@ -70,7 +79,7 @@ function Build-Backend {
 
 # Start backend service
 function Start-Backend {
-    Write-Host "${Cyan}[1/2] Starting backend API service...${Reset}"
+    Write-Host "${Cyan}[2/3] Starting backend API service...${Reset}"
     if (Check-Port 3001) {
         Write-Host "${Yellow}Warning: Port 3001 is already in use, backend service may already be running${Reset}"
         Write-Host "${Yellow}Attempting to restart backend service...${Reset}"
@@ -79,7 +88,7 @@ function Start-Backend {
             $tcpConnections = Get-NetTCPConnection | Where-Object {$_.LocalPort -eq 3001 -and $_.State -eq "Listen"}
             foreach ($conn in $tcpConnections) {
                 $processId = $conn.OwningProcess
-                Get-Process -Id $processId | Stop-Process -Force
+                Get-Process -Id $processId -ErrorAction SilentlyContinue | Stop-Process -Force
             }
             Start-Sleep -Seconds 2
         } catch {
@@ -90,9 +99,8 @@ function Start-Backend {
     Write-Host "${Green}Starting backend service (http://localhost:3001)${Reset}"
     cd "$ProjectDir\api-new"
 
-    # Start backend service
-    $NpmPath = (Get-Command npm).Source
-    $BackendProcess = Start-Process -FilePath "powershell.exe" -ArgumentList "-File", "`"$NpmPath`"", "start" -WorkingDirectory "$ProjectDir\api-new" -NoNewWindow -PassThru
+    # Start backend service in new window
+    $BackendProcess = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "cd '$ProjectDir\api-new'; npm start" -PassThru
     $BackendProcess.Id | Out-File -FilePath "$env:TEMP\pmsy-api.pid" -Force
 
     # Wait for backend to start
@@ -113,7 +121,7 @@ function Start-Backend {
 # Start frontend service
 function Start-Frontend {
     Write-Host ""
-    Write-Host "${Cyan}[2/2] Starting frontend development server...${Reset}"
+    Write-Host "${Cyan}[3/3] Starting frontend development server...${Reset}"
     if (Check-Port 5173) {
         Write-Host "${Yellow}Warning: Port 5173 is already in use, frontend service may already be running${Reset}"
         Write-Host "${Yellow}Attempting to restart frontend service...${Reset}"
@@ -122,7 +130,7 @@ function Start-Frontend {
             $tcpConnections = Get-NetTCPConnection | Where-Object {$_.LocalPort -eq 5173 -and $_.State -eq "Listen"}
             foreach ($conn in $tcpConnections) {
                 $processId = $conn.OwningProcess
-                Get-Process -Id $processId | Stop-Process -Force
+                Get-Process -Id $processId -ErrorAction SilentlyContinue | Stop-Process -Force
             }
             Start-Sleep -Seconds 2
         } catch {
@@ -139,20 +147,19 @@ function Start-Frontend {
 
     Write-Host "${Green}Starting frontend service${Reset}"
 
-    # Start frontend service
-    $NpmPath = (Get-Command npm).Source
-    $FrontendProcess = Start-Process -FilePath "powershell.exe" -ArgumentList "-File", "`"$NpmPath`"", "run", "client:dev" -WorkingDirectory "$ProjectDir" -NoNewWindow -PassThru
+    # Start frontend service in new window
+    $FrontendProcess = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "cd '$ProjectDir'; npm run client:dev" -PassThru
     $FrontendProcess.Id | Out-File -FilePath "$env:TEMP\pmsy-client.pid" -Force
 
     # Wait for frontend to start
     Write-Host "${Cyan}Waiting for frontend service to start...${Reset}"
-    for ($i = 1; $i -le 30; $i++) {
+    for ($i = 1; $i -le 60; $i++) {
         if (Check-Port 5173) {
             Write-Host "${Green}Frontend service is ready${Reset}"
             break
         }
         Start-Sleep -Seconds 1
-        if ($i -eq 30) {
+        if ($i -eq 60) {
             Write-Host "${Red}Frontend service startup timeout, please check error messages${Reset}"
             exit 1
         }
@@ -167,8 +174,10 @@ function Show-Completion {
     Write-Host "${Green}==========================================${Reset}"
     Write-Host ""
     Write-Host "Access addresses:"
-    Write-Host "  - Frontend: http://localhost:5173"
-    Write-Host "  - Backend: http://localhost:3001"
+    Write-Host "  - Frontend:    http://localhost:5173"
+    Write-Host "  - Backend:     http://localhost:3001"
+    Write-Host ""
+    Write-Host "Note: Docker services (PostgreSQL, Redis, MinIO) must be started separately"
     Write-Host ""
     Write-Host "Stop services:"
     Write-Host "  .\deploy\windows\dev-scripts\stop-dev.ps1"

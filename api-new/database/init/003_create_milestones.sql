@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS milestone_tasks (
     description TEXT,
     is_required BOOLEAN DEFAULT false,
     is_completed BOOLEAN DEFAULT false,
+    is_custom BOOLEAN DEFAULT false,
     completed_at TIMESTAMPTZ,
     completed_by UUID REFERENCES profiles(id),
     output_documents JSONB DEFAULT '[]'::jsonb,
@@ -69,6 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_milestone_tasks_milestone_id ON milestone_tasks(m
 CREATE INDEX IF NOT EXISTS idx_milestone_tasks_template_id ON milestone_tasks(template_id);
 CREATE INDEX IF NOT EXISTS idx_milestone_tasks_is_completed ON milestone_tasks(is_completed);
 CREATE INDEX IF NOT EXISTS idx_milestone_tasks_is_required ON milestone_tasks(is_required);
+CREATE INDEX IF NOT EXISTS idx_milestone_tasks_is_custom ON milestone_tasks(is_custom);
 CREATE INDEX IF NOT EXISTS idx_milestone_tasks_status ON milestone_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_milestone_tasks_created_by ON milestone_tasks(created_by);
 CREATE INDEX IF NOT EXISTS idx_milestone_tasks_completed_by ON milestone_tasks(completed_by);

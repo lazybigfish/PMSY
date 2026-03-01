@@ -542,7 +542,7 @@ export async function addTaskDependency(
   data: { depends_on_task_id: string; dependency_type?: string }
 ): Promise<any> {
   const response = await apiClient.post(`/api/task-dependencies/${taskId}`, data);
-  return response.data;
+  return response;
 }
 
 /**

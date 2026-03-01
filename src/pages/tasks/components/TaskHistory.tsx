@@ -166,7 +166,23 @@ export const TaskHistory: React.FC<TaskHistoryProps> = ({ taskId }) => {
 
               {/* 变更内容 */}
               <div className="flex-1">
-                {record.description ? (
+                {/* 对于 progress 字段，同时显示数值变化和描述内容 */}
+                {record.field_name === 'progress' && record.old_value && record.new_value ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-dark-500 line-through">
+                        {formatFieldValue(record.field_name, record.old_value)}
+                      </span>
+                      <ArrowRight className="w-4 h-4 text-dark-400" />
+                      <span className="text-dark-900 font-medium">
+                        {formatFieldValue(record.field_name, record.new_value)}
+                      </span>
+                    </div>
+                    {record.description && (
+                      <p className="text-dark-700 text-sm mt-1">{record.description}</p>
+                    )}
+                  </div>
+                ) : record.description ? (
                   <p className="text-dark-700">{record.description}</p>
                 ) : (
                   <div className="flex items-center gap-2 text-sm">

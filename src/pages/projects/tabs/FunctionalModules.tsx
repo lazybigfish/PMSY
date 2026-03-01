@@ -115,6 +115,16 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
       }
     });
 
+    const sortByOrder = (nodes: ProjectModule[]) => {
+      nodes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      nodes.forEach(node => {
+        if (node.children && node.children.length > 0) {
+          sortByOrder(node.children);
+        }
+      });
+    };
+
+    sortByOrder(roots);
     return roots;
   };
 
@@ -401,50 +411,97 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
   };
 
   const handleMoveModule = async (id: string, direction: 'up' | 'down') => {
-    // This is a simplified sort implementation.
-    // Ideally we need to swap sort_order with adjacent sibling.
-    // For now, we will just alert that this requires backend support for reordering efficiently,
-    // or we implement a basic swap if we have all siblings loaded.
-
-    // Find the module and its siblings
-    const findNodeAndSiblings = (nodes: ProjectModule[]): { node: ProjectModule, siblings: ProjectModule[], index: number } | null => {
-        for (let i = 0; i < nodes.length; i++) {
-            if (nodes[i].id === id) return { node: nodes[i], siblings: nodes, index: i };
-            if (nodes[i].children) {
-                const found = findNodeAndSiblings(nodes[i].children!);
-                if (found) return found;
-            }
+    const findNodeContext = (
+      nodes: ProjectModule[],
+      parentId: string | null = null
+    ): { node: ProjectModule, siblings: ProjectModule[], parentId: string | null, index: number } | null => {
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) {
+          return { node: nodes[i], siblings: nodes, parentId, index: i };
         }
-        return null;
+        if (nodes[i].children && nodes[i].children.length > 0) {
+          const found = findNodeContext(nodes[i].children!, nodes[i].id);
+          if (found) return found;
+        }
+      }
+      return null;
     };
 
-    const result = findNodeAndSiblings(modules);
+    const findParent = (nodes: ProjectModule[], targetId: string): ProjectModule | null => {
+      for (const node of nodes) {
+        if (node.id === targetId) return null;
+        if (node.children) {
+          for (const child of node.children) {
+            if (child.id === targetId) return node;
+            const found = findParent(node.children!, targetId);
+            if (found) return found;
+          }
+        }
+      }
+      return null;
+    };
+
+    const result = findNodeContext(modules);
     if (!result) return;
 
-    const { node, siblings, index } = result;
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-
-    if (targetIndex < 0 || targetIndex >= siblings.length) return;
-
-    const targetNode = siblings[targetIndex];
-
-    // Swap sort_order
-    // Note: This assumes sort_order is populated. If not, we might need to initialize it.
-    // Here we just swap their IDs in a temporary local state or update DB.
-    // Since we don't have explicit sort_order management in frontend easily without re-fetching everything,
-    // We will try to swap their 'sort_order' field in DB.
+    const { node, siblings, parentId, index } = result;
 
     try {
-        const nodeOrder = node.sort_order || 0;
-        const targetOrder = targetNode.sort_order || 0;
+      if (direction === 'up') {
+        if (!parentId) return;
+        
+        const parent = findParent(modules, parentId);
+        
+        if (index > 0) {
+          const prevSibling = siblings[index - 1];
+          await api.db.from('project_modules').update({
+            parent_id: prevSibling.id,
+            level: (prevSibling.level || 1) + 1,
+            sort_order: prevSibling.children?.length || 0
+          }).eq('id', node.id);
+        } else {
+          if (parent) {
+            const grandParent = findParent(modules, parent.id);
+            const grandParentSiblings = grandParent ? (grandParent.children || []) : modules;
+            const grandParentIndex = grandParentSiblings.findIndex(n => n.id === parent.id);
+            
+            await api.db.from('project_modules').update({
+              parent_id: grandParent?.id || null,
+              level: grandParent ? (grandParent.level || 1) + 1 : 1,
+              sort_order: grandParentIndex
+            }).eq('id', node.id);
+          } else {
+            await api.db.from('project_modules').update({
+              parent_id: null,
+              level: 1,
+              sort_order: index
+            }).eq('id', node.id);
+          }
+        }
+      } else {
+        if (!node.children || node.children.length === 0) return;
+        
+        const firstChild = node.children[0];
+        
+        if (siblings.length > index + 1) {
+          const nextSibling = siblings[index + 1];
+          await api.db.from('project_modules').update({
+            parent_id: nextSibling.id,
+            level: (nextSibling.level || 1) + 1,
+            sort_order: 0
+          }).eq('id', node.id);
+        } else {
+          await api.db.from('project_modules').update({
+            parent_id: node.id,
+            level: (node.level || 1) + 1,
+            sort_order: 0
+          }).eq('id', firstChild.id);
+        }
+      }
 
-        // If orders are same or invalid, we might need a better strategy, but let's try simple swap
-        await api.db.from('project_modules').update({ sort_order: targetOrder }).eq('id', node.id);
-        await api.db.from('project_modules').update({ sort_order: nodeOrder }).eq('id', targetNode.id);
-
-        fetchModules();
+      fetchModules();
     } catch (error) {
-        console.error('Error moving module:', error);
+      console.error('Error moving module:', error);
     }
   };
 
@@ -796,7 +853,47 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-lg font-semibold text-gray-900">{selectedModule.name}</h4>
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    className="text-lg font-semibold text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none bg-transparent w-full px-1 -mx-1 py-0.5 transition-colors"
+                    value={selectedModule.name}
+                    onChange={(e) => {
+                      const newName = e.target.value;
+                      setModules(prev => {
+                        const updateTree = (nodes: ProjectModule[]): ProjectModule[] =>
+                          nodes.map(n => n.id === selectedModule.id
+                            ? { ...n, name: newName }
+                            : { ...n, children: n.children ? updateTree(n.children) : [] });
+                        return updateTree(prev);
+                      });
+                    }}
+                    onBlur={async (e) => {
+                      const newName = e.target.value.trim();
+                      if (!newName) {
+                        fetchModules();
+                        alert('模块名称不能为空');
+                        return;
+                      }
+                      if (newName !== selectedModule.name) {
+                        const { error } = await api.db
+                          .from('project_modules')
+                          .update({ name: newName })
+                          .eq('id', selectedModule.id);
+                        if (error) {
+                          console.error('Error updating module name:', error);
+                          alert('更新模块名称失败: ' + error.message);
+                          fetchModules();
+                        }
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur();
+                      }
+                    }}
+                  />
+                </div>
                 <div className="flex items-center space-x-2">
                   {selectedModule.status === 'delayed' && <span className="inline-flex items-center text-xs px-2 py-1 rounded-full bg-red-100 text-red-800"><AlertTriangle className="h-3 w-3 mr-1"/> 延期</span>}
                   {selectedModule.status === 'completed' && <span className="inline-flex items-center text-xs px-2 py-1 rounded-full bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1"/> 已完成</span>}

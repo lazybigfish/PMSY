@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Loader2, Trash2, Pin, Star, MessageSquare, Eye, Clock } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Trash2, Pin, Star, MessageSquare, Eye, Clock, ChevronDown, ChevronUp, Reply, Image as ImageIcon, ZoomIn } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { ForumPost, ForumReply, ForumCategory } from '../../types';
@@ -8,24 +8,30 @@ import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { LikeButton } from '../../components/LikeButton';
 import { Avatar } from '../../components/Avatar';
+import { ImagePreview } from '../../components/ImagePreview';
+import { PostImageUploader, PostImage } from './components/PostImageUploader';
 
 // 辅助函数：解析帖子内容
-const parseContent = (content: any): string => {
-  if (!content) return '';
-  // 如果是字符串，尝试解析为 JSON
+const parseContent = (content: any): { text: string; images: string[] } => {
+  if (!content) return { text: '', images: [] };
   if (typeof content === 'string') {
     try {
       const parsed = JSON.parse(content);
-      return parsed.text || parsed.content || content;
+      return {
+        text: parsed.text || parsed.content || '',
+        images: parsed.images || []
+      };
     } catch {
-      return content;
+      return { text: content, images: [] };
     }
   }
-  // 如果是对象，取 text 或 content 字段
   if (typeof content === 'object') {
-    return content.text || content.content || '';
+    return {
+      text: content.text || content.content || '',
+      images: content.images || []
+    };
   }
-  return String(content);
+  return { text: String(content), images: [] };
 };
 
 const categories: { key: ForumCategory; label: string; color: string; bgColor: string; borderColor: string }[] = [
@@ -36,17 +42,157 @@ const categories: { key: ForumCategory; label: string; color: string; bgColor: s
   { key: 'other', label: '其他', color: 'text-dark-700', bgColor: 'bg-dark-50', borderColor: 'border-dark-200' },
 ];
 
+// 递归回复组件
+interface ReplyItemProps {
+  reply: ForumReply;
+  user: any;
+  profile: any;
+  onDelete: (reply: ForumReply) => void;
+  onReply: (reply: ForumReply) => void;
+  level?: number;
+}
+
+function ReplyItem({ reply, user, profile, onDelete, onReply, level = 0 }: ReplyItemProps) {
+  const isReplyAuthor = reply.author_id === user?.id;
+  const isAdmin = profile?.role === 'admin';
+  const [isExpanded, setIsExpanded] = useState(true);
+  const hasChildren = reply.children && reply.children.length > 0;
+  const maxLevel = 3;
+
+  return (
+    <div className={`${level > 0 ? 'ml-4 pl-4 border-l-2 border-dark-100' : ''}`}>
+      <div className="flex gap-3 p-3 bg-dark-50 rounded-xl hover:bg-dark-100/50 transition-all duration-200">
+        <Avatar
+          userId={reply.author?.id}
+          avatarUrl={reply.author?.avatar_url}
+          name={reply.author?.full_name}
+          size="sm"
+          rounded="lg"
+          className="ring-2 ring-white flex-shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm text-dark-900">
+                {reply.author?.full_name || '未知用户'}
+              </span>
+              {reply.floor_number && (
+                <span className="text-xs px-2 py-0.5 bg-primary-100 text-primary-700 rounded-full font-medium">
+                  {reply.floor_number}楼
+                </span>
+              )}
+              {reply.parent_author && level > 0 && (
+                <span className="text-xs text-dark-500">
+                  回复 <span className="text-primary-600">@{reply.parent_author.full_name}</span>
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <span className="text-xs text-dark-400">
+                {format(new Date(reply.created_at), 'MM-dd HH:mm', { locale: zhCN })}
+              </span>
+              {(isReplyAuthor || isAdmin) && (
+                <button
+                  onClick={() => onDelete(reply)}
+                  className="p-1.5 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="删除回复"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="text-sm text-dark-700 leading-relaxed whitespace-pre-wrap mb-2">
+            {reply.content?.text || reply.content}
+          </p>
+          {/* 回复图片 */}
+          {reply.content?.images?.length > 0 && (
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {reply.content.images.map((imgUrl: string, idx: number) => (
+                <div 
+                  key={idx} 
+                  className="w-20 h-20 rounded-lg overflow-hidden bg-dark-100 flex-shrink-0"
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`回复图片 ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            {level < maxLevel && (
+              <button
+                onClick={() => onReply(reply)}
+                className="flex items-center gap-1 text-xs text-dark-500 hover:text-primary-600 hover:bg-primary-50 px-2 py-1 rounded-lg transition-colors"
+              >
+                <Reply className="w-3 h-3" />
+                回复
+              </button>
+            )}
+            {hasChildren && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="flex items-center gap-1 text-xs text-dark-500 hover:text-primary-600 hover:bg-primary-50 px-2 py-1 rounded-lg transition-colors"
+              >
+                {isExpanded ? (
+                  <>
+                    <ChevronUp className="w-3 h-3" />
+                    收起 ({reply.children?.length})
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-3 h-3" />
+                    展开 ({reply.children?.length})
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 递归渲染子回复 */}
+      {hasChildren && isExpanded && (
+        <div className="mt-2 space-y-2">
+          {reply.children?.map((child) => (
+            <ReplyItem
+              key={child.id}
+              reply={child}
+              user={user}
+              profile={profile}
+              onDelete={onDelete}
+              onReply={onReply}
+              level={level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ForumPostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  
+
   const [post, setPost] = useState<ForumPost | null>(null);
   const [replies, setReplies] = useState<ForumReply[]>([]);
   const [loading, setLoading] = useState(true);
   const [replyContent, setReplyContent] = useState('');
+  const [replyImages, setReplyImages] = useState<PostImage[]>([]);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  
+  const [replyingTo, setReplyingTo] = useState<ForumReply | null>(null);
+
   const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
@@ -59,16 +205,16 @@ export default function ForumPostDetailPage() {
     if (!id) return;
     try {
       setLoading(true);
-      
+
       // 加载帖子详情
       const { data: postData, error: postError } = await api.db
         .from('forum_posts')
         .select('*')
         .eq('id', id)
         .single();
-      
+
       if (postError) throw postError;
-      
+
       // 加载作者信息
       let postWithAuthor = postData;
       if (postData?.author_id) {
@@ -77,10 +223,10 @@ export default function ForumPostDetailPage() {
           .select('id, full_name, avatar_url')
           .eq('id', postData.author_id)
           .single();
-        
+
         postWithAuthor = { ...postData, author: authorData };
       }
-      
+
       // 检查当前用户是否点赞
       if (user) {
         const { data: likeData } = await api.db
@@ -93,16 +239,17 @@ export default function ForumPostDetailPage() {
 
         postWithAuthor.is_liked = !!likeData;
       }
-      
+
       postWithAuthor.like_count = postWithAuthor.like_count || 0;
+      postWithAuthor.content = parseContent(postData?.content);
       setPost(postWithAuthor);
-      
+
       // 增加浏览量
       await api.db
         .from('forum_posts')
         .update({ view_count: (postData?.view_count || 0) + 1 })
         .eq('id', id);
-      
+
       // 加载回复
       await loadReplies(id);
     } catch (error) {
@@ -111,6 +258,61 @@ export default function ForumPostDetailPage() {
       setLoading(false);
     }
   };
+
+  // 构建嵌套回复结构并计算楼层号
+  const buildReplyTree = useCallback((flatReplies: ForumReply[]): ForumReply[] => {
+    const replyMap = new Map<string, ForumReply>();
+    const rootReplies: ForumReply[] = [];
+
+    // 倒序排序（最新的在上）
+    const sortedReplies = [...flatReplies].sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    // 第一遍：创建映射
+    sortedReplies.forEach(reply => {
+      replyMap.set(reply.id, { ...reply, children: [] });
+    });
+
+    // 第二遍：构建树结构
+    sortedReplies.forEach(reply => {
+      const replyWithChildren = replyMap.get(reply.id)!;
+      if (reply.parent_id && replyMap.has(reply.parent_id)) {
+        const parent = replyMap.get(reply.parent_id)!;
+        if (!parent.children) parent.children = [];
+        parent.children.push(replyWithChildren);
+      } else {
+        rootReplies.push(replyWithChildren);
+      }
+    });
+
+    // 第三遍：计算楼层号（正序显示，所以重新排序）
+    const calculateFloorNumbers = (replies: ForumReply[], prefix: string = '') => {
+      // 按时间正序排列楼层号
+      const sorted = [...replies].sort((a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+
+      sorted.forEach((reply, index) => {
+        const floorNumber = prefix ? `${prefix}-${index + 1}` : String(index + 1);
+        reply.floor_number = floorNumber;
+
+        // 设置 parent_author
+        if (reply.parent_id && replyMap.has(reply.parent_id)) {
+          const parent = replyMap.get(reply.parent_id)!;
+          reply.parent_author = parent.author;
+        }
+
+        if (reply.children && reply.children.length > 0) {
+          calculateFloorNumbers(reply.children, floorNumber);
+        }
+      });
+
+      return sorted;
+    };
+
+    return calculateFloorNumbers(rootReplies);
+  }, []);
 
   const loadReplies = async (postId: string) => {
     try {
@@ -136,13 +338,18 @@ export default function ForumPostDetailPage() {
         authorsData?.forEach(a => authorMap.set(a.id, a));
       }
 
-      const repliesWithAuthors = (repliesData || []).map(reply => ({
-        ...reply,
-        author: authorMap.get(reply.author_id),
-        content: parseContent(reply.content)
-      }));
+      const repliesWithAuthors = (repliesData || []).map(reply => {
+        const parsed = parseContent(reply.content);
+        return {
+          ...reply,
+          author: authorMap.get(reply.author_id),
+          content: parsed
+        };
+      });
 
-      setReplies(repliesWithAuthors);
+      // 构建嵌套结构
+      const nestedReplies = buildReplyTree(repliesWithAuthors);
+      setReplies(nestedReplies);
     } catch (error) {
       console.error('Error loading replies:', error);
     }
@@ -151,14 +358,26 @@ export default function ForumPostDetailPage() {
   const submitReply = async () => {
     if (!post || !user || !replyContent.trim()) return;
 
+    // 过滤出已上传成功的图片
+    const uploadedImages = replyImages
+      .filter(img => !img.uploading && !img.error)
+      .map(img => img.url);
+
     try {
       setSubmitting(true);
-      
-      await api.db.from('forum_replies').insert({
+
+      const replyData: any = {
         post_id: post.id,
         author_id: user.id,
-        content: { text: replyContent.trim() }
-      });
+        content: { text: replyContent.trim(), images: uploadedImages }
+      };
+
+      // 如果是回复某条回复
+      if (replyingTo) {
+        replyData.parent_id = replyingTo.id;
+      }
+
+      await api.db.from('forum_replies').insert(replyData);
 
       const now = new Date().toISOString();
       await api.db
@@ -171,7 +390,8 @@ export default function ForumPostDetailPage() {
         .eq('id', post.id);
 
       setReplyContent('');
-      // 更新本地帖子数据
+      setReplyImages([]);
+      setReplyingTo(null);
       setPost(prev => prev ? { ...prev, reply_count: prev.reply_count + 1 } : null);
       await loadReplies(post.id);
     } catch (error) {
@@ -200,6 +420,20 @@ export default function ForumPostDetailPage() {
     }
   };
 
+  const handleReplyClick = (reply: ForumReply) => {
+    setReplyingTo(reply);
+    // 滚动到底部输入框
+    const inputArea = document.getElementById('reply-input-area');
+    if (inputArea) {
+      inputArea.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+    setReplyContent('');
+  };
+
   const getCategoryStyle = (key: ForumCategory) => {
     return categories.find(c => c.key === key) || categories[4];
   };
@@ -214,7 +448,6 @@ export default function ForumPostDetailPage() {
 
     try {
       if (post.is_liked) {
-        // Unlike - 只需删除点赞记录，触发器会自动更新 like_count
         const { data: likes } = await api.db
           .from('forum_likes')
           .select('*')
@@ -230,28 +463,25 @@ export default function ForumPostDetailPage() {
               .eq('id', like.id);
           }
         }
-        
-        // 乐观更新本地状态
-        setPost(prev => prev ? { 
-          ...prev, 
-          is_liked: false, 
+
+        setPost(prev => prev ? {
+          ...prev,
+          is_liked: false,
           like_count: Math.max(0, currentLikeCount - 1)
         } : null);
       } else {
-        // Like - 只需插入点赞记录，触发器会自动更新 like_count
         const { error: insertError } = await api.db
           .from('forum_likes')
           .insert({ target_id: post.id, target_type: 'post', user_id: user.id });
-        
+
         if (insertError) {
           console.error('Error inserting like:', insertError);
           return;
         }
-        
-        // 乐观更新本地状态
-        setPost(prev => prev ? { 
-          ...prev, 
-          is_liked: true, 
+
+        setPost(prev => prev ? {
+          ...prev,
+          is_liked: true,
           like_count: currentLikeCount + 1
         } : null);
       }
@@ -259,6 +489,20 @@ export default function ForumPostDetailPage() {
       console.error('Error toggling like:', error);
     }
   };
+
+  // 计算总回复数（包括嵌套回复）
+  const countTotalReplies = (replies: ForumReply[]): number => {
+    let count = 0;
+    replies.forEach(reply => {
+      count++;
+      if (reply.children) {
+        count += countTotalReplies(reply.children);
+      }
+    });
+    return count;
+  };
+
+  const totalReplyCount = countTotalReplies(replies);
 
   if (loading) {
     return (
@@ -350,16 +594,47 @@ export default function ForumPostDetailPage() {
               </span>
               <span className="flex items-center gap-1">
                 <MessageSquare className="w-3.5 h-3.5" />
-                {post.reply_count || 0} 回复
+                {totalReplyCount} 回复
               </span>
             </div>
           </div>
         </div>
 
-        {/* 正文内容 */}
+        {/* 帖子正文 */}
         <div className="prose prose-sm max-w-none text-dark-700 leading-relaxed whitespace-pre-wrap text-base mb-6">
-          {parseContent(post.content)}
+          {post.content?.text || post.content}
         </div>
+
+        {/* 帖子图片 */}
+        {post.content?.images?.length > 0 && (
+          <div className="mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {post.content.images.map((imgUrl: string, idx: number) => (
+                <div 
+                  key={idx} 
+                  className="relative aspect-square rounded-lg overflow-hidden bg-dark-100 cursor-pointer group"
+                  onClick={() => {
+                    setPreviewImages(post.content.images);
+                    setPreviewIndex(idx);
+                    setShowPreview(true);
+                  }}
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`图片 ${idx + 1}`}
+                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 点赞按钮 */}
         <div className="flex justify-center pt-4 border-t border-dark-100">
@@ -378,55 +653,23 @@ export default function ForumPostDetailPage() {
         <div className="px-6 py-4 bg-dark-50/50 border-b border-dark-100">
           <h2 className="font-semibold text-dark-800 flex items-center gap-2 text-base">
             <MessageSquare className="w-5 h-5 text-primary-500" />
-            回复 ({replies.length})
+            回复 ({totalReplyCount})
           </h2>
         </div>
 
         {/* 回复列表 */}
-        <div className="p-6 space-y-4">
-          {replies.map((reply) => {
-            const isReplyAuthor = reply.author_id === user?.id;
-            return (
-              <div
-                key={reply.id}
-                className="flex gap-4 p-4 bg-dark-50 rounded-xl hover:bg-dark-100/50 hover:shadow-sm transition-all duration-200 ease-out"
-              >
-                <Avatar
-                  userId={reply.author?.id}
-                  avatarUrl={reply.author?.avatar_url}
-                  name={reply.author?.full_name}
-                  size="sm"
-                  rounded="lg"
-                  className="ring-2 ring-white flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="font-semibold text-sm text-dark-900">
-                      {reply.author?.full_name || '未知用户'}
-                    </span>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-dark-400">
-                        {format(new Date(reply.created_at), 'MM-dd HH:mm', { locale: zhCN })}
-                      </span>
-                      {(isReplyAuthor || isAdmin) && (
-                        <button
-                          onClick={() => deleteReply(reply)}
-                          className="p-1.5 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="删除回复"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-sm text-dark-700 leading-relaxed whitespace-pre-wrap">
-                    {reply.content}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-          
+        <div className="p-6 space-y-3">
+          {replies.map((reply) => (
+            <ReplyItem
+              key={reply.id}
+              reply={reply}
+              user={user}
+              profile={profile}
+              onDelete={deleteReply}
+              onReply={handleReplyClick}
+            />
+          ))}
+
           {replies.length === 0 && (
             <div className="text-center py-12">
               <div className="w-16 h-16 rounded-2xl bg-dark-100 flex items-center justify-center mx-auto mb-4">
@@ -440,33 +683,62 @@ export default function ForumPostDetailPage() {
 
         {/* 回复输入 */}
         {user && (
-          <div className="px-6 py-4 bg-dark-50/30 border-t border-dark-100">
-            <div className="flex gap-3">
+          <div id="reply-input-area" className="px-6 py-4 bg-dark-50/30 border-t border-dark-100">
+            {replyingTo && (
+              <div className="flex items-center justify-between mb-3 p-2 bg-primary-50 rounded-lg">
+                <span className="text-sm text-primary-700">
+                  回复 <span className="font-semibold">{replyingTo.floor_number}楼</span> 的{' '}
+                  <span className="font-semibold">{replyingTo.author?.full_name}</span>
+                </span>
+                <button
+                  onClick={cancelReply}
+                  className="text-xs text-dark-500 hover:text-dark-700 px-2 py-1 rounded hover:bg-dark-100 transition-colors"
+                >
+                  取消
+                </button>
+              </div>
+            )}
+            <div className="space-y-3">
               <textarea
                 value={replyContent}
                 onChange={(e) => setReplyContent(e.target.value)}
-                placeholder="写下你的回复..."
+                placeholder={replyingTo ? `回复 ${replyingTo.author?.full_name}...` : '写下你的回复，支持 Ctrl+V 粘贴图片'}
                 rows={3}
-                className="flex-1 input resize-none"
+                className="w-full input resize-none"
               />
-              <button
-                onClick={submitReply}
-                disabled={!replyContent.trim() || submitting}
-                className="btn-primary px-6 self-end"
-              >
-                {submitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    回复
-                  </>
-                )}
-              </button>
+              <PostImageUploader
+                images={replyImages}
+                onChange={setReplyImages}
+                maxImages={4}
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={submitReply}
+                  disabled={!replyContent.trim() || submitting}
+                  className="btn-primary px-6"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      回复
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* 图片预览 */}
+      <ImagePreview
+        images={previewImages}
+        initialIndex={previewIndex}
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+      />
     </div>
   );
 }

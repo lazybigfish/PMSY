@@ -7,8 +7,8 @@ const StakeholderLayout = () => {
   const location = useLocation();
   
   const tabs = [
-    { name: '供应商库', href: '/stakeholders/suppliers', icon: Building2, color: 'sun' },
     { name: '客户库', href: '/stakeholders/clients', icon: Users, color: 'primary' },
+    { name: '供应商库', href: '/stakeholders/suppliers', icon: Building2, color: 'sun' },
   ];
 
   const getTabColors = (color: string, isActive: boolean) => {

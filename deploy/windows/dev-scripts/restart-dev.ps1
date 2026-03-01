@@ -7,8 +7,10 @@ chcp 65001 | Out-Null
 # PMSY Development Environment Restart Script
 # ==========================================
 #
-# Function: Stop all services, compile code, then restart
+# Function: Stop frontend and backend, compile code, then restart
 # Usage: .\deploy\windows\dev-scripts\restart-dev.ps1
+#
+# Note: Docker services (PostgreSQL, Redis, MinIO) must be started separately
 #
 # ==========================================
 
@@ -33,8 +35,8 @@ Write-Host "${Blue}PMSY Development Environment Restart${Reset}"
 Write-Host "${Blue}==========================================${Reset}"
 Write-Host ""
 
-# Step 1: Stop all services
-Write-Host "${Cyan}Step 1/3: Stopping all services${Reset}"
+# Step 1: Stop frontend and backend services
+Write-Host "${Cyan}Step 1/3: Stopping frontend and backend services${Reset}"
 try {
     & "$ScriptDir\stop-dev.ps1"
 } catch {
@@ -72,8 +74,8 @@ try {
 }
 Write-Host ""
 
-# Step 3: Start all services
-Write-Host "${Cyan}Step 3/3: Starting all services${Reset}"
+# Step 3: Start frontend and backend services
+Write-Host "${Cyan}Step 3/3: Starting frontend and backend services${Reset}"
 try {
     & "$ScriptDir\start-dev.ps1"
 } catch {
@@ -85,4 +87,6 @@ Write-Host ""
 Write-Host "${Green}==========================================${Reset}"
 Write-Host "${Green}Restart completed!${Reset}"
 Write-Host "${Green}==========================================${Reset}"
+Write-Host ""
+Write-Host "Note: Docker services (PostgreSQL, Redis, MinIO) must be started separately"
 Write-Host ""

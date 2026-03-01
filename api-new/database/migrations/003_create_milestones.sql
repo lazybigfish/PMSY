@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS milestone_tasks (
     description TEXT,
     is_required BOOLEAN DEFAULT false,
     is_completed BOOLEAN DEFAULT false,
+    is_custom BOOLEAN DEFAULT false,
     completed_at TIMESTAMPTZ,
     completed_by UUID REFERENCES profiles(id),
     output_documents JSONB DEFAULT '[]'::jsonb,

@@ -224,6 +224,13 @@ if [ -z "$DEPLOY_SERVER_IP" ]; then
 fi
 echo "   服务器 IP: $DEPLOY_SERVER_IP"
 
+if [ -z "$DEPLOY_SERVER_PORT" ]; then
+    DEPLOY_SERVER_PORT="${DEPLOY_SERVER_PORT:-9022}"
+    read -p "   SSH 端口 [$DEPLOY_SERVER_PORT]: " input_port
+    DEPLOY_SERVER_PORT="${input_port:-$DEPLOY_SERVER_PORT}"
+fi
+echo "   SSH 端口: $DEPLOY_SERVER_PORT"
+
 if [ -z "$DEPLOY_SERVER_USER" ]; then
     DEPLOY_SERVER_USER="${DEPLOY_SERVER_USER:-ubuntu}"
     read -p "   服务器用户名 [$DEPLOY_SERVER_USER]: " input_user
@@ -241,6 +248,7 @@ echo "   部署目录: $DEPLOY_REMOTE_DIR"
 cat > .env.deploy << EOF
 # PMSY 部署配置
 DEPLOY_SERVER_IP=$DEPLOY_SERVER_IP
+DEPLOY_SERVER_PORT=$DEPLOY_SERVER_PORT
 DEPLOY_SERVER_USER=$DEPLOY_SERVER_USER
 DEPLOY_REMOTE_DIR=$DEPLOY_REMOTE_DIR
 EOF
@@ -255,7 +263,7 @@ echo -e "${BLUE}[步骤 2/5] 检测生产服务器环境...${NC}"
 echo ""
 
 echo -e "${YELLOW}   检查服务器连接...${NC}"
-if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
+if ! ssh -p "$DEPLOY_SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
     echo -e "${RED}❌ 错误: 无法连接到服务器 $DEPLOY_SERVER_IP${NC}"
     echo "   请检查:"
     echo "   1. 服务器 IP 是否正确"
@@ -266,7 +274,7 @@ fi
 echo -e "${GREEN}   ✅ 服务器连接正常${NC}"
 
 echo -e "${YELLOW}   检查现有 PMSY 环境...${NC}"
-EXISTING_ENV=$(ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "
+EXISTING_ENV=$(ssh -p "$DEPLOY_SERVER_PORT" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "
     if [ -d '$DEPLOY_REMOTE_DIR' ]; then
         echo 'DIRECTORY_EXISTS'
         if [ -f '$DEPLOY_REMOTE_DIR/docker-compose.yml' ]; then
@@ -337,11 +345,11 @@ if [ "$ENV_STATUS" != "CLEAN" ]; then
     echo ""
     
     echo -e "${YELLOW}现有容器列表:${NC}"
-    ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo docker ps -a --format '  {{.Names}} ({{.Status}})' 2>/dev/null | grep -E 'pmsy' || echo '  无运行中的容器'"
+    ssh -p "$DEPLOY_SERVER_PORT" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo docker ps -a --format '  {{.Names}} ({{.Status}})' 2>/dev/null | grep -E 'pmsy' || echo '  无运行中的容器'"
     echo ""
     
     echo -e "${YELLOW}现有数据卷列表:${NC}"
-    ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo docker volume ls --format '  {{.Name}}' 2>/dev/null | grep -E 'pmsy' || echo '  无相关数据卷'"
+    ssh -p "$DEPLOY_SERVER_PORT" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo docker volume ls --format '  {{.Name}}' 2>/dev/null | grep -E 'pmsy' || echo '  无相关数据卷'"
     echo ""
     
     read -p "确认要清空现有环境并重新部署? (yes/no): " -r
@@ -355,7 +363,7 @@ if [ "$ENV_STATUS" != "CLEAN" ]; then
     echo ""
     echo -e "${YELLOW}   正在清空服务器环境...${NC}"
     
-    ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "
+    ssh -p "$DEPLOY_SERVER_PORT" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "
         echo '   停止并删除所有 PMSY 相关容器...'
         cd $DEPLOY_REMOTE_DIR 2>/dev/null && sudo docker-compose down -v 2>/dev/null || true
         
@@ -504,7 +512,7 @@ case $DEPLOY_MODE in
         fi
 
         echo "   检查 SSH 免密码登录..."
-        if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
+        if ! ssh -p "$DEPLOY_SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
             echo ""
             echo -e "${CYAN}   ========================================${NC}"
             echo -e "${CYAN}   需要配置 SSH 免密码登录${NC}"
@@ -571,8 +579,8 @@ case $DEPLOY_MODE in
         echo ""
         
         echo -e "${YELLOW}   上传到服务器...${NC}"
-        ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo mkdir -p $DEPLOY_REMOTE_DIR && sudo chown $DEPLOY_SERVER_USER:$DEPLOY_SERVER_USER $DEPLOY_REMOTE_DIR"
-        rsync -avz --delete "$DEPLOY_TMP/pmsy/" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP:$DEPLOY_REMOTE_DIR/"
+        ssh -p "$DEPLOY_SERVER_PORT" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo mkdir -p $DEPLOY_REMOTE_DIR && sudo chown $DEPLOY_SERVER_USER:$DEPLOY_SERVER_USER $DEPLOY_REMOTE_DIR"
+        rsync -avz --delete -e "ssh -p $DEPLOY_SERVER_PORT" "$DEPLOY_TMP/pmsy/" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP:$DEPLOY_REMOTE_DIR/"
         rm -rf "$DEPLOY_TMP"
         echo -e "${GREEN}   ✅ 上传完成${NC}"
         echo ""
@@ -680,7 +688,7 @@ REMOTE_SCRIPT
             ssh-keygen -t rsa -b 4096 -C "pmsy-deploy" -f "$HOME/.ssh/id_rsa" -N ""
         fi
 
-        if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
+        if ! ssh -p "$DEPLOY_SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
             SSH_CONFIG_SUCCESS=false
             for i in {1..3}; do
                 if ssh-copy-id -o StrictHostKeyChecking=no "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" 2>&1; then
@@ -742,7 +750,7 @@ REMOTE_SCRIPT
         echo ""
         
         echo -e "${YELLOW}   上传到服务器（包含镜像，可能较慢）...${NC}"
-        ssh "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo mkdir -p $DEPLOY_REMOTE_DIR && sudo chown $DEPLOY_SERVER_USER:$DEPLOY_SERVER_USER $DEPLOY_REMOTE_DIR"
+        ssh -p "$DEPLOY_SERVER_PORT" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "sudo mkdir -p $DEPLOY_REMOTE_DIR && sudo chown $DEPLOY_SERVER_USER:$DEPLOY_SERVER_USER $DEPLOY_REMOTE_DIR"
         rsync -avz --delete "$DEPLOY_TMP/pmsy/" "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP:$DEPLOY_REMOTE_DIR/"
         rm -rf "$DEPLOY_TMP"
         echo -e "${GREEN}   ✅ 上传完成${NC}"
@@ -1099,8 +1107,8 @@ echo -e "${GREEN}🎉 全新部署完成!${NC}"
 echo -e "${GREEN}==========================================${NC}"
 echo ""
 echo "访问地址:"
-echo "  - 前端: http://$DEPLOY_SERVER_IP"
-echo "  - API: http://$DEPLOY_SERVER_IP/api/health"
+echo "  - 前端: http://$DEPLOY_SERVER_IP:6969"
+echo "  - API: http://$DEPLOY_SERVER_IP:6969/api/health"
 echo ""
 echo "默认账号:"
 echo "  - 管理员: admin@pmsy.com / Willyou@2026"

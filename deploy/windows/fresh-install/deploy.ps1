@@ -18,6 +18,7 @@
 
 param(
     [string]$ServerIp = "",
+    [string]$ServerPort = "",
     [string]$ServerUser = "",
     [string]$DeployDir = ""
 )
@@ -282,6 +283,7 @@ Write-Host ""
 if (Test-Path ".env.deploy") {
     $ConfigContent = Get-Content ".env.deploy" -Raw
     $ServerIp = ($ConfigContent | Select-String "DEPLOY_SERVER_IP=(.*)").Matches.Groups[1].Value
+    $ServerPort = ($ConfigContent | Select-String "DEPLOY_SERVER_PORT=(.*)").Matches.Groups[1].Value
     $ServerUser = ($ConfigContent | Select-String "DEPLOY_SERVER_USER=(.*)").Matches.Groups[1].Value
     $DeployDir = ($ConfigContent | Select-String "DEPLOY_REMOTE_DIR=(.*)").Matches.Groups[1].Value
     Write-Host "$Green   ✅ 已加载配置文件 .env.deploy$Reset"
@@ -294,6 +296,13 @@ if ([string]::IsNullOrEmpty($ServerIp)) {
     $ServerIp = Read-Host "   服务器 IP"
 }
 Write-Host "   服务器 IP: $ServerIp"
+
+if ([string]::IsNullOrEmpty($ServerPort)) {
+    $DefaultPort = "9022"
+    $InputPort = Read-Host "   SSH 端口 [$DefaultPort]"
+    $ServerPort = if (![string]::IsNullOrEmpty($InputPort)) { $InputPort } else { $DefaultPort }
+}
+Write-Host "   SSH 端口: $ServerPort"
 
 if ([string]::IsNullOrEmpty($ServerUser)) {
     $DefaultUser = "ubuntu"
@@ -313,6 +322,7 @@ Write-Host "   部署目录: $DeployDir"
 @"
 # PMSY 部署配置
 DEPLOY_SERVER_IP=$ServerIp
+DEPLOY_SERVER_PORT=$ServerPort
 DEPLOY_SERVER_USER=$ServerUser
 DEPLOY_REMOTE_DIR=$DeployDir
 "@ | Out-File -FilePath ".env.deploy" -Force
@@ -334,7 +344,7 @@ try {
     }
     
     # 测试SSH连接
-    $SshTest = ssh $ServerUser@$ServerIp "echo OK"
+    $SshTest = ssh -p $ServerPort $ServerUser@$ServerIp "echo OK"
     if ($SshTest -ne "OK") {
         throw "SSH连接失败"
     }
@@ -368,7 +378,7 @@ else
 fi
 "@
     
-    $ExistingEnv = ssh $ServerUser@$ServerIp $CheckEnvScript
+    $ExistingEnv = ssh -p $ServerPort $ServerUser@$ServerIp $CheckEnvScript
     $EnvStatus = "CLEAN"
     
     if ($ExistingEnv -match "DIRECTORY_EXISTS") {
@@ -426,7 +436,7 @@ fi
         # 显示现有容器和数据卷
         Write-Host "$Yellow现有容器列表:$Reset"
         try {
-            $Containers = ssh $ServerUser@$ServerIp "sudo docker ps -a --format '  {{.Names}} ({{.Status}})' 2>/dev/null | grep -E 'pmsy' || echo '  无运行中的容器'"
+            $Containers = ssh -p $ServerPort $ServerUser@$ServerIp "sudo docker ps -a --format '  {{.Names}} ({{.Status}})' 2>/dev/null | grep -E 'pmsy' || echo '  无运行中的容器'"
             Write-Host $Containers
         } catch {
             Write-Host "  无法获取容器列表"
@@ -435,7 +445,7 @@ fi
         
         Write-Host "$Yellow现有数据卷列表:$Reset"
         try {
-            $Volumes = ssh $ServerUser@$ServerIp "sudo docker volume ls --format '  {{.Name}}' 2>/dev/null | grep -E 'pmsy' || echo '  无相关数据卷'"
+            $Volumes = ssh -p $ServerPort $ServerUser@$ServerIp "sudo docker volume ls --format '  {{.Name}}' 2>/dev/null | grep -E 'pmsy' || echo '  无相关数据卷'"
             Write-Host $Volumes
         } catch {
             Write-Host "  无法获取数据卷列表"
@@ -476,7 +486,7 @@ sudo chown $ServerUser:$ServerUser $DeployDir
 echo '   ✅ 环境清理完成'
 "@
         
-        ssh $ServerUser@$ServerIp $CleanupScript
+        ssh -p $ServerPort $ServerUser@$ServerIp $CleanupScript
         Write-Host "$Green   ✅ 服务器环境已重置$Reset"
     }
 } catch {
@@ -641,7 +651,7 @@ else
     echo 'DOCKER_NOT_INSTALLED'
 fi
 "@
-    $DockerCheck = ssh $ServerUser@$ServerIp $DockerCheckScript
+    $DockerCheck = ssh -p $ServerPort $ServerUser@$ServerIp $DockerCheckScript
     
     if ($DockerCheck -match "DOCKER_NOT_INSTALLED") {
         Write-Host "$Red❌ 错误: 服务器上未安装 Docker$Reset"
@@ -711,7 +721,7 @@ if ($LocalArch -eq "AMD64") {
 
 # 获取服务器架构
 try {
-    $ServerArchRaw = ssh $ServerUser@$ServerIp "uname -m"
+    $ServerArchRaw = ssh -p $ServerPort $ServerUser@$ServerIp "uname -m"
     if ($ServerArchRaw -match "x86_64") {
         $ServerArchNormalized = "amd64"
     } elseif ($ServerArchRaw -match "arm64" -or $ServerArchRaw -match "aarch64") {
@@ -991,7 +1001,7 @@ switch ($DeployMode) {
         Write-Host "$Yellow   上传到服务器...$Reset"
         try {
             # 检查服务器目录是否存在，不存在则创建
-            ssh $ServerUser@$ServerIp "mkdir -p '$DeployDir'"
+            ssh -p $ServerPort $ServerUser@$ServerIp "mkdir -p '$DeployDir'"
             
             # 上传文件
             Write-Host "   上传前端和后端文件..."
@@ -1178,7 +1188,7 @@ echo "   [服务器] ✅ 部署完成"
             }
             
             # 执行远程脚本
-            ssh $ServerUser@$ServerIp "$RemoteScript"
+            ssh -p $ServerPort $ServerUser@$ServerIp "$RemoteScript"
             Write-Host "$Green   ✅ 服务器部署完成$Reset"
         } catch {
             Write-Host "$Red❌ 服务器部署失败: $($_.Exception.Message)$Reset"
@@ -1249,7 +1259,7 @@ echo "   [服务器] ✅ 部署完成"
             $MkdirScript = @"
 mkdir -p '$DeployDir'
 "@
-            ssh $ServerUser@$ServerIp $MkdirScript
+            ssh -p $ServerPort $ServerUser@$ServerIp $MkdirScript
             
             # 上传文件
             Write-Host "   上传部署包..."
@@ -1327,7 +1337,7 @@ echo "   [服务器] ✅ 部署完成"
 "@
             
             # 执行远程脚本
-            ssh $ServerUser@$ServerIp "$RemoteScript"
+            ssh -p $ServerPort $ServerUser@$ServerIp "$RemoteScript"
             Write-Host "$Green   ✅ 服务器部署完成$Reset"
         } catch {
             Write-Host "$Red❌ 服务器部署失败: $($_.Exception.Message)$Reset"
@@ -1547,7 +1557,7 @@ echo ""
 "@ | Out-File -FilePath "$OfflineDir\deploy\scripts\offline-deploy.sh" -Force
         
         # 设置执行权限
-        ssh $ServerUser@$ServerIp "chmod +x '$OfflineDir/deploy/scripts/offline-deploy.sh'" 2>$null
+        ssh -p $ServerPort $ServerUser@$ServerIp "chmod +x '$OfflineDir/deploy/scripts/offline-deploy.sh'" 2>$null
         
         # 打包
         Write-Host "$Yellow   打包离线部署包...$Reset"
@@ -1918,8 +1928,8 @@ Write-Host "$Green🎉 全新部署完成!$Reset"
 Write-Host "$Green==========================================$Reset"
 Write-Host ""
 Write-Host "📍 访问地址:"
-Write-Host "  - 前端: http://$ServerIp"
-Write-Host "  - API: http://$ServerIp/api/health"
+Write-Host "  - 前端: http://$ServerIp`:6969"
+Write-Host "  - API: http://$ServerIp`:6969/api/health"
 Write-Host ""
 Write-Host "👤 默认管理员账号:"
 Write-Host "  - 用户名: admin"

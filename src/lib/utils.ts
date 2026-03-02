@@ -145,7 +145,9 @@ export function getWeekInfo(date: Date): { weekNumber: number; dayOfWeek: string
   return { weekNumber, dayOfWeek };
 }
 
-export function formatCreatedAtWithWeek(date: Date | string): string {
+export function formatCreatedAtWithWeek(date: Date | string | undefined | null): string {
+  if (!date) return '-';
+  
   const d = typeof date === 'string' ? new Date(date) : date;
   if (isNaN(d.getTime())) return '-';
 
@@ -159,7 +161,9 @@ export function formatCreatedAtWithWeek(date: Date | string): string {
   return `${year}年${month}月${day}日 ${hours}:${minutes} ${dayOfWeek}（第${weekNumber}周）`;
 }
 
-export function formatDateTime(date: Date | string): string {
+export function formatDateTime(date: Date | string | undefined | null): string {
+  if (!date) return '-';
+  
   const d = typeof date === 'string' ? new Date(date) : date;
   if (isNaN(d.getTime())) return '-';
 
@@ -170,4 +174,37 @@ export function formatDateTime(date: Date | string): string {
   const minutes = String(d.getMinutes()).padStart(2, '0');
 
   return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+/**
+ * 格式化日期
+ * @param date 日期
+ * @returns 格式化后的日期字符串
+ */
+export function formatDate(date: Date | string | undefined | null): string {
+  if (!date) return '-';
+  
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '-';
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * 格式化文件大小
+ * @param bytes 字节数
+ * @returns 格式化后的文件大小字符串
+ */
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const k = 1024;
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + units[i];
 }

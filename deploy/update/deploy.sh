@@ -41,13 +41,14 @@ echo -e "${YELLOW}   - 重启服务${NC}"
 echo ""
 
 # 配置
-SERVER_IP="${DEPLOY_SERVER_IP:-43.136.69.250}"
+SERVER_IP="${DEPLOY_SERVER_IP:-106.227.19.2}"
+SERVER_PORT="${DEPLOY_SERVER_PORT:-9022}"
 SERVER_USER="${DEPLOY_SERVER_USER:-ubuntu}"
 DEPLOY_DIR="${DEPLOY_REMOTE_DIR:-/opt/pmsy}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 echo -e "${CYAN}部署配置:${NC}"
-echo "  服务器: $SERVER_USER@$SERVER_IP"
+echo "  服务器: $SERVER_USER@$SERVER_IP:$SERVER_PORT"
 echo "  部署目录: $DEPLOY_DIR"
 echo ""
 
@@ -68,7 +69,7 @@ fi
 echo -e "${GREEN}   使用配置文件: $ENV_FILE${NC}"
 
 echo -e "${GREEN}[2/7] 检查服务器连接...${NC}"
-if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$SERVER_USER@$SERVER_IP" "echo OK" 2>/dev/null; then
+if ! ssh -p "$SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=5 "$SERVER_USER@$SERVER_IP" "echo OK" 2>/dev/null; then
     echo -e "${RED}❌ 错误: 无法连接到服务器${NC}"
     exit 1
 fi
@@ -76,13 +77,22 @@ echo -e "${GREEN}   ✅ 服务器连接正常${NC}"
 
 echo -e "${GREEN}[3/7] 构建前端...${NC}"
 
-# 构建前端 - 使用 VITE_ENV_FILE 环境变量加载生产环境配置
+# 构建前端 - 使用生产环境配置
 # 不再覆盖 .env 文件，避免开发环境配置丢失
 echo "   使用 $ENV_FILE 进行生产环境构建"
 echo "   开始构建前端（可能需要 30-60 秒）..."
 
-# 使用 --mode production 构建，VITE_ENV_FILE 指定环境文件
-export VITE_ENV_FILE="$ENV_FILE"
+# 从生产环境配置文件中读取 VITE_API_URL
+VITE_API_URL=$(grep '^VITE_API_URL=' "$ENV_FILE" | cut -d'=' -f2)
+if [ -z "$VITE_API_URL" ]; then
+    echo -e "${RED}   ❌ 错误: 未在 $ENV_FILE 中找到 VITE_API_URL 配置${NC}"
+    exit 1
+fi
+
+echo "   VITE_API_URL: $VITE_API_URL"
+
+# 使用生产环境变量构建
+export VITE_API_URL="$VITE_API_URL"
 npm run build -- --mode production
 BUILD_EXIT_CODE=$?
 
@@ -124,15 +134,15 @@ echo "   文件数量: $API_FILE_COUNT"
 
 echo -e "${GREEN}[5/7] 复制文件到服务器...${NC}"
 echo "   复制前端 dist..."
-rsync -avz --delete "$PROJECT_ROOT/dist/" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/dist/"
+rsync -avz --delete -e "ssh -p $SERVER_PORT" "$PROJECT_ROOT/dist/" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/dist/"
 echo "   复制后端 dist..."
-rsync -avz --delete "$PROJECT_ROOT/api-new/dist/" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/dist/"
+rsync -avz --delete -e "ssh -p $SERVER_PORT" "$PROJECT_ROOT/api-new/dist/" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/dist/"
 echo "   复制后端 package.json..."
 scp "$PROJECT_ROOT/api-new/package.json" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/"
 echo "   复制后端 Dockerfile..."
 scp "$PROJECT_ROOT/api-new/Dockerfile" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/"
 echo "   复制数据库迁移文件..."
-rsync -avz --delete "$PROJECT_ROOT/api-new/database/migrations/" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/database/migrations/"
+rsync -avz --delete -e "ssh -p $SERVER_PORT" "$PROJECT_ROOT/api-new/database/migrations/" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/database/migrations/"
 echo "   复制迁移脚本..."
 scp "$PROJECT_ROOT/api-new/database/migrate.sh" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/database/"
 echo "   复制 docker-compose.yml..."
@@ -146,11 +156,11 @@ echo -e "${GREEN}[6/7] 执行数据库迁移...${NC}"
 echo "   检查服务器容器状态..."
 
 # 先在服务器上检查容器状态
-CONTAINER_STATUS=$(ssh "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker-compose ps postgres 2>/dev/null | grep -E 'Up|running' || echo 'NOT_RUNNING'")
+CONTAINER_STATUS=$(ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker-compose ps postgres 2>/dev/null | grep -E 'Up|running' || echo 'NOT_RUNNING'")
 
 if [ "$CONTAINER_STATUS" = "NOT_RUNNING" ]; then
     echo -e "${YELLOW}   ⚠️ PostgreSQL 容器未运行，尝试启动...${NC}"
-    ssh "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker-compose up -d postgres"
+    ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker-compose up -d postgres"
     sleep 5
 fi
 
@@ -158,7 +168,7 @@ echo "   使用 Docker 模式执行迁移..."
 
 # 在服务器上使用 Docker 执行数据库迁移
 # Docker 模式下不需要密码，使用 docker-compose exec 直接进入容器执行
-ssh "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo bash api-new/database/migrate.sh --docker-compose"
+ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo bash api-new/database/migrate.sh --docker-compose"
 
 MIGRATION_EXIT_CODE=$?
 if [ $MIGRATION_EXIT_CODE -ne 0 ]; then
@@ -181,7 +191,7 @@ if [ $MIGRATION_EXIT_CODE -ne 0 ]; then
 fi
 
 echo -e "${GREEN}[7/7] 重新构建并重启服务...${NC}"
-ssh "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker-compose up -d --build --force-recreate api"
+ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker-compose up -d --build --force-recreate api"
 echo -e "${GREEN}   ✅ 服务已重启${NC}"
 
 echo ""
@@ -190,8 +200,8 @@ echo -e "${GREEN}🎉 更新部署完成!${NC}"
 echo -e "${GREEN}==========================================${NC}"
 echo ""
 echo "访问地址:"
-echo "  - 前端: http://$SERVER_IP"
-echo "  - API: http://$SERVER_IP/api/health"
+echo "  - 前端: http://$SERVER_IP:6969"
+echo "  - API: http://$SERVER_IP:6969/api/health"
 echo ""
 echo -e "${YELLOW}请测试登录功能确认更新成功${NC}"
 echo ""

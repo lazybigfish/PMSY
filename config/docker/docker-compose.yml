@@ -90,7 +90,7 @@ services:
     image: nginx:alpine
     container_name: pmsy-nginx
     ports:
-      - "80:80"
+      - "6969:80"
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro

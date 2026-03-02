@@ -110,14 +110,14 @@ export function requireRole(allowedRoles: string[]) {
  * 要求管理员权限的中间件
  */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  return requireRole(['admin'])(req, res, next);
+  requireRole(['admin'])(req, res, next);
 }
 
 /**
  * 要求管理员或经理权限的中间件
  */
 export function requireAdminOrManager(req: Request, res: Response, next: NextFunction): void {
-  return requireRole(['admin', 'manager'])(req, res, next);
+  requireRole(['admin', 'manager'])(req, res, next);
 }
 
 export default {

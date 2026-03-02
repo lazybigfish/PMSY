@@ -4,7 +4,7 @@ import {
   generateRefreshToken,
   getExpiresIn,
   getExpiresAt,
-} from './jwtService';
+} from '../services/jwtService';
 import { hashPassword, verifyPassword } from '../utils/password';
 import {
   User,
@@ -13,6 +13,7 @@ import {
   UpdateUserRequest,
   AuthResponse,
 } from '../types/auth';
+import { UnauthorizedError, ValidationError, NotFoundError, ConflictError } from '../middleware/errorHandler';
 import { v4 as uuidv4 } from 'uuid';
 
 // 管理员创建用户请求类型
@@ -75,14 +76,14 @@ export async function register(data: SignUpRequest): Promise<AuthResponse> {
   // 检查邮箱是否已存在
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
-    throw new Error('该邮箱已被注册');
+    throw new ValidationError('该邮箱已被注册');
   }
 
   // 如果提供了用户名，检查是否已存在
   if (username) {
     const existingUsername = await findUserByUsername(username);
     if (existingUsername) {
-      throw new Error('该用户名已被使用');
+      throw new ValidationError('该用户名已被使用');
     }
   }
 
@@ -148,25 +149,25 @@ export async function login(data: LoginRequest): Promise<AuthResponse> {
 
   // 查找用户 - 支持邮箱或用户名登录
   let user = await findUserByEmail(email);
-  
+
   // 如果邮箱找不到，尝试用用户名查找
   if (!user) {
     user = await findUserByUsername(email);
   }
-  
+
   if (!user) {
-    throw new Error('邮箱或密码错误');
+    throw new UnauthorizedError('邮箱或密码错误');
   }
 
   // 检查用户是否激活
   if (!user.is_active) {
-    throw new Error('账号已被禁用');
+    throw new UnauthorizedError('账号已被禁用');
   }
 
   // 验证密码
   const isPasswordValid = await verifyPassword(password, user.password_hash || '');
   if (!isPasswordValid) {
-    throw new Error('邮箱或密码错误');
+    throw new UnauthorizedError('邮箱或密码错误');
   }
 
   // 更新最后登录时间
@@ -235,14 +236,14 @@ export async function updateUser(
   // 检查用户是否存在
   const user = await findUserById(userId);
   if (!user) {
-    throw new Error('用户不存在');
+    throw new NotFoundError('用户不存在');
   }
 
   // 如果更新邮箱，检查是否已被其他用户使用
   if (email && email !== user.email) {
     const existingUser = await findUserByEmail(email);
     if (existingUser && existingUser.id !== userId) {
-      throw new Error('该邮箱已被其他用户使用');
+      throw new ConflictError('该邮箱已被其他用户使用');
     }
   }
 
@@ -250,7 +251,7 @@ export async function updateUser(
   if (username && username !== user.username) {
     const existingUser = await findUserByUsername(username);
     if (existingUser && existingUser.id !== userId) {
-      throw new Error('该用户名已被其他用户使用');
+      throw new ConflictError('该用户名已被其他用户使用');
     }
   }
 
@@ -283,13 +284,13 @@ export async function updatePassword(
 ): Promise<void> {
   const user = await db('profiles').where({ id: userId }).first();
   if (!user) {
-    throw new Error('用户不存在');
+    throw new NotFoundError('用户不存在');
   }
 
   // 验证旧密码
   const isOldPasswordValid = await verifyPassword(oldPassword, user.password_hash);
   if (!isOldPasswordValid) {
-    throw new Error('旧密码错误');
+    throw new UnauthorizedError('旧密码错误');
   }
 
   // 哈希新密码
@@ -315,7 +316,7 @@ export async function adminUpdateUser(
 ): Promise<User | null> {
   const user = await findUserById(userId);
   if (!user) {
-    throw new Error('用户不存在');
+    throw new NotFoundError('用户不存在');
   }
 
   const updateData: Record<string, unknown> = {
@@ -385,7 +386,7 @@ export async function listUsers(options: {
 export async function deactivateUser(userId: string): Promise<void> {
   const user = await findUserById(userId);
   if (!user) {
-    throw new Error('用户不存在');
+    throw new NotFoundError('用户不存在');
   }
 
   await db('profiles')
@@ -407,14 +408,14 @@ export async function adminCreateUser(data: AdminCreateUserRequest): Promise<Use
   // 检查邮箱是否已存在
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
-    throw new Error('该邮箱已被注册');
+    throw new ConflictError('该邮箱已被注册');
   }
 
   // 如果提供了用户名，检查是否已存在
   if (username) {
     const existingUsername = await findUserByUsername(username);
     if (existingUsername) {
-      throw new Error('该用户名已被使用');
+      throw new ConflictError('该用户名已被使用');
     }
   }
 
@@ -492,7 +493,7 @@ export async function resetPassword(
 ): Promise<string> {
   const user = await findUserById(userId);
   if (!user) {
-    throw new Error('用户不存在');
+    throw new NotFoundError('用户不存在');
   }
 
   // 生成新密码
@@ -521,7 +522,7 @@ export async function resetPassword(
 export async function setForcePasswordChange(userId: string, force: boolean): Promise<void> {
   const user = await findUserById(userId);
   if (!user) {
-    throw new Error('用户不存在');
+    throw new NotFoundError('用户不存在');
   }
 
   await db('profiles')

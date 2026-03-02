@@ -18,6 +18,7 @@
 
 param(
     [string]$ServerIp = "",
+    [string]$ServerPort = "",
     [string]$ServerUser = "",
     [string]$DeployDir = ""
 )
@@ -55,7 +56,14 @@ $ProjectRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 if ([string]::IsNullOrEmpty($ServerIp)) {
     $ServerIp = $env:DEPLOY_SERVER_IP
     if ([string]::IsNullOrEmpty($ServerIp)) {
-        $ServerIp = "43.136.69.250"  # 默认服务器IP
+        $ServerIp = "106.227.19.2"  # 默认服务器IP
+    }
+}
+
+if ([string]::IsNullOrEmpty($ServerPort)) {
+    $ServerPort = $env:DEPLOY_SERVER_PORT
+    if ([string]::IsNullOrEmpty($ServerPort)) {
+        $ServerPort = "9022"  # 默认SSH端口
     }
 }
 
@@ -74,7 +82,7 @@ if ([string]::IsNullOrEmpty($DeployDir)) {
 }
 
 Write-Host "$Cyan部署配置:$Reset"
-Write-Host "  服务器: $ServerUser@$ServerIp"
+Write-Host "  服务器: $ServerUser@$ServerIp`:$ServerPort"
 Write-Host "  部署目录: $DeployDir"
 Write-Host ""
 
@@ -110,7 +118,7 @@ try {
     }
     
     # 测试SSH连接
-    $SshTest = ssh $ServerUser@$ServerIp "echo OK"
+    $SshTest = ssh -p $ServerPort $ServerUser@$ServerIp "echo OK"
     if ($SshTest -ne "OK") {
         throw "SSH连接失败"
     }
@@ -206,7 +214,7 @@ try {
     Write-Host "   复制数据库迁移文件..."
     if (Test-Path "$ProjectRoot\api-new\database\migrations") {
         # 确保服务器目录存在
-        ssh $ServerUser@$ServerIp "mkdir -p '$DeployDir/api-new/database/migrations'"
+        ssh -p $ServerPort $ServerUser@$ServerIp "mkdir -p '$DeployDir/api-new/database/migrations'"
         scp -r "$ProjectRoot\api-new\database\migrations/*" "$ServerUser@$ServerIp:$DeployDir/api-new/database/migrations/"
     }
     
@@ -240,18 +248,18 @@ try {
     Write-Host "   检查服务器容器状态..."
     
     # 先在服务器上检查容器状态
-    $ContainerStatus = ssh $ServerUser@$ServerIp "cd '$DeployDir' && docker-compose ps postgres 2>/dev/null | grep -E 'Up|running' || echo 'NOT_RUNNING'"
+    $ContainerStatus = ssh -p $ServerPort $ServerUser@$ServerIp "cd '$DeployDir' && docker-compose ps postgres 2>/dev/null | grep -E 'Up|running' || echo 'NOT_RUNNING'"
     
     if ($ContainerStatus -eq "NOT_RUNNING") {
         Write-Host "$Yellow   ⚠️ PostgreSQL 容器未运行，尝试启动...$Reset"
-        ssh $ServerUser@$ServerIp "cd '$DeployDir' && docker-compose up -d postgres"
+        ssh -p $ServerPort $ServerUser@$ServerIp "cd '$DeployDir' && docker-compose up -d postgres"
         Start-Sleep -Seconds 5
     }
     
     Write-Host "   使用 Docker 模式执行迁移..."
     
     # 在服务器上使用 Docker 执行数据库迁移
-    $MigrationResult = ssh $ServerUser@$ServerIp "cd '$DeployDir' && sudo bash api-new/database/migrate.sh --docker-compose"
+    $MigrationResult = ssh -p $ServerPort $ServerUser@$ServerIp "cd '$DeployDir' && sudo bash api-new/database/migrate.sh --docker-compose"
     $MigrationExitCode = $LASTEXITCODE
     
     if ($MigrationExitCode -ne 0) {
@@ -270,7 +278,7 @@ try {
     Write-Host "   请检查数据库连接和迁移文件"
     Write-Host ""
     Write-Host "   手动调试命令:"
-    Write-Host "     ssh $ServerUser@$ServerIp"
+    Write-Host "     ssh -p $ServerPort $ServerUser@$ServerIp"
     Write-Host "     cd $DeployDir"
     Write-Host "     sudo docker-compose ps"
     Write-Host "     sudo docker-compose logs postgres"
@@ -286,10 +294,10 @@ try {
 Write-Host "$Green[7/7] 重新构建并重启服务...$Reset"
 try {
     # 重启 API 服务
-    ssh $ServerUser@$ServerIp "cd '$DeployDir' && sudo docker-compose up -d --build --force-recreate api"
+    ssh -p $ServerPort $ServerUser@$ServerIp "cd '$DeployDir' && sudo docker-compose up -d --build --force-recreate api"
     
     # 重启 Nginx 服务
-    ssh $ServerUser@$ServerIp "cd '$DeployDir' && sudo docker-compose restart nginx"
+    ssh -p $ServerPort $ServerUser@$ServerIp "cd '$DeployDir' && sudo docker-compose restart nginx"
     
     Write-Host "$Green   ✅ 服务已重启$Reset"
 } catch {
@@ -307,14 +315,14 @@ Write-Host "$Green🎉 更新部署完成!$Reset"
 Write-Host "$Green==========================================$Reset"
 Write-Host ""
 Write-Host "访问地址:"
-Write-Host "  - 前端: http://$ServerIp"
-Write-Host "  - API: http://$ServerIp/api/health"
+Write-Host "  - 前端: http://$ServerIp`:6969"
+Write-Host "  - API: http://$ServerIp`:6969/api/health"
 Write-Host ""
 Write-Host "$Yellow请测试登录功能确认更新成功$Reset"
 Write-Host ""
 Write-Host "$Blue查看日志:$Reset"
-Write-Host "  ssh $ServerUser@$ServerIp 'cd $DeployDir && sudo docker-compose logs -f api'"
+Write-Host "  ssh -p $ServerPort $ServerUser@$ServerIp 'cd $DeployDir && sudo docker-compose logs -f api'"
 Write-Host ""
 Write-Host "$Blue查看迁移记录:$Reset"
-Write-Host "  ssh $ServerUser@$ServerIp 'cd $DeployDir && sudo docker-compose exec postgres psql -U pmsy -d pmsy -c "SELECT filename, executed_at, execution_time_ms FROM schema_migrations ORDER BY executed_at DESC LIMIT 10;"'"
+Write-Host "  ssh -p $ServerPort $ServerUser@$ServerIp 'cd $DeployDir && sudo docker-compose exec postgres psql -U pmsy -d pmsy -c "SELECT filename, executed_at, execution_time_ms FROM schema_migrations ORDER BY executed_at DESC LIMIT 10;"'"
 Write-Host ""

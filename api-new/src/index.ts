@@ -22,6 +22,10 @@ import projectsRouter from './routes/projects';
 import projectSuppliersRouter from './routes/projectSuppliers';
 import duplicateCheckRouter from './routes/duplicateCheck';
 import taskDependenciesRouter from './routes/taskDependencies';
+import backupRouter from './routes/system/backup.routes';
+
+// 导入定时备份调度器
+import { initBackupScheduler } from './jobs/backup.scheduler';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -53,6 +57,7 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/project-suppliers', projectSuppliersRouter);
 app.use('/api/duplicate-check', duplicateCheckRouter);
 app.use('/api/task-dependencies', taskDependenciesRouter);
+app.use('/api/system/backup', backupRouter);
 
 // 路由（带 /api 前缀，兼容 Nginx 代理配置）
 app.use('/api/health', healthRouter);
@@ -108,6 +113,9 @@ async function startServer() {
 
     // 确保存储桶存在
     await ensureBucketExists();
+
+    // 初始化定时备份调度器
+    await initBackupScheduler();
 
     // 启动 HTTP 服务
     app.listen(PORT, () => {

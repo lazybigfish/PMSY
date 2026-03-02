@@ -112,7 +112,7 @@ export async function uploadFile(
   
   // 使用原生 fetch 以便支持进度回调
   const token = localStorage.getItem('access_token');
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -160,7 +160,7 @@ export async function downloadFile(fileId: string): Promise<Blob> {
  * 获取文件下载链接
  */
 export function getFileUrl(filePath: string): string {
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   // 从完整路径中提取文件名，因为上传到 forum 目录
   const fileName = filePath.split('/').pop() || filePath;
   return `${API_BASE_URL}/storage/v1/object/public/files/forum/${fileName}`;

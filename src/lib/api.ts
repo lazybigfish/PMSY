@@ -4,7 +4,7 @@
  * 使用自研后端 API
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
  * 获取存储的访问令牌

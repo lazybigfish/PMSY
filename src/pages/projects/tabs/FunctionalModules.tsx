@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { ProjectModule, Task, ProjectSupplier } from '../../../types';
-import { Loader2, Download, Upload, FileSpreadsheet, ChevronRight, ChevronDown, CheckCircle, AlertTriangle, Plus, Trash2, ArrowUp, ArrowDown, Play, CheckSquare, Building2 } from 'lucide-react';
+import { Loader2, Download, Upload, FileSpreadsheet, ChevronRight, ChevronDown, CheckCircle, AlertTriangle, Plus, Trash2, Play, CheckSquare, Building2, Move, X, CornerDownRight, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -11,6 +11,8 @@ interface FunctionalModulesProps {
   canEdit?: boolean;
 }
 
+type MoveAction = 'before' | 'after' | 'child';
+
 const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdit = true }) => {
   const [modules, setModules] = useState<ProjectModule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,11 +20,14 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [suppliers, setSuppliers] = useState<ProjectSupplier[]>([]);
+  
+  // 移动模式状态
+  const [moveMode, setMoveMode] = useState(false);
+  const [movingModuleId, setMovingModuleId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchModules();
     fetchSuppliers();
-    // fetchTasks(); // Removed initial full fetch
   }, [projectId]);
 
   const fetchModules = async () => {
@@ -38,7 +43,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
       const treeData = buildTree(data || []);
       setModules(treeData);
       
-      // 默认展开所有模块
       const allExpanded: Record<string, boolean> = {};
       const setAllExpanded = (nodes: ProjectModule[]) => {
         nodes.forEach((node) => {
@@ -59,7 +63,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
 
   const fetchSuppliers = async () => {
     try {
-      // 1. 先获取项目供应商关联数据
       const { data: projectSuppliersData, error: psError } = await api.db
         .from('project_suppliers')
         .select('*')
@@ -67,7 +70,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
 
       if (psError) throw psError;
 
-      // 2. 获取供应商详情
       const projectSuppliers = projectSuppliersData || [];
       if (projectSuppliers.length > 0) {
         const supplierIds = projectSuppliers.map(ps => ps.supplier_id).filter(Boolean);
@@ -94,7 +96,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     }
   };
 
-  // 获取模块的供应商信息
   const getModuleSupplier = (moduleId: string) => {
     return suppliers.find(s => s.module_ids?.includes(moduleId));
   };
@@ -128,7 +129,30 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     return roots;
   };
 
-  // 统计各层级模块数据（使用加权平均计算完成度）
+  const flattenTree = (nodes: ProjectModule[], parentId: string | null = null, result: ProjectModule[] = []): ProjectModule[] => {
+    nodes.forEach((node) => {
+      result.push({ ...node, parent_id: parentId });
+      if (node.children && node.children.length > 0 && expanded[node.id]) {
+        flattenTree(node.children, node.id, result);
+      }
+    });
+    return result;
+  };
+
+  // 完整的扁平化，不考虑展开状态，用于移动计算
+  const flattenTreeAll = (nodes: ProjectModule[], parentId: string | null = null, result: ProjectModule[] = []): ProjectModule[] => {
+    nodes.forEach((node) => {
+      result.push({ ...node, parent_id: parentId });
+      if (node.children && node.children.length > 0) {
+        flattenTreeAll(node.children, node.id, result);
+      }
+    });
+    return result;
+  };
+
+  const flattenedModules = flattenTree(modules);
+  const allModules = flattenTreeAll(modules);
+
   const calculateLevelStats = (moduleList: ProjectModule[]) => {
     const stats: Record<number, { total: number; totalProgress: number }> = {};
 
@@ -139,7 +163,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
           stats[level] = { total: 0, totalProgress: 0 };
         }
         stats[level].total += 1;
-        // 累加每个模块的进度值
         stats[level].totalProgress += (node.progress || 0);
         if (node.children && node.children.length > 0) {
           traverse(node.children);
@@ -151,19 +174,10 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     return stats;
   };
 
-  // 获取层级名称
   const getLevelName = (level: number) => {
     const levelNames: Record<number, string> = {
-      1: '一级',
-      2: '二级',
-      3: '三级',
-      4: '四级',
-      5: '五级',
-      6: '六级',
-      7: '七级',
-      8: '八级',
-      9: '九级',
-      10: '十级',
+      1: '一级', 2: '二级', 3: '三级', 4: '四级', 5: '五级',
+      6: '六级', 7: '七级', 8: '八级', 9: '九级', 10: '十级',
     };
     return levelNames[level] || `${level}级`;
   };
@@ -171,42 +185,217 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
   const toggleExpand = (id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+
   const selectModule = (id: string) => {
+    if (moveMode) return;
     setSelectedModuleId(id);
   };
 
-  const fetchTasks = async (moduleId?: string) => {
-    // If no specific module, fetch nothing initially (on demand load)
-    // Or if we need to show all, optimize select.
-    // For now, let's lazy load tasks when a module is selected.
-    if (!moduleId) {
-      // Clear tasks if deselecting? No, keep cache.
-      return;
+  const findModule = (nodes: ProjectModule[], id: string): ProjectModule | null => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      if (node.children) {
+        const found = findModule(node.children, id);
+        if (found) return found;
+      }
     }
-    
-    // Check if we already loaded tasks for this module (simple cache could be added later)
-    // For now, just fetch for this module
-    const { data } = await api.db
-      .from('tasks')
-      .select('id, title, status, module_id') // Select only needed fields
-      .eq('project_id', projectId)
-      .eq('module_id', moduleId);
-      
-    setTasks(prev => {
-       // Merge new tasks, removing old ones for this module to avoid dupes
-       const others = prev.filter(t => t.module_id !== moduleId);
-       return [...others, ...(data as Task[] || [])];
-    });
+    return null;
   };
 
-  useEffect(() => {
-    if (selectedModuleId) {
-        fetchTasks(selectedModuleId);
+  const getModuleById = (id: string): ProjectModule | undefined => {
+    return flattenedModules.find(m => m.id === id);
+  };
+
+  // 开始移动模式
+  const startMoveMode = (moduleId: string) => {
+    setMovingModuleId(moduleId);
+    setMoveMode(true);
+    // 展开所有模块以便选择目标
+    const allExpanded: Record<string, boolean> = {};
+    const expandAll = (nodes: ProjectModule[]) => {
+      nodes.forEach((node) => {
+        allExpanded[node.id] = true;
+        if (node.children && node.children.length > 0) {
+          expandAll(node.children);
+        }
+      });
+    };
+    expandAll(modules);
+    setExpanded(allExpanded);
+  };
+
+  // 取消移动
+  const cancelMoveMode = () => {
+    setMoveMode(false);
+    setMovingModuleId(null);
+  };
+
+  // 执行移动
+  const executeMove = async (targetId: string, action: MoveAction) => {
+    if (!movingModuleId || movingModuleId === targetId) return;
+
+    const movingModule = getModuleById(movingModuleId);
+    const targetModule = getModuleById(targetId);
+
+    if (!movingModule || !targetModule) return;
+
+    // 检查是否是将父模块移动到子模块下（循环引用）
+    const isTargetDescendant = (nodeId: string, ancestorId: string): boolean => {
+      const node = findModule(modules, nodeId);
+      if (!node || !node.children) return false;
+      for (const child of node.children) {
+        if (child.id === ancestorId) return true;
+        if (isTargetDescendant(child.id, ancestorId)) return true;
+      }
+      return false;
+    };
+
+    if (isTargetDescendant(movingModuleId, targetId)) {
+      alert('不能将父模块移动到其子模块下');
+      return;
     }
-  }, [selectedModuleId]);
+
+    try {
+      let newParentId: string | null = null;
+      let newLevel: number;
+      let newSortOrder: number;
+
+      // 使用 allModules（包含所有模块，不考虑展开状态）来计算
+      const siblings = allModules.filter(m => m.parent_id === targetModule.parent_id);
+      const targetIndex = siblings.findIndex(s => s.id === targetId);
+
+      switch (action) {
+        case 'before':
+          newParentId = targetModule.parent_id;
+          newLevel = targetModule.level || 1;
+          newSortOrder = targetIndex;
+          break;
+        case 'after':
+          newParentId = targetModule.parent_id;
+          newLevel = targetModule.level || 1;
+          newSortOrder = targetIndex + 1;
+          break;
+        case 'child':
+          newParentId = targetId;
+          newLevel = (targetModule.level || 1) + 1;
+          const targetChildren = allModules.filter(m => m.parent_id === targetId);
+          newSortOrder = targetChildren.length;
+          break;
+      }
+
+      // 乐观更新
+      setModules(prev => moveModuleInTree(prev, movingModuleId, newParentId, newLevel, newSortOrder));
+      setMoveMode(false);
+      setMovingModuleId(null);
+
+      // 更新数据库
+      const { error } = await api.db.from('project_modules').update({
+        parent_id: newParentId,
+        level: newLevel,
+        sort_order: newSortOrder
+      }).eq('id', movingModuleId);
+
+      if (error) throw error;
+
+      // 乐观更新已完成，无需重新获取数据
+    } catch (err) {
+      console.error('Error moving module:', err);
+      alert('移动模块失败，正在恢复...');
+      // 失败时重新获取数据恢复状态
+      fetchModules();
+    }
+  };
+
+  const moveModuleInTree = (
+    nodes: ProjectModule[],
+    movedId: string,
+    newParentId: string | null,
+    newLevel: number,
+    newSortOrder: number
+  ): ProjectModule[] => {
+    const deepClone = (items: ProjectModule[]): ProjectModule[] => {
+      return items.map(node => ({
+        ...node,
+        children: node.children ? deepClone(node.children) : []
+      }));
+    };
+
+    // 递归更新节点及其子节点的层级
+    const updateLevelRecursive = (node: ProjectModule, parentLevel: number): ProjectModule => {
+      const updatedNode = { ...node, level: parentLevel + 1 };
+      if (updatedNode.children && updatedNode.children.length > 0) {
+        updatedNode.children = updatedNode.children.map(child =>
+          updateLevelRecursive(child, updatedNode.level)
+        );
+      }
+      return updatedNode;
+    };
+
+    let movedNode: ProjectModule | null = null;
+
+    const removeFromTree = (items: ProjectModule[]): ProjectModule[] => {
+      const result: ProjectModule[] = [];
+      for (const node of items) {
+        if (node.id === movedId) {
+          movedNode = { ...node, children: node.children ? deepClone(node.children) : [] };
+          continue;
+        }
+        if (node.children && node.children.length > 0) {
+          node.children = removeFromTree(node.children);
+        }
+        result.push(node);
+      }
+      return result;
+    };
+
+    const addToTree = (items: ProjectModule[]): ProjectModule[] => {
+      if (!movedNode) return items;
+
+      // 更新被移动节点及其所有子节点的层级
+      const updatedNode = updateLevelRecursive(
+        { ...movedNode, parent_id: newParentId, sort_order: newSortOrder },
+        newLevel - 1
+      );
+
+      if (newParentId === null) {
+        return [...items, updatedNode];
+      }
+
+      return items.map(node => {
+        if (node.id === newParentId) {
+          return {
+            ...node,
+            children: [...(node.children || []), updatedNode]
+          };
+        }
+        if (node.children && node.children.length > 0) {
+          return {
+            ...node,
+            children: addToTree(node.children)
+          };
+        }
+        return node;
+      });
+    };
+
+    let result = removeFromTree(nodes);
+    result = addToTree(result);
+
+    // 只排序，不重新分配 sort_order，保持数据库中的顺序值
+    const resortOnly = (items: ProjectModule[]): ProjectModule[] => {
+      items.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      items.forEach(node => {
+        if (node.children && node.children.length > 0) {
+          resortOnly(node.children);
+        }
+      });
+      return items;
+    };
+
+    return resortOnly(result);
+  };
 
   const handleExport = () => {
-    // Flatten tree for export
     const rows: any[] = [];
     const traverse = (nodes: ProjectModule[], depth: number) => {
       nodes.forEach((node) => {
@@ -258,8 +447,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
       const data = XLSX.utils.sheet_to_json(ws);
-
-      console.log('Imported data:', data);
       await processImport(data);
     };
     reader.readAsBinaryString(file);
@@ -270,88 +457,64 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
 
     setLoading(true);
     try {
-        console.log('Raw imported data:', data); // Debug log
+      const normalizedData = data.map(row => {
+        const newRow: any = {};
+        Object.keys(row).forEach(key => {
+          newRow[key.trim()] = row[key];
+        });
+        return newRow;
+      });
 
-        // Normalize keys to handle potential whitespace or case issues
-        const normalizedData = data.map(row => {
-            const newRow: any = {};
-            Object.keys(row).forEach(key => {
-                newRow[key.trim()] = row[key];
-            });
-            return newRow;
+      await api.db.from('project_modules').delete().eq('project_id', projectId);
+
+      const parentStack: { id: string; level: number }[] = [];
+      let insertedCount = 0;
+      
+      for (let i = 0; i < normalizedData.length; i++) {
+        const row = normalizedData[i];
+        const levelStr = row['层级'] || row['Level'] || row['level'] || '1';
+        const level = parseInt(String(levelStr), 10);
+        
+        const name = (row['模块名称'] || row['Module Name'] || row['name'] || row['Name'])?.trim();
+        const desc = row['模块描述'] || row['Description'] || row['description'] || '';
+        const statusStr = row['状态'] || row['Status'] || row['status'];
+
+        if (!name) continue;
+
+        const status = reverseTranslateStatus(statusStr);
+        
+        while (parentStack.length > 0 && parentStack[parentStack.length - 1].level >= level) {
+          parentStack.pop();
+        }
+        
+        const parentId = parentStack.length > 0 ? parentStack[parentStack.length - 1].id : null;
+
+        const { data: inserted, error } = await api.db.from('project_modules').insert({
+          project_id: projectId,
+          name: name,
+          description: desc,
+          status: status,
+          level: level,
+          parent_id: parentId,
+          sort_order: i
         });
 
-        // 1. Delete existing
-        const { error: deleteError } = await api.db.from('project_modules').delete().eq('project_id', projectId);
-        if (deleteError) throw deleteError;
+        if (error) throw error;
 
-        // 2. Insert new
-        const parentStack: { id: string; level: number }[] = [];
-        let insertedCount = 0;
-        
-        for (let i = 0; i < normalizedData.length; i++) {
-            const row = normalizedData[i];
-            // Try multiple variations of column names
-            const levelStr = row['层级'] || row['Level'] || row['level'] || '1';
-            const level = parseInt(String(levelStr), 10);
-            
-            const name = (row['模块名称'] || row['Module Name'] || row['name'] || row['Name'])?.trim();
-            const desc = row['模块描述'] || row['Description'] || row['description'] || '';
-            const statusStr = row['状态'] || row['Status'] || row['status'];
-
-            if (!name) {
-                console.warn(`Skipping row ${i}: Missing name`, row);
-                continue; 
-            }
-
-            const status = reverseTranslateStatus(statusStr);
-            
-            // Adjust stack for hierarchy
-            while (parentStack.length > 0 && parentStack[parentStack.length - 1].level >= level) {
-                parentStack.pop();
-            }
-            
-            const parentId = parentStack.length > 0 ? parentStack[parentStack.length - 1].id : null;
-
-            const { data: inserted, error } = await api.db.from('project_modules').insert({
-                project_id: projectId,
-                name: name,
-                description: desc,
-                status: status,
-                level: level,
-                parent_id: parentId,
-                sort_order: i
-            });
-
-            if (error) {
-                console.error('Error inserting row:', row, error);
-                throw error;
-            }
-
-            if (inserted && inserted[0]) {
-                parentStack.push({ id: inserted[0].id, level: level });
-                insertedCount++;
-            }
+        if (inserted && inserted[0]) {
+          parentStack.push({ id: inserted[0].id, level: level });
+          insertedCount++;
         }
-        
-        console.log(`Successfully inserted ${insertedCount} modules`);
-        
-        await fetchModules();
-        
-        // Auto-expand all nodes after import
-        const { data: allModules } = await api.db.from('project_modules').select('id').eq('project_id', projectId);
-        if (allModules) {
-            const newExpanded: Record<string, boolean> = {};
-            allModules.forEach(m => newExpanded[m.id] = true);
-            setExpanded(newExpanded);
-        }
-
-        alert(`导入成功，共导入 ${insertedCount} 个模块`);
+      }
+      
+      await fetchModules();
+      
+      alert(`导入成功，共导入 ${insertedCount} 个模块`);
     } catch (error) {
-        console.error('Import error:', error);
-        alert('导入失败，请检查控制台日志');
+      console.error('Import error:', error);
+      alert('导入失败，请检查控制台日志');
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -359,149 +522,43 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     const name = prompt('请输入新模块名称:');
     if (!name || !name.trim()) return;
     
-    // Find parent module to determine level
     let level = 1;
     if (parentId) {
-        const findParent = (nodes: ProjectModule[]): ProjectModule | undefined => {
-            for (const node of nodes) {
-                if (node.id === parentId) return node;
-                if (node.children) {
-                    const found = findParent(node.children);
-                    if (found) return found;
-                }
-            }
-            return undefined;
-        }
-        const parent = findParent(modules);
-        if (parent) {
-            level = parent.level + 1;
-        }
+      const parent = findModule(modules, parentId);
+      if (parent) {
+        level = parent.level + 1;
+      }
     }
 
     try {
-        const { error } = await api.db.from('project_modules').insert({
-            project_id: projectId,
-            parent_id: parentId,
-            name: name.trim(),
-            level: level,
-            status: 'not_started'
-        });
-        
-        if (error) throw error;
-        fetchModules();
+      const { error } = await api.db.from('project_modules').insert({
+        project_id: projectId,
+        parent_id: parentId,
+        name: name.trim(),
+        level: level,
+        status: 'not_started'
+      });
+      
+      if (error) throw error;
+      fetchModules();
     } catch (error) {
-        console.error('Error adding module:', error);
-        alert('添加模块失败');
+      console.error('Error adding module:', error);
+      alert('添加模块失败');
     }
   };
 
   const handleDeleteModule = async (id: string) => {
-      if (!window.confirm('确定要删除该模块及其所有子模块吗？此操作不可撤销。')) return;
-
-      try {
-          const { error } = await api.db.from('project_modules').delete().eq('id', id);
-          if (error) throw error;
-          
-          if (selectedModuleId === id) setSelectedModuleId(null);
-          fetchModules();
-      } catch (error) {
-          console.error('Error deleting module:', error);
-          alert('删除模块失败');
-      }
-  };
-
-  const handleMoveModule = async (id: string, direction: 'up' | 'down') => {
-    const findNodeContext = (
-      nodes: ProjectModule[],
-      parentId: string | null = null
-    ): { node: ProjectModule, siblings: ProjectModule[], parentId: string | null, index: number } | null => {
-      for (let i = 0; i < nodes.length; i++) {
-        if (nodes[i].id === id) {
-          return { node: nodes[i], siblings: nodes, parentId, index: i };
-        }
-        if (nodes[i].children && nodes[i].children.length > 0) {
-          const found = findNodeContext(nodes[i].children!, nodes[i].id);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
-    const findParent = (nodes: ProjectModule[], targetId: string): ProjectModule | null => {
-      for (const node of nodes) {
-        if (node.id === targetId) return null;
-        if (node.children) {
-          for (const child of node.children) {
-            if (child.id === targetId) return node;
-            const found = findParent(node.children!, targetId);
-            if (found) return found;
-          }
-        }
-      }
-      return null;
-    };
-
-    const result = findNodeContext(modules);
-    if (!result) return;
-
-    const { node, siblings, parentId, index } = result;
+    if (!window.confirm('确定要删除该模块及其所有子模块吗？此操作不可撤销。')) return;
 
     try {
-      if (direction === 'up') {
-        if (!parentId) return;
-        
-        const parent = findParent(modules, parentId);
-        
-        if (index > 0) {
-          const prevSibling = siblings[index - 1];
-          await api.db.from('project_modules').update({
-            parent_id: prevSibling.id,
-            level: (prevSibling.level || 1) + 1,
-            sort_order: prevSibling.children?.length || 0
-          }).eq('id', node.id);
-        } else {
-          if (parent) {
-            const grandParent = findParent(modules, parent.id);
-            const grandParentSiblings = grandParent ? (grandParent.children || []) : modules;
-            const grandParentIndex = grandParentSiblings.findIndex(n => n.id === parent.id);
-            
-            await api.db.from('project_modules').update({
-              parent_id: grandParent?.id || null,
-              level: grandParent ? (grandParent.level || 1) + 1 : 1,
-              sort_order: grandParentIndex
-            }).eq('id', node.id);
-          } else {
-            await api.db.from('project_modules').update({
-              parent_id: null,
-              level: 1,
-              sort_order: index
-            }).eq('id', node.id);
-          }
-        }
-      } else {
-        if (!node.children || node.children.length === 0) return;
-        
-        const firstChild = node.children[0];
-        
-        if (siblings.length > index + 1) {
-          const nextSibling = siblings[index + 1];
-          await api.db.from('project_modules').update({
-            parent_id: nextSibling.id,
-            level: (nextSibling.level || 1) + 1,
-            sort_order: 0
-          }).eq('id', node.id);
-        } else {
-          await api.db.from('project_modules').update({
-            parent_id: node.id,
-            level: (node.level || 1) + 1,
-            sort_order: 0
-          }).eq('id', firstChild.id);
-        }
-      }
-
+      const { error } = await api.db.from('project_modules').delete().eq('id', id);
+      if (error) throw error;
+      
+      if (selectedModuleId === id) setSelectedModuleId(null);
       fetchModules();
     } catch (error) {
-      console.error('Error moving module:', error);
+      console.error('Error deleting module:', error);
+      alert('删除模块失败');
     }
   };
 
@@ -562,21 +619,46 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     }
   };
 
-  const renderNode = (node: ProjectModule) => {
+  // 渲染模块节点
+  const renderNode = (node: ProjectModule, indexPath: number[] = []) => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expanded[node.id];
     const supplier = getModuleSupplier(node.id);
+    const isSelected = selectedModuleId === node.id;
+    const isMoving = movingModuleId === node.id;
+    const level = node.level || 1;
+    
+    // 生成序号显示，如 1, 1.1, 1.1.1
+    const displayIndex = indexPath.length > 0 ? indexPath.join('.') : '';
 
     return (
       <div key={node.id} className="border-l border-gray-200 ml-4 pl-4">
-        <div className={`flex items-center py-2 rounded px-2 group ${selectedModuleId === node.id ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}>
+        <div 
+          className={`flex items-center py-2 rounded px-2 group transition-all ${
+            isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'
+          } ${
+            isMoving ? 'bg-yellow-100 ring-2 ring-yellow-400' : ''
+          }`}
+        >
           <button
             onClick={() => toggleExpand(node.id)}
             className={`mr-2 p-1 rounded hover:bg-gray-200 ${hasChildren ? '' : 'invisible'}`}
           >
             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
-          <button onClick={() => selectModule(node.id)} className="font-medium text-gray-900 text-left flex-grow">
+          
+          {/* 序号显示 */}
+          {displayIndex && (
+            <span className="text-xs text-gray-400 mr-2 font-mono min-w-[2rem]">
+              {displayIndex}
+            </span>
+          )}
+          
+          <button 
+            onClick={() => selectModule(node.id)} 
+            className="font-medium text-gray-900 text-left flex-grow"
+            disabled={moveMode}
+          >
             {node.name}
             {supplier && (
               <span className="ml-2 inline-flex items-center text-xs px-2 py-0.5 rounded bg-orange-100 text-orange-700" title={`供应商: ${supplier.supplier?.name}`}>
@@ -610,7 +692,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
           </div>
 
           <div className="flex items-center space-x-2">
-            {/* Quick Start Button */}
             {node.status !== 'in_progress' && node.status !== 'completed' && (
               <button
                 onClick={(e) => handleQuickStart(e, node)}
@@ -620,7 +701,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
                 <Play className="h-4 w-4" />
               </button>
             )}
-            {/* Quick Complete Button */}
             {node.status !== 'completed' && (
               <button
                 onClick={(e) => handleQuickComplete(e, node)}
@@ -640,24 +720,66 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
             </span>
 
             <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={(e) => { e.stopPropagation(); handleMoveModule(node.id, 'up'); }} className="p-1 text-gray-400 hover:text-indigo-600" title="上移">
-                    <ArrowUp className="h-4 w-4" />
+              {!moveMode && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); startMoveMode(node.id); }} 
+                  className="p-1 text-gray-400 hover:text-indigo-600" 
+                  title="移动模块"
+                >
+                  <Move className="h-4 w-4" />
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); handleMoveModule(node.id, 'down'); }} className="p-1 text-gray-400 hover:text-indigo-600" title="下移">
-                    <ArrowDown className="h-4 w-4" />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); handleAddModule(node.id); }} className="p-1 text-gray-400 hover:text-indigo-600" title="添加子模块">
-                    <Plus className="h-4 w-4" />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteModule(node.id); }} className="p-1 text-gray-400 hover:text-red-600" title="删除模块">
-                    <Trash2 className="h-4 w-4" />
-                </button>
+              )}
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleAddModule(node.id); }} 
+                className="p-1 text-gray-400 hover:text-indigo-600" 
+                title="添加子模块"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleDeleteModule(node.id); }} 
+                className="p-1 text-gray-400 hover:text-red-600" 
+                title="删除模块"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
+
+        {/* 移动模式下的操作按钮 */}
+        {moveMode && movingModuleId !== node.id && (
+          <div className="flex items-center gap-2 ml-8 mt-1 mb-2">
+            <button
+              onClick={() => executeMove(node.id, 'before')}
+              className="px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 flex items-center gap-1"
+              title="移动到该模块之前（同级）"
+            >
+              <ArrowRight className="h-3 w-3 rotate-180" />
+              移到前面
+            </button>
+            <button
+              onClick={() => executeMove(node.id, 'after')}
+              className="px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 flex items-center gap-1"
+              title="移动到该模块之后（同级）"
+            >
+              <ArrowRight className="h-3 w-3" />
+              移到后面
+            </button>
+            <button
+              onClick={() => executeMove(node.id, 'child')}
+              className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200 flex items-center gap-1"
+              title="移动为该模块的子级"
+            >
+              <CornerDownRight className="h-3 w-3" />
+              设为子级
+            </button>
+          </div>
+        )}
+
         {hasChildren && isExpanded && (
           <div className="ml-4">
-            {node.children?.map(renderNode)}
+            {node.children?.map((child, idx) => renderNode(child, [...indexPath, idx + 1]))}
           </div>
         )}
       </div>
@@ -665,18 +787,16 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
   };
 
   const selectedModule = selectedModuleId
-    ? modules.flatMap(function flatten(m: ProjectModule): ProjectModule[] {
-        return [m, ...(m.children?.flatMap(flatten) || [])];
-      }).find(m => m.id === selectedModuleId) || null
+    ? findModule(modules, selectedModuleId)
     : null;
 
-  const associatedTasks = selectedModule
-    ? tasks.filter(t => t.module_id === selectedModule.id)
+  const associatedTasks = selectedModuleId
+    ? tasks.filter(t => t.module_id === selectedModuleId)
     : [];
 
   const updateSelectedModule = async (patch: Partial<ProjectModule>) => {
     if (!selectedModule) return;
-    // Optimistic UI update
+    
     setModules(prev => {
       const updateTree = (nodes: ProjectModule[]): ProjectModule[] =>
         nodes.map(n => n.id === selectedModule.id
@@ -684,6 +804,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
           : { ...n, children: n.children ? updateTree(n.children) : [] });
       return updateTree(prev);
     });
+    
     await api.db
       .from('project_modules')
       .update(patch as any)
@@ -695,14 +816,12 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
 
     const updates: Partial<ProjectModule> = { progress: newProgress };
 
-    // Auto-update status based on progress
     if (newProgress === 100 && selectedModule.status !== 'completed') {
       updates.status = 'completed';
     } else if (newProgress > 0 && (selectedModule.status === 'not_started' || selectedModule.status === 'pending')) {
       updates.status = 'in_progress';
     }
 
-    // Optimistic UI update
     setModules(prev => {
       const updateTree = (nodes: ProjectModule[]): ProjectModule[] =>
         nodes.map(n => n.id === selectedModule.id
@@ -719,7 +838,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     if (error) {
       console.error('Error updating progress:', error);
       alert('更新进度失败: ' + error.message);
-      // Revert optimistic update on error
       fetchModules();
     }
   };
@@ -729,12 +847,10 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
 
     const updates: Partial<ProjectModule> = { status: newStatus };
 
-    // Auto-update progress when status is completed
     if (newStatus === 'completed') {
       updates.progress = 100;
     }
 
-    // Optimistic UI update
     setModules(prev => {
       const updateTree = (nodes: ProjectModule[]): ProjectModule[] =>
         nodes.map(n => n.id === selectedModule.id
@@ -751,25 +867,41 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     if (error) {
       console.error('Error updating status:', error);
       alert('更新状态失败: ' + error.message);
-      // Revert optimistic update on error
       fetchModules();
     }
-  };
-
-  const computeProgress = (node: ProjectModule): number => {
-    const collect = (n: ProjectModule): ProjectModule[] => [n, ...(n.children?.flatMap(collect) || [])];
-    const list = collect(node);
-    const total = list.length;
-    const done = list.filter(n => n.status === 'completed').length;
-    return Math.round((done / Math.max(total, 1)) * 100);
   };
 
   if (loading) return <Loader2 className="animate-spin h-8 w-8 text-indigo-600" />;
 
   return (
     <div className="space-y-4">
+      {/* 移动模式提示栏 */}
+      {moveMode && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Move className="h-5 w-5 text-yellow-600" />
+            <span className="text-yellow-800">
+              正在移动模块：<strong>{getModuleById(movingModuleId || '')?.name}</strong>
+            </span>
+            <span className="text-yellow-600 text-sm ml-2">
+              点击目标模块下方的按钮选择移动位置
+            </span>
+          </div>
+          <button
+            onClick={cancelMoveMode}
+            className="px-3 py-1 bg-white border border-yellow-300 text-yellow-700 rounded hover:bg-yellow-100 flex items-center gap-1"
+          >
+            <X className="h-4 w-4" />
+            取消
+          </button>
+        </div>
+      )}
+
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">功能模块</h3>
+        <h3 className="text-lg font-medium">
+          功能模块 
+          {!moveMode && <span className="text-xs text-gray-500 ml-2">（点击移动按钮调整位置）</span>}
+        </h3>
         <div className="flex space-x-2">
           <button onClick={() => handleAddModule(null)} className="flex items-center px-3 py-2 bg-indigo-600 text-white rounded shadow-sm text-sm hover:bg-indigo-700">
             <Plus className="h-4 w-4 mr-2" /> 新增模块
@@ -787,7 +919,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
         </div>
       </div>
 
-      {/* 统计卡片 */}
       {modules.length > 0 && (
         <div className="w-full">
           {(() => {
@@ -798,19 +929,16 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
               <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cardCount}, minmax(0, 1fr))` }}>
                 {levels.map((level) => {
                   const { total, totalProgress } = stats[level];
-                  // 加权平均完成度 = 总进度 / 模块数量
                   const percentage = total > 0 ? Math.round(totalProgress / total) : 0;
                   return (
                     <div
                       key={level}
                       className="relative h-24 bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 cursor-pointer group"
                     >
-                      {/* 背景填充层 - 柔和的海洋蓝绿色系 */}
                       <div
                         className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-teal-400/30 via-cyan-400/20 to-blue-300/10 transition-all duration-500 ease-out group-hover:from-teal-400/40 group-hover:via-cyan-400/30 group-hover:to-blue-300/20"
                         style={{ height: `${percentage}%` }}
                       />
-                      {/* 内容层 */}
                       <div className="relative z-10 flex flex-col items-center justify-center h-full p-3">
                         <span className="text-sm font-medium text-gray-500 mb-1">{getLevelName(level)}模块</span>
                         <div className="flex items-baseline gap-1">
@@ -841,7 +969,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
           {modules.length === 0 ? (
             <div className="text-center text-gray-500 py-8">暂无功能模块。请从Excel导入开始。</div>
           ) : (
-            modules.map(renderNode)
+            modules.map((module, idx) => renderNode(module, [idx + 1]))
           )}
         </div>
 
@@ -900,7 +1028,6 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
                 </div>
               </div>
 
-              {/* 供应商信息 */}
               {(() => {
                 const supplier = getModuleSupplier(selectedModule.id);
                 if (!supplier) return null;
@@ -940,6 +1067,16 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
                   onChange={(e) => updateSelectedModule({ description: e.target.value })}
                   placeholder="请输入模块介绍..."
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm text-gray-700">模块层级</label>
+                <div className="flex items-center space-x-2">
+                  <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded font-medium">
+                    {getLevelName(selectedModule.level || 1)}
+                  </span>
+                  <span className="text-xs text-gray-500">（点击移动按钮调整层级）</span>
+                </div>
               </div>
 
               <div className="space-y-2">

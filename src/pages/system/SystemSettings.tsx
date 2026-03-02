@@ -7,6 +7,7 @@ import MilestoneTemplates from './tabs/MilestoneTemplates';
 import GeneralConfig from './tabs/GeneralConfig';
 import HotNewsConfig from './tabs/HotNewsConfig';
 import LoginThemeConfig from './tabs/LoginThemeConfig';
+import DataBackup from './tabs/DataBackup';
 import { useAuth } from '../../context/AuthContextNew';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -26,6 +27,7 @@ const SystemSettings = () => {
     ...(isAdmin ? [{ id: 'hot-news', label: '热点配置' }] : []),
     { id: 'general', label: '通用设置' },
     { id: 'login-theme', label: '登录页管理' },
+    ...(isAdmin ? [{ id: 'data-backup', label: '数据备份' }] : []),
   ];
 
   const getTabButtonClass = (isActive: boolean) => {
@@ -74,6 +76,8 @@ const SystemSettings = () => {
         return <GeneralConfig />;
       case 'login-theme':
         return <LoginThemeConfig />;
+      case 'data-backup':
+        return isAdmin ? <DataBackup /> : null;
       default:
         return <UserManagement />;
     }

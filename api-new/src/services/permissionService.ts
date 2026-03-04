@@ -166,6 +166,10 @@ const tablePermissions: Record<string, TablePermission> = {
     adminRoles: ['admin'],
     ownerField: 'author_id',
   },
+  forum_replies: {
+    adminRoles: ['admin'],
+    ownerField: 'author_id',
+  },
   forum_comments: {
     adminRoles: ['admin'],
     ownerField: 'author_id',

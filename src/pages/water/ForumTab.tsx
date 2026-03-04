@@ -12,7 +12,7 @@ import { LikeButton } from '../../components/LikeButton';
 import { Avatar } from '../../components/Avatar';
 import { ThemedButton } from '../../components/theme/ThemedButton';
 import { ThemedCard } from '../../components/theme/ThemedCard';
-import { PostImageUploader, PostImage } from './components/PostImageUploader';
+import { ImageUploader } from '../../components/upload';
 
 // 辅助函数：解析帖子内容
 const parseContent = (content: any): { text: string; images: string[] } => {
@@ -63,7 +63,7 @@ export default function ForumTab() {
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [formCategory, setFormCategory] = useState<ForumCategory>('tech');
-  const [formImages, setFormImages] = useState<PostImage[]>([]);
+  const [formImages, setFormImages] = useState<string[]>([]);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
@@ -157,20 +157,8 @@ export default function ForumTab() {
       return;
     }
 
-    // 过滤出已上传成功的图片，转换 blob URL 为可存储的 URL
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    const uploadedImages = formImages
-      .filter(img => !img.uploading && !img.error)
-      .map(img => {
-        // 如果是 blob URL，从 id 中获取文件名，构造存储 URL
-        // 如果已经是 http URL，直接使用
-        let url = img.url;
-        if (url.startsWith('blob:')) {
-          const fileName = img.id.replace('forum/', '');
-          url = `${API_BASE_URL}/storage/v1/object/public/files/forum/${fileName}`;
-        }
-        return url;
-      });
+    // 使用新架构上传的图片URL已经是可直接存储的URL
+    const uploadedImages = formImages;
 
     try {
       setSubmitting(true);
@@ -575,10 +563,14 @@ export default function ForumTab() {
             <label className="block text-sm font-medium text-dark-700 mb-1">
               图片
             </label>
-            <PostImageUploader
-              images={formImages}
+            <ImageUploader
+              value={formImages}
               onChange={setFormImages}
-              maxImages={9}
+              maxCount={9}
+              maxSize={5 * 1024 * 1024}
+              compress="post"
+              bucket="images"
+              folder="forum"
             />
           </div>
         </div>

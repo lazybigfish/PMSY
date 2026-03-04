@@ -28,7 +28,7 @@ interface MilestoneTask {
   is_completed: boolean;
   completed_at: string;
   completed_by: string;
-  output_documents: { name: string; url: string; uploaded_at?: string; uploaded_by?: string }[];
+  output_documents: { name: string; url?: string; uploaded_at?: string; uploaded_by?: string; required?: boolean }[];
   is_custom?: boolean;
 }
 
@@ -464,10 +464,17 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
     });
   };
 
-  // 下载单个文件
+  // 下载单个文件 - 通过后端 API 下载以避免混合内容问题
   const downloadFile = async (url: string, filename: string): Promise<Blob> => {
-    const response = await fetch(url);
-    return await response.blob();
+    // 从 URL 中提取存储路径
+    const urlMatch = url.match(/\/project-documents\/(.+?)(?:\?|$)/);
+    if (!urlMatch || !urlMatch[1]) {
+      throw new Error('无法解析文件路径');
+    }
+    const filePath = urlMatch[1];
+
+    // 使用后端 API 下载文件，避免混合内容问题
+    return await api.storage.from('project-documents').download(filePath);
   };
 
   // 打包下载当前阶段的文档

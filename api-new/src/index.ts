@@ -23,6 +23,8 @@ import projectSuppliersRouter from './routes/projectSuppliers';
 import duplicateCheckRouter from './routes/duplicateCheck';
 import taskDependenciesRouter from './routes/taskDependencies';
 import backupRouter from './routes/system/backup.routes';
+import uploadRouter from './routes/upload';
+import filesRouter from './routes/files';
 
 // 导入定时备份调度器
 import { initBackupScheduler } from './jobs/backup.scheduler';
@@ -58,6 +60,8 @@ app.use('/api/project-suppliers', projectSuppliersRouter);
 app.use('/api/duplicate-check', duplicateCheckRouter);
 app.use('/api/task-dependencies', taskDependenciesRouter);
 app.use('/api/system/backup', backupRouter);
+app.use('/api/upload', uploadRouter);
+app.use('/api/files', filesRouter);
 
 // 路由（带 /api 前缀，兼容 Nginx 代理配置）
 app.use('/api/health', healthRouter);

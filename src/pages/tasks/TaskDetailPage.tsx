@@ -473,8 +473,6 @@ const TaskDetailPage = () => {
       return;
     }
 
-    console.log('[TaskDetailPage] handleProgressUpdate called with attachments:', attachments);
-
     try {
       // 1. 创建进度更新记录
       const { data: progressLogData, error: logError } = await api.db
@@ -486,14 +484,11 @@ const TaskDetailPage = () => {
           description: content
         });
 
-      console.log('[TaskDetailPage] Progress log created:', progressLogData, 'error:', logError);
-
       if (logError) {
         throw new Error(`创建进度记录失败: ${logError.message}`);
       }
 
       const progressLog = progressLogData?.[0];
-      console.log('[TaskDetailPage] Progress log:', progressLog);
 
       // 2. 保存附件记录
       if (attachments.length > 0 && progressLog) {
@@ -508,24 +503,26 @@ const TaskDetailPage = () => {
             uploaded_by: user.id
           }));
 
-        console.log('[TaskDetailPage] Attachments to insert:', attachmentsToInsert);
-
         if (attachmentsToInsert.length > 0) {
-          const { data: attData, error: attError } = await api.db
+          await api.db
             .from('task_progress_attachments')
             .insert(attachmentsToInsert);
-          console.log('[TaskDetailPage] Attachments insert result:', attData, 'error:', attError);
         }
-      } else {
-        console.log('[TaskDetailPage] No attachments to save. attachments.length:', attachments.length, 'progressLog:', progressLog);
       }
 
-      // 3. 更新任务进度和状态
+      // 3. 更新任务进度和状态（状态联动逻辑）
       const updateData: any = { progress };
+      
+      // 状态联动规则：
+      // - 待办(todo) + 进度 > 0% → 进行中(in_progress)
+      // - 进行中(in_progress) + 进度 = 100% → 已完成(done)
       if (progress === 100 && task.status !== 'done') {
         updateData.status = 'done';
         updateData.completed_at = new Date().toISOString();
+      } else if (progress > 0 && progress < 100 && task.status === 'todo') {
+        updateData.status = 'in_progress';
       }
+      
       await taskService.updateTask(task.id, updateData);
 
       // 4. 手动记录进度更新描述到历史记录（触发器只记录数值变化，不记录描述内容）

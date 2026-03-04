@@ -2,6 +2,7 @@ import { Client as MinioClient, CopyConditions } from 'minio';
 import { MINIO_CONFIG, API_URL } from '../config/constants';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import * as fileAccessService from './fileAccessService';
 
 /**
  * 存储服务
@@ -50,20 +51,21 @@ export async function uploadFile(
   const bucketExists = await minioClient.bucketExists(bucket);
   if (!bucketExists) {
     await minioClient.makeBucket(bucket);
-    // 设置存储桶为公开读取
-    const policy = {
-      Version: '2012-10-17',
-      Statement: [
-        {
-          Effect: 'Allow',
-          Principal: { AWS: ['*'] },
-          Action: ['s3:GetObject'],
-          Resource: [`arn:aws:s3:::${bucket}/*`],
-        },
-      ],
-    };
-    await minioClient.setBucketPolicy(bucket, JSON.stringify(policy));
   }
+
+  // 设置存储桶为公开读取（每次上传都检查，确保策略正确）
+  const policy = {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Principal: { AWS: ['*'] },
+        Action: ['s3:GetObject'],
+        Resource: [`arn:aws:s3:::${bucket}/*`],
+      },
+    ],
+  };
+  await minioClient.setBucketPolicy(bucket, JSON.stringify(policy));
 
   // 上传文件
   await minioClient.putObject(bucket, filePath, buffer, buffer.length, {
@@ -71,8 +73,8 @@ export async function uploadFile(
     'X-Upload-Date': new Date().toISOString(),
   });
 
-  // 生成文件 URL - 使用环境变量中的 API_URL
-  const url = `${API_URL}/storage/v1/object/public/${bucket}/${filePath}`;
+  // 生成文件 URL - 根据 bucket 自动选择访问策略
+  const url = fileAccessService.getDirectUrl(bucket, filePath);
 
   return {
     filename: path.basename(filePath),

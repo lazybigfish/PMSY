@@ -169,26 +169,30 @@ if ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "test -f $DEPLOY_DIR/.env" 2>
     TEMP_ENV=$(mktemp)
     cp "$PROJECT_ROOT/$ENV_FILE" "$TEMP_ENV"
     
-    # 检测操作系统类型并使用相应的 sed 命令
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        SED_CMD="sed -i ''"
-    else
-        # Linux
-        SED_CMD="sed -i"
-    fi
-    
     # 如果服务器上有这些配置，用服务器的值替换本地的值
+    # 使用 # 作为分隔符避免密钥中的 / 字符冲突
     if [ -n "$SERVER_DB_PASSWORD" ]; then
-        $SED_CMD "s/^DB_PASSWORD=.*/DB_PASSWORD=$SERVER_DB_PASSWORD/" "$TEMP_ENV"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s#^DB_PASSWORD=.*#DB_PASSWORD=$SERVER_DB_PASSWORD#" "$TEMP_ENV"
+        else
+            sed -i "s#^DB_PASSWORD=.*#DB_PASSWORD=$SERVER_DB_PASSWORD#" "$TEMP_ENV"
+        fi
         echo "   保留服务器数据库密码"
     fi
     if [ -n "$SERVER_MINIO_SECRET" ]; then
-        $SED_CMD "s/^MINIO_SECRET_KEY=.*/MINIO_SECRET_KEY=$SERVER_MINIO_SECRET/" "$TEMP_ENV"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s#^MINIO_SECRET_KEY=.*#MINIO_SECRET_KEY=$SERVER_MINIO_SECRET#" "$TEMP_ENV"
+        else
+            sed -i "s#^MINIO_SECRET_KEY=.*#MINIO_SECRET_KEY=$SERVER_MINIO_SECRET#" "$TEMP_ENV"
+        fi
         echo "   保留服务器 MinIO 密钥"
     fi
     if [ -n "$SERVER_JWT_SECRET" ]; then
-        $SED_CMD "s/^JWT_SECRET=.*/JWT_SECRET=$SERVER_JWT_SECRET/" "$TEMP_ENV"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s#^JWT_SECRET=.*#JWT_SECRET=$SERVER_JWT_SECRET#" "$TEMP_ENV"
+        else
+            sed -i "s#^JWT_SECRET=.*#JWT_SECRET=$SERVER_JWT_SECRET#" "$TEMP_ENV"
+        fi
         echo "   保留服务器 JWT 密钥"
     fi
     

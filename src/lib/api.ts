@@ -571,12 +571,22 @@ export const storage = {
       return { data: { path: data?.Key || path }, error: null };
     },
 
-    download: (path: string): Promise<Blob> =>
-      request<Blob>(`/storage/v1/object/${bucket}/${path}`, {
+    download: async (path: string): Promise<Blob> => {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/storage/v1/object/${bucket}/${path}`, {
         headers: {
           'Accept': '*/*',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-      }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: '下载失败' }));
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      return response.blob();
+    },
 
     getPublicUrl: (path: string): { data: { publicUrl: string } } => ({
       data: {
@@ -587,7 +597,7 @@ export const storage = {
     remove: (paths: string[]): Promise<{ data: any; error: any }> =>
       request(`/storage/v1/object/delete/${bucket}`, {
         method: 'POST',
-        body: { prefixes: paths },
+        body: JSON.stringify({ prefixes: paths }),
       }).then(data => ({ data, error: null })).catch(error => ({ data: null, error })),
   }),
 };

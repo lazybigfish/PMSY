@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { CheckCircle, FilePlus, Trash2, Upload, Download, FileText, Loader2, Archive } from 'lucide-react';
 import { api } from '../../../lib/api';
 
@@ -11,7 +11,7 @@ interface MilestoneTask {
   is_completed: boolean;
   completed_at: string;
   completed_by: string;
-  output_documents: { name: string; url: string; uploaded_at?: string; uploaded_by?: string }[];
+  output_documents: { name: string; url?: string; uploaded_at?: string; uploaded_by?: string; required?: boolean }[];
   is_custom?: boolean;
 }
 
@@ -26,6 +26,7 @@ interface MilestoneTaskListProps {
   onUploadDoc?: (task: MilestoneTask, docIndex: number, file: File) => Promise<void>;
   onDownloadDoc?: (url: string, filename: string) => void;
   uploadingTaskId?: string | null;
+  onTasksChange?: (tasks: MilestoneTask[]) => void;
 }
 
 export function MilestoneTaskList({
@@ -38,10 +39,17 @@ export function MilestoneTaskList({
   onDeleteDoc,
   onUploadDoc,
   onDownloadDoc,
-  uploadingTaskId
+  uploadingTaskId,
+  onTasksChange
 }: MilestoneTaskListProps) {
   const [uploading, setUploading] = useState<{ taskId: string; docIndex: number } | null>(null);
+  const [localTasks, setLocalTasks] = useState<MilestoneTask[]>(tasks);
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
+  // 同步外部 tasks 变化到本地状态
+  useEffect(() => {
+    setLocalTasks(tasks);
+  }, [tasks]);
 
   const handleFileUpload = async (task: MilestoneTask, docIndex: number, file: File) => {
     if (!file) return;
@@ -81,8 +89,14 @@ export function MilestoneTaskList({
 
       if (updateError) throw updateError;
 
-      // Refresh tasks
-      window.location.reload();
+      // 更新本地状态，而不是全局刷新
+      const updatedTasks = localTasks.map(t =>
+        t.id === task.id ? { ...t, output_documents: docs } : t
+      );
+      setLocalTasks(updatedTasks);
+      if (onTasksChange) {
+        onTasksChange(updatedTasks);
+      }
     } catch (error) {
       console.error('Error uploading file:', error);
       alert('上传文件失败');
@@ -125,7 +139,7 @@ export function MilestoneTaskList({
     }
   };
 
-  if (tasks.length === 0) {
+  if (localTasks.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
         暂无任务
@@ -135,7 +149,7 @@ export function MilestoneTaskList({
 
   return (
     <div className="space-y-3">
-      {tasks.map((task) => (
+      {localTasks.map((task) => (
         <div
           key={task.id}
           className={`border rounded-lg p-4 transition-all ${

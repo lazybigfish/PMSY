@@ -49,10 +49,11 @@ interface ReplyItemProps {
   profile: any;
   onDelete: (reply: ForumReply) => void;
   onReply: (reply: ForumReply) => void;
+  onImagePreview?: (images: string[], index: number) => void;
   level?: number;
 }
 
-function ReplyItem({ reply, user, profile, onDelete, onReply, level = 0 }: ReplyItemProps) {
+function ReplyItem({ reply, user, profile, onDelete, onReply, onImagePreview, level = 0 }: ReplyItemProps) {
   const isReplyAuthor = reply.author_id === user?.id;
   const isAdmin = profile?.role === 'admin';
   const [isExpanded, setIsExpanded] = useState(true);
@@ -111,12 +112,13 @@ function ReplyItem({ reply, user, profile, onDelete, onReply, level = 0 }: Reply
               {parseContent(reply.content).images.map((imgUrl: string, idx: number) => (
                 <div 
                   key={idx} 
-                  className="w-20 h-20 rounded-lg overflow-hidden bg-dark-100 flex-shrink-0"
+                  className="w-20 h-20 rounded-lg overflow-hidden bg-dark-100 flex-shrink-0 cursor-pointer group"
+                  onClick={() => onImagePreview?.(parseContent(reply.content).images, idx)}
                 >
                   <img
                     src={imgUrl}
                     alt={`回复图片 ${idx + 1}`}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = 'none';
                     }}
@@ -168,6 +170,7 @@ function ReplyItem({ reply, user, profile, onDelete, onReply, level = 0 }: Reply
               profile={profile}
               onDelete={onDelete}
               onReply={onReply}
+              onImagePreview={onImagePreview}
               level={level + 1}
             />
           ))}
@@ -670,6 +673,11 @@ export default function ForumPostDetailPage() {
               profile={profile}
               onDelete={deleteReply}
               onReply={handleReplyClick}
+              onImagePreview={(images, index) => {
+                setPreviewImages(images);
+                setPreviewIndex(index);
+                setShowPreview(true);
+              }}
             />
           ))}
 

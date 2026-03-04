@@ -216,6 +216,23 @@ export async function insertMany(table: string, data: Record<string, any>[], sel
 }
 
 /**
+ * 处理 JSONB 字段，将对象转换为 JSON 字符串以便 Knex 正确处理
+ */
+function processJsonbForKnex(data: Record<string, any>, table: string): Record<string, any> {
+  const processed = { ...data };
+  
+  // 处理 milestone_tasks 表的 output_documents 字段
+  if (table === 'milestone_tasks' && processed.output_documents !== undefined) {
+    // Knex 需要 JSON 字符串来正确处理 JSONB 字段
+    if (typeof processed.output_documents === 'object') {
+      processed.output_documents = JSON.stringify(processed.output_documents);
+    }
+  }
+  
+  return processed;
+}
+
+/**
  * 更新数据
  * @param table - 表名
  * @param data - 更新数据
@@ -231,13 +248,16 @@ export async function update(
   select?: string,
   currentUserId?: string
 ): Promise<any[]> {
+  // 处理 JSONB 字段
+  const processedData = processJsonbForKnex(data, table);
+  
   // 如果需要设置当前用户ID，使用事务确保在同一个连接中执行
   if (currentUserId && table === 'tasks') {
     return await db.transaction(async (trx): Promise<any[]> => {
       await trx.raw(`SET LOCAL "app.current_user_id" = '${currentUserId}'`);
       const result = await trx(table)
         .where(conditions)
-        .update({ ...data, updated_at: new Date() })
+        .update({ ...processedData, updated_at: new Date() })
         .returning(select ? select.split(',').map(f => f.trim()) : '*');
       return result || [];
     });
@@ -245,7 +265,7 @@ export async function update(
 
   return await db(table)
     .where(conditions)
-    .update({ ...data, updated_at: new Date() })
+    .update({ ...processedData, updated_at: new Date() })
     .returning(select ? select.split(',').map(f => f.trim()) : '*');
 }
 
@@ -265,13 +285,16 @@ export async function updateById(
   select?: string,
   currentUserId?: string
 ): Promise<any | null> {
+  // 处理 JSONB 字段
+  const processedData = processJsonbForKnex(data, table);
+  
   // 如果需要设置当前用户ID，使用事务确保在同一个连接中执行
   if (currentUserId && table === 'tasks') {
     const results = await db.transaction(async (trx) => {
       await trx.raw(`SET LOCAL "app.current_user_id" = '${currentUserId}'`);
       return await trx(table)
         .where({ id })
-        .update({ ...data, updated_at: new Date() })
+        .update({ ...processedData, updated_at: new Date() })
         .returning(select ? select.split(',').map(f => f.trim()) : '*');
     });
     return results?.[0] || null;
@@ -279,7 +302,7 @@ export async function updateById(
 
   const results = await db(table)
     .where({ id })
-    .update({ ...data, updated_at: new Date() })
+    .update({ ...processedData, updated_at: new Date() })
     .returning(select ? select.split(',').map(f => f.trim()) : '*');
   return results?.[0] || null;
 }

@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS app_roles (
     key TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
 -- 创建 role_permissions 表（角色权限）
@@ -12,6 +13,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     role_key TEXT REFERENCES app_roles(key) ON DELETE CASCADE,
     module_key TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     UNIQUE(role_key, module_key)
 );
 

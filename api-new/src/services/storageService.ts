@@ -1,5 +1,5 @@
 import { Client as MinioClient, CopyConditions } from 'minio';
-import { MINIO_CONFIG } from '../config/constants';
+import { MINIO_CONFIG, API_URL } from '../config/constants';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 
@@ -71,9 +71,8 @@ export async function uploadFile(
     'X-Upload-Date': new Date().toISOString(),
   });
 
-  // 生成文件 URL - 使用与 API 同源的地址
-  const API_PORT = process.env.API_PORT || process.env.PORT || 3001;
-  const url = `http://localhost:${API_PORT}/storage/v1/object/public/${bucket}/${filePath}`;
+  // 生成文件 URL - 使用环境变量中的 API_URL
+  const url = `${API_URL}/storage/v1/object/public/${bucket}/${filePath}`;
 
   return {
     filename: path.basename(filePath),
@@ -146,7 +145,7 @@ export async function deleteFiles(bucket: string, filePaths: string[]): Promise<
  * @returns 公开 URL
  */
 export function getPublicUrl(bucket: string, filePath: string): string {
-  return `${MINIO_CONFIG.useSSL ? 'https' : 'http'}://${MINIO_CONFIG.endPoint}:${MINIO_CONFIG.port}/${bucket}/${filePath}`;
+  return `${API_URL}/storage/v1/object/public/${bucket}/${filePath}`;
 }
 
 /**
@@ -241,7 +240,8 @@ export async function fileExists(bucket: string, filePath: string): Promise<bool
   try {
     await minioClient.statObject(bucket, filePath);
     return true;
-  } catch (error) {
+  } catch (error: any) {
+    console.error(`[Storage] File check failed: ${bucket}/${filePath}`, error.code || error.message);
     return false;
   }
 }

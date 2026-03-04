@@ -41,15 +41,14 @@ CREATE TRIGGER update_profiles_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- 插入默认管理员用户
--- 注意：实际密码通过 seed 脚本设置，此处仅创建占位记录
--- 默认用户名: admin，密码: Willyou@2026
--- 登录时使用用户名（username）而非邮箱
+-- 默认用户名: admin，密码: Willyou@0813
+-- 登录时可以使用用户名或邮箱
 INSERT INTO profiles (id, email, username, password_hash, full_name, role, is_active, email_confirmed_at)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'admin@pmsy.com',
     'admin',
-    '$2b$10$placeholder',  -- 占位符，真实密码通过 seed 脚本生成
+    '$2a$10$nfN/j6WMa/z7QquHKcRm3uC7Jd5Ub1wF.3fZjqHb.hEf.MkpEmEyW',  -- Willyou@0813 的 bcrypt 哈希
     '系统管理员',
     'admin',
     true,

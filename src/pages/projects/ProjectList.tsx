@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, apiClient } from '../../lib/api';
 import { Project } from '../../types';
 import { useAuth } from '../../context/AuthContextNew';
 import { useTheme } from '../../context/ThemeContext';
@@ -219,9 +219,12 @@ const ProjectList = () => {
 
   const handleConfirmDelete = async () => {
     if (!projectToDelete) return;
-    
+
     try {
-      await api.db.from('projects').delete().eq('id', projectToDelete);
+      await apiClient.post('/rest/v1/delete', {
+        table: 'projects',
+        conditions: { id: projectToDelete }
+      });
       setProjects(prevProjects => prevProjects.filter(p => p.id !== projectToDelete));
       setDeleteModalOpen(false);
       setProjectToDelete(null);

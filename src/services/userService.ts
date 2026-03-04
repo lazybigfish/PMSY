@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 用户相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 import type { Profile, UpdateUserRequest } from '../types';
 
 /**
@@ -62,7 +62,10 @@ export async function updateUserRole(userId: string, role: string): Promise<void
  * 删除用户
  */
 export async function deleteUser(userId: string): Promise<void> {
-  await api.db.from('profiles').delete().eq('id', userId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'profiles',
+    conditions: { id: userId }
+  });
 }
 
 /**

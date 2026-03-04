@@ -35,6 +35,65 @@ const upload = multer({
 });
 
 /**
+ * GET /storage/v1/object/public/:bucket/*
+ * 公开访问文件（不需要认证）
+ * ⚠️ 这个路由必须放在 /object/:bucket 路由之前，否则会被通配符路由拦截
+ */
+router.get(
+  '/object/public/:bucket/*',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { bucket } = req.params;
+      // * 通配符匹配的内容在 req.params[0]
+      const filePath = req.params[0];
+
+      if (!filePath) {
+        throw new NotFoundError('文件路径不能为空');
+      }
+
+      // 检查文件是否存在
+      const exists = await storageService.fileExists(bucket, filePath);
+      if (!exists) {
+        throw new NotFoundError('文件不存在');
+      }
+
+      // 获取文件元数据
+      const stat = await storageService.getFileStat(bucket, filePath);
+
+      // 获取原始文件名
+      const originalFilename = filePath.split('/').pop() || 'download';
+      
+      // 获取文件内容类型
+      const contentType = stat.metaData['content-type'] || 'application/octet-stream';
+      
+      // 设置响应头
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', stat.size);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      
+      // 对于非浏览器直接展示的类型，设置 Content-Disposition 强制下载
+      const isInlineDisplayable = contentType.startsWith('image/') || 
+                                   contentType === 'application/pdf' ||
+                                   contentType.startsWith('text/');
+      
+      if (!isInlineDisplayable || req.query.download === 'true') {
+        // 对文件名进行 UTF-8 编码以支持中文
+        const encodedFilename = encodeURIComponent(originalFilename);
+        res.setHeader('Content-Disposition', `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`);
+      } else {
+        res.setHeader('Content-Disposition', `inline; filename="${originalFilename}"`);
+      }
+
+      // 获取文件流并返回
+      const stream = await storageService.downloadFile(bucket, filePath);
+      stream.pipe(res);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
  * POST /storage/v1/object/:bucket/:path(*)
  * 上传文件（兼容 Supabase 格式）
  */
@@ -51,9 +110,9 @@ router.post(
         throw new ValidationError('未提供文件');
       }
 
-      // 生成唯一文件名
-      const uniqueFilename = storageService.generateUniqueFilename(file.originalname);
-      const fullPath = filePath ? `${filePath}/${uniqueFilename}` : uniqueFilename;
+      // 使用前端提供的文件路径，不再重新生成文件名
+      // 前端已经负责生成唯一的文件名
+      const fullPath = filePath;
 
       // 上传文件
       const metadata = await storageService.uploadFile(
@@ -84,7 +143,7 @@ router.post(
 
 /**
  * GET /storage/v1/object/:bucket/:path(*)
- * 下载文件
+ * 下载文件（需要认证）
  */
 router.get(
   '/object/:bucket/:path(*)',
@@ -106,39 +165,6 @@ router.get(
       res.setHeader('Content-Type', stat.metaData['content-type'] || 'application/octet-stream');
       res.setHeader('Content-Length', stat.size);
       res.setHeader('Content-Disposition', `attachment; filename="${filePath.split('/').pop()}"`);
-
-      // 获取文件流并返回
-      const stream = await storageService.downloadFile(bucket, filePath);
-      stream.pipe(res);
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/**
- * GET /storage/v1/object/public/:bucket/:path(*)
- * 公开访问文件（不需要认证）
- */
-router.get(
-  '/object/public/:bucket/:path(*)',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { bucket, path: filePath } = req.params;
-
-      // 检查文件是否存在
-      const exists = await storageService.fileExists(bucket, filePath);
-      if (!exists) {
-        throw new NotFoundError('文件不存在');
-      }
-
-      // 获取文件元数据
-      const stat = await storageService.getFileStat(bucket, filePath);
-
-      // 设置响应头
-      res.setHeader('Content-Type', stat.metaData['content-type'] || 'application/octet-stream');
-      res.setHeader('Content-Length', stat.size);
-      res.setHeader('Access-Control-Allow-Origin', '*');
 
       // 获取文件流并返回
       const stream = await storageService.downloadFile(bucket, filePath);

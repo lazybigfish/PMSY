@@ -9,7 +9,7 @@ import { Knex } from 'knex';
  * 默认管理员信息：
  * - 用户名: admin
  * - 邮箱: admin@pmsy.com
- * - 密码: Willyou@2026
+ * - 密码: Willyou@0813
  */
 
 export async function seed(knex: Knex): Promise<void> {

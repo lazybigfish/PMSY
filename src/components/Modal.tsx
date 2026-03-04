@@ -101,6 +101,7 @@ interface ModalFormProps extends ModalProps {
   cancelText?: string;
   isSubmitting?: boolean;
   submitDisabled?: boolean;
+  closeOnBackdropClick?: boolean;
 }
 
 /**
@@ -116,6 +117,7 @@ export function ModalForm({
   cancelText = '取消',
   isSubmitting = false,
   submitDisabled = false,
+  closeOnBackdropClick = true,
   maxWidth = 'lg',
   showCloseButton = true,
   className = '',
@@ -134,7 +136,7 @@ export function ModalForm({
           transparent 70%
         )`,
       }}
-      onClick={onClose}
+      onClick={closeOnBackdropClick ? onClose : undefined}
     >
       <form
         className={`bg-white rounded-2xl ${maxWidthClasses[maxWidth]} w-full shadow-2xl animate-scale-in max-h-[90vh] overflow-hidden flex flex-col ${className}`}

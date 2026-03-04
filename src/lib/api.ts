@@ -400,11 +400,36 @@ export const db = {
         const endpoint = `/rest/v1/${table}${filterStr ? '?' + filterStr : ''}`;
         
         try {
+          // 首先尝试 DELETE 请求
           await request(endpoint, {
             method: 'DELETE',
           });
           return { data: null, error: null };
         } catch (error: any) {
+          // 如果是连接重置错误，尝试使用 POST 替代
+          if (error.message?.includes('Failed to fetch') || error.name === 'TypeError') {
+            console.log(`[API] DELETE failed, trying POST alternative for ${table}`);
+            try {
+              // 使用 POST /rest/v1/delete 替代
+              const conditions: Record<string, any> = {};
+              Object.keys(filters).forEach(key => {
+                // 解析 eq.column 格式
+                const match = key.match(/^(\w+)\.(\w+)$/);
+                if (match) {
+                  conditions[match[2]] = filters[key];
+                }
+              });
+              
+              await request('/rest/v1/delete', {
+                method: 'POST',
+                body: JSON.stringify({ table, conditions }),
+              });
+              return { data: null, error: null };
+            } catch (postError: any) {
+              console.error(`[API] POST delete error from ${table}:`, postError);
+              return { data: null, error: postError };
+            }
+          }
           console.error(`[API] Delete error from ${table}:`, error);
           return { data: null, error };
         }
@@ -562,7 +587,7 @@ export const storage = {
     remove: (paths: string[]): Promise<{ data: any; error: any }> =>
       request(`/storage/v1/object/delete/${bucket}`, {
         method: 'POST',
-        body: JSON.stringify({ prefixes: paths }),
+        body: { prefixes: paths },
       }).then(data => ({ data, error: null })).catch(error => ({ data: null, error })),
   }),
 };

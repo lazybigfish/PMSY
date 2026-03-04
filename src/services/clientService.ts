@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 客户相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 
 // 客户联系人
 export interface ClientContact {
@@ -97,7 +97,10 @@ export async function updateClient(id: string, data: Partial<ClientContact>): Pr
  * 删除客户
  */
 export async function deleteClient(id: string): Promise<void> {
-  await api.db.from('client_contacts').delete().eq('id', id);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'client_contacts',
+    conditions: { id: id }
+  });
 }
 
 // 导出服务对象

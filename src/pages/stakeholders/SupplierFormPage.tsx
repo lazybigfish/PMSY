@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, apiClient } from '../../lib/api';
 import { ArrowLeft, Plus, AlertTriangle, Save } from 'lucide-react';
 import { Supplier } from '../../types';
 
@@ -151,7 +151,10 @@ export default function SupplierFormPage() {
 
       if (formData.contacts && formData.contacts.length > 0 && supplierId) {
         if (isEditing) {
-          await api.db.from('supplier_contacts').delete().eq('supplier_id', supplierId);
+          await apiClient.post('/rest/v1/delete', {
+            table: 'supplier_contacts',
+            conditions: { supplier_id: supplierId }
+          });
         }
         
         const validContacts = formData.contacts.filter(c => c.name?.trim());

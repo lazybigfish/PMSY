@@ -17,10 +17,12 @@ interface MilestoneTask {
 
 interface MilestoneTaskListProps {
   tasks: MilestoneTask[];
+  projectName?: string;
   onToggleTask: (task: MilestoneTask) => void;
   onAddDoc: (task: MilestoneTask) => void;
   onRemoveDoc: (task: MilestoneTask, docIndex: number) => void;
   onDeleteTask: (task: MilestoneTask) => void;
+  onDeleteDoc?: (task: MilestoneTask, docIndex: number) => void;
   onUploadDoc?: (task: MilestoneTask, docIndex: number, file: File) => Promise<void>;
   onDownloadDoc?: (url: string, filename: string) => void;
   uploadingTaskId?: string | null;
@@ -28,10 +30,12 @@ interface MilestoneTaskListProps {
 
 export function MilestoneTaskList({
   tasks,
+  projectName = '',
   onToggleTask,
   onAddDoc,
   onRemoveDoc,
   onDeleteTask,
+  onDeleteDoc,
   onUploadDoc,
   onDownloadDoc,
   uploadingTaskId
@@ -50,16 +54,17 @@ export function MilestoneTaskList({
       const filePath = `milestone-documents/${fileName}`;
 
       // Upload file to Storage
-      const { error: uploadError } = await api.storage
+      const { data: uploadData, error: uploadError } = await api.storage
         .from('project-documents')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
+      // 使用服务器返回的实际路径获取 public URL
+      const actualPath = uploadData?.path || filePath;
       const { data: { publicUrl } } = api.storage
         .from('project-documents')
-        .getPublicUrl(filePath);
+        .getPublicUrl(actualPath);
 
       // Update task with new document URL
       const docs = [...(task.output_documents || [])];
@@ -88,16 +93,32 @@ export function MilestoneTaskList({
 
   const handleDownload = async (url: string, filename: string) => {
     try {
-      const response = await fetch(url);
+      // 添加 download=true 参数强制下载
+      const downloadUrl = url.includes('?') ? `${url}&download=true` : `${url}?download=true`;
+
+      const response = await fetch(downloadUrl);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      // 构建下载文件名：原文件名-项目名称.扩展名
+      const lastDotIndex = filename.lastIndexOf('.');
+      const namePart = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+      const extPart = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+      const downloadFilename = projectName
+        ? `${namePart}-${projectName}${extPart}`
+        : filename;
+
       const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
+      const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename;
+      link.href = blobUrl;
+      link.download = downloadFilename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
+      window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error('Error downloading file:', error);
       alert('下载文件失败');
@@ -196,13 +217,27 @@ export function MilestoneTaskList({
                         </button>
                       )}
 
-                      <button
-                        onClick={() => onRemoveDoc(task, idx)}
-                        className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
-                        title="删除文档"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {/* Delete/Clear Attachment Button - only show if document has URL and onDeleteDoc is provided */}
+                      {doc.url && onDeleteDoc && (
+                        <button
+                          onClick={() => onDeleteDoc(task, idx)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                          title={'required' in doc ? '清除附件（可重新上传）' : '删除附件'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+
+                      {/* Remove Document Button - only show if no URL and no required field (custom doc without file) */}
+                      {!doc.url && !('required' in doc) && (
+                        <button
+                          onClick={() => onRemoveDoc(task, idx)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                          title="移除文档"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

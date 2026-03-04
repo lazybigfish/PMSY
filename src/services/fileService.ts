@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 文件相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 import type { FileRecord, Folder } from '../types/file';
 export type { FileRecord, Folder } from '../types/file';
 
@@ -170,14 +170,20 @@ export function getFileUrl(filePath: string): string {
  * 删除文件
  */
 export async function deleteFile(fileId: string): Promise<void> {
-  await api.db.from('files').delete().eq('id', fileId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'files',
+    conditions: { id: fileId }
+  });
 }
 
 /**
  * 删除文件夹
  */
 export async function deleteFolder(folderId: string): Promise<void> {
-  await api.db.from('folders').delete().eq('id', folderId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'folders',
+    conditions: { id: folderId }
+  });
 }
 
 /**

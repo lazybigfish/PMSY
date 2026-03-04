@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, apiClient } from '../../../lib/api';
 import { Plus, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { VersionSelector } from '../components/VersionSelector';
 import { MilestoneTemplateList } from '../components/MilestoneTemplateList';
@@ -342,7 +342,10 @@ export default function MilestoneTemplates() {
   const handleDeleteMilestone = async (milestone: MilestoneTemplate) => {
     if (!confirm('确定删除此阶段吗？')) return;
     try {
-      await api.db.from('milestone_templates').delete().eq('id', milestone.id);
+      await apiClient.post('/rest/v1/delete', {
+        table: 'milestone_templates',
+        conditions: { id: milestone.id }
+      });
       if (selectedVersion) fetchMilestones(selectedVersion.id);
     } catch (error) {
       console.error('Error deleting milestone:', error);
@@ -410,7 +413,10 @@ export default function MilestoneTemplates() {
   const handleDeleteTask = async (task: MilestoneTaskTemplate) => {
     if (!confirm('确定删除此任务吗？')) return;
     try {
-      await api.db.from('milestone_task_templates').delete().eq('id', task.id);
+      await apiClient.post('/rest/v1/delete', {
+        table: 'milestone_task_templates',
+        conditions: { id: task.id }
+      });
       if (selectedVersion) fetchMilestones(selectedVersion.id);
     } catch (error) {
       console.error('Error deleting task:', error);

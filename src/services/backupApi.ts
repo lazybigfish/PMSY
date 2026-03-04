@@ -69,7 +69,10 @@ export async function downloadBackup(id: string): Promise<Blob> {
  * 删除备份
  */
 export async function deleteBackup(id: string): Promise<void> {
-  await apiClient.delete(`/api/system/backup/${id}`);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'backups',
+    conditions: { id: id }
+  });
 }
 
 /**

@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 供应商相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 
 // 供应商
 export interface Supplier {
@@ -107,7 +107,10 @@ export async function updateSupplier(id: string, data: Partial<Supplier>): Promi
  * 删除供应商
  */
 export async function deleteSupplier(id: string): Promise<void> {
-  await api.db.from('suppliers').delete().eq('id', id);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'suppliers',
+    conditions: { id: id }
+  });
 }
 
 /**
@@ -146,7 +149,10 @@ export async function addSupplierToProject(data: {
  * 从项目移除供应商
  */
 export async function removeSupplierFromProject(projectSupplierId: string): Promise<void> {
-  await api.db.from('project_suppliers').delete().eq('id', projectSupplierId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'project_suppliers',
+    conditions: { id: projectSupplierId }
+  });
 }
 
 // 导出服务对象

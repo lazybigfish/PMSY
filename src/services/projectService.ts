@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 项目相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 import type {
   Project,
   ProjectDetail,
@@ -146,7 +146,10 @@ export async function updateProject(projectId: string, data: UpdateProjectReques
  * 删除项目
  */
 export async function deleteProject(projectId: string): Promise<void> {
-  await api.db.from('projects').delete().eq('id', projectId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'projects',
+    conditions: { id: projectId }
+  });
 }
 
 /**
@@ -192,7 +195,10 @@ export async function updateProjectModule(moduleId: string, data: Partial<Create
  * 删除项目模块
  */
 export async function deleteProjectModule(moduleId: string): Promise<void> {
-  await api.db.from('project_modules').delete().eq('id', moduleId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'project_modules',
+    conditions: { id: moduleId }
+  });
 }
 
 /**
@@ -251,7 +257,10 @@ export async function completeMilestone(milestoneId: string): Promise<ProjectMil
  * 删除里程碑
  */
 export async function deleteMilestone(milestoneId: string): Promise<void> {
-  await api.db.from('project_milestones').delete().eq('id', milestoneId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'project_milestones',
+    conditions: { id: milestoneId }
+  });
 }
 
 /**
@@ -311,7 +320,10 @@ export async function closeRisk(riskId: string): Promise<ProjectRisk> {
  * 删除风险
  */
 export async function deleteRisk(riskId: string): Promise<void> {
-  await api.db.from('risks').delete().eq('id', riskId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'risks',
+    conditions: { id: riskId }
+  });
 }
 
 /**
@@ -378,7 +390,10 @@ export async function addProjectMember(
  * 移除项目成员
  */
 export async function removeProjectMember(memberId: string): Promise<void> {
-  await api.db.from('project_members').delete().eq('id', memberId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'project_members',
+    conditions: { id: memberId }
+  });
 }
 
 /**

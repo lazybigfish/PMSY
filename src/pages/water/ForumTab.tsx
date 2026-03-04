@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Loader2, MessageSquare, Filter } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, apiClient } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { useTheme } from '../../context/ThemeContext';
 import { ForumPost, ForumCategory } from '../../types';
@@ -157,16 +157,17 @@ export default function ForumTab() {
       return;
     }
 
-    // 过滤出已上传成功的图片，转换 blob URL 为可存储的 MinIO URL
+    // 过滤出已上传成功的图片，转换 blob URL 为可存储的 URL
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     const uploadedImages = formImages
       .filter(img => !img.uploading && !img.error)
       .map(img => {
-        // 如果是 blob URL，从 id 中获取文件名，构造 MinIO URL
+        // 如果是 blob URL，从 id 中获取文件名，构造存储 URL
         // 如果已经是 http URL，直接使用
         let url = img.url;
         if (url.startsWith('blob:')) {
           const fileName = img.id.replace('forum/', '');
-          url = `http://localhost:9000/files/forum/${fileName}`;
+          url = `${API_BASE_URL}/storage/v1/object/public/files/forum/${fileName}`;
         }
         return url;
       });
@@ -224,8 +225,14 @@ export default function ForumTab() {
     e.stopPropagation();
     if (!confirm(`确定要删除帖子「${post.title}」吗？`)) return;
 
-    await api.db.from('forum_replies').delete().eq('post_id', post.id);
-    await api.db.from('forum_posts').delete().eq('id', post.id);
+    await apiClient.post('/rest/v1/delete', {
+      table: 'forum_replies',
+      conditions: { post_id: post.id }
+    });
+    await apiClient.post('/rest/v1/delete', {
+      table: 'forum_posts',
+      conditions: { id: post.id }
+    });
     loadPosts();
   };
 
@@ -261,10 +268,10 @@ export default function ForumTab() {
 
         if (likes && likes.length > 0) {
           for (const like of likes) {
-            await api.db
-              .from('forum_likes')
-              .delete()
-              .eq('id', like.id);
+            await apiClient.post('/rest/v1/delete', {
+              table: 'forum_likes',
+              conditions: { id: like.id }
+            });
           }
         }
 

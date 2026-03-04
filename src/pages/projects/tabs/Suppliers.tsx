@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, apiClient } from '../../../lib/api';
 import { ProjectSupplier, Supplier, ProjectModule } from '../../../types';
 import { Plus, FileText, X, ChevronRight, ChevronDown } from 'lucide-react';
 import { FileUploadButton } from '../../../components/FileUploadButton';
@@ -370,8 +370,10 @@ export default function Suppliers({ projectId, canEdit = true }: SuppliersProps)
   const handleRemoveSupplier = async (id: string) => {
     if (!confirm('确定要移除该供应商吗？这将同时删除相关的验收和付款记录。')) return;
     try {
-      const { error } = await api.db.from('project_suppliers').delete().eq('id', id);
-      if (error) throw error;
+      await apiClient.post('/rest/v1/delete', {
+        table: 'project_suppliers',
+        conditions: { id: id }
+      });
       setProjectSuppliers(prev => prev.filter(p => p.id !== id));
       refreshStats(); // 刷新外采统计
     } catch (error) {

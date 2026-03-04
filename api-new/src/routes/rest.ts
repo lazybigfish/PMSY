@@ -1,9 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { ValidationError, NotFoundError } from '../middleware/errorHandler';
+import { ValidationError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
 import * as dbService from '../services/dbService';
 import { QueryOptions } from '../services/dbService';
 import { getUserAccessibleProjects } from '../services/permissionService';
+import { checkTablePermission } from '../services/permissionService';
 
 /**
  * REST API 路由
@@ -319,6 +320,52 @@ router.get('/:table/:id', requireAuth, async (req: Request, res: Response, next:
 });
 
 /**
+ * POST /rest/v1/delete
+ * 通用删除端点，使用 POST 替代 DELETE
+ * 避免某些网络环境（如云防护）拦截 DELETE 请求
+ * 注意：这个路由必须在 POST /:table 之前定义，否则会被当成表名 "delete"
+ */
+router.post('/delete', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { table, conditions } = req.body;
+
+    if (!table) {
+      throw new ValidationError('缺少必要参数: table');
+    }
+
+    if (!conditions || typeof conditions !== 'object') {
+      throw new ValidationError('缺少必要参数: conditions');
+    }
+
+    // 检查表权限
+    const userContext = {
+      userId: req.user!.sub,
+      role: req.user!.role,
+      email: req.user!.email,
+    };
+    const permission = await checkTablePermission(table, userContext, 'delete');
+    if (!permission.allowed) {
+      throw new ForbiddenError(permission.reason || '没有权限访问此表');
+    }
+
+    const { db } = await import('../config/database');
+
+    // 执行删除
+    const result = await db(table).where(conditions).delete();
+
+    console.log(`[REST] POST delete from ${table}:`, { conditions, deleted: result });
+
+    res.json({
+      success: true,
+      message: '删除成功',
+      deleted: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /rest/v1/:table
  * 插入数据（兼容 Supabase 格式）
  */
@@ -392,6 +439,35 @@ router.post('/:table', requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 /**
+ * 处理 JSONB 字段，确保它们是对象/数组而不是字符串
+ */
+function processJsonbFields(table: string, data: Record<string, any>): Record<string, any> {
+  const processedData = { ...data };
+  
+  // 处理 milestone_tasks 表的 output_documents 字段
+  if (table === 'milestone_tasks' && processedData.output_documents !== undefined) {
+    console.log('[REST] PATCH output_documents type:', typeof processedData.output_documents);
+    console.log('[REST] PATCH output_documents value:', JSON.stringify(processedData.output_documents));
+    
+    if (typeof processedData.output_documents === 'string') {
+      try {
+        processedData.output_documents = JSON.parse(processedData.output_documents);
+      } catch (e) {
+        console.warn('[REST] Failed to parse output_documents as JSON:', processedData.output_documents);
+        processedData.output_documents = [];
+      }
+    }
+    // 确保是数组格式
+    if (!Array.isArray(processedData.output_documents)) {
+      console.warn('[REST] output_documents is not array, converting to array');
+      processedData.output_documents = [];
+    }
+  }
+  
+  return processedData;
+}
+
+/**
  * PATCH /rest/v1/:table
  * 批量更新数据（根据条件）
  */
@@ -427,11 +503,13 @@ router.patch('/:table', requireAuth, async (req: Request, res: Response, next: N
     const columns = await dbService.getTableColumns(table);
     const hasUpdatedBy = columns.includes('updated_by');
 
+    // 处理 JSONB 字段
+    let updateData = processJsonbFields(table, data);
+    
     // 添加更新者 ID（仅当表有 updated_by 字段时）
-    const updateData = {
-      ...data,
-      ...(hasUpdatedBy && userId ? { updated_by: userId } : {}),
-    };
+    if (hasUpdatedBy && userId) {
+      updateData.updated_by = userId;
+    }
 
     // 调用 dbService.update，传递 currentUserId 供触发器使用
     const result = await dbService.update(table, updateData, conditions, select as string, table === 'tasks' ? userId : undefined);
@@ -465,11 +543,13 @@ router.patch('/:table/:id', requireAuth, async (req: Request, res: Response, nex
     const columns = await dbService.getTableColumns(table);
     const hasUpdatedBy = columns.includes('updated_by');
 
+    // 处理 JSONB 字段
+    let updateData = processJsonbFields(table, data);
+    
     // 添加更新者 ID（仅当表有 updated_by 字段时）
-    const updateData = {
-      ...data,
-      ...(hasUpdatedBy && userId ? { updated_by: userId } : {}),
-    };
+    if (hasUpdatedBy && userId) {
+      updateData.updated_by = userId;
+    }
 
     // 调用 dbService.updateById，传递 currentUserId 供触发器使用
     const result = await dbService.updateById(table, id, updateData, select as string, table === 'tasks' ? userId : undefined);
@@ -880,6 +960,52 @@ router.post('/tasks/record-module-change', requireAuth, async (req: Request, res
     });
 
     res.json({ success: true, message: '模块变更历史记录已保存' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /rest/v1/role_permissions/save
+ * 保存角色权限（先删除旧权限，再插入新权限）
+ * 使用 POST 替代 DELETE，避免某些网络环境拦截 DELETE 请求
+ */
+router.post('/role_permissions/save', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { role_key, module_keys } = req.body;
+
+    if (!role_key) {
+      throw new ValidationError('缺少必要参数: role_key');
+    }
+
+    if (!Array.isArray(module_keys)) {
+      throw new ValidationError('module_keys 必须是数组');
+    }
+
+    const { db } = await import('../config/database');
+
+    // 使用事务：先删除旧权限，再插入新权限
+    await db.transaction(async (trx) => {
+      // 1. 删除现有权限
+      await trx('role_permissions').where('role_key', role_key).delete();
+
+      // 2. 插入新权限
+      if (module_keys.length > 0) {
+        const permissionsToInsert = module_keys.map((moduleKey: string) => ({
+          role_key: role_key,
+          module_key: moduleKey,
+        }));
+
+        await trx('role_permissions').insert(permissionsToInsert);
+      }
+    });
+
+    res.json({
+      success: true,
+      message: '角色权限保存成功',
+      role_key,
+      module_count: module_keys.length,
+    });
   } catch (error) {
     next(error);
   }

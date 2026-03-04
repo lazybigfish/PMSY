@@ -46,8 +46,14 @@ export default function HotNewsConfig() {
       const normalizedLimit = Math.max(5, Math.floor(fetchLimit || 0));
 
       // 先删除旧配置
-      await api.db.from('system_configs').delete().eq('key', 'hot_topic_keywords');
-      await api.db.from('system_configs').delete().eq('key', 'hot_news_fetch_limit');
+      await apiClient.post('/rest/v1/delete', {
+        table: 'system_configs',
+        conditions: { key: 'hot_topic_keywords' }
+      });
+      await apiClient.post('/rest/v1/delete', {
+        table: 'system_configs',
+        conditions: { key: 'hot_news_fetch_limit' }
+      });
 
       // 插入新配置
       const { error } = await api.db.from('system_configs').insert([

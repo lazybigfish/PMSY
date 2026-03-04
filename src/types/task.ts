@@ -103,6 +103,8 @@ export interface TaskProgressLog {
     id: string;
     file_name: string;
     file_url: string;
+    file_size: number;
+    file_type: string;
   }[];
 }
 

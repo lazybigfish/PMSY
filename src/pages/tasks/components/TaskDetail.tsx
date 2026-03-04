@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, apiClient } from '../../../lib/api';
 import { Task, Profile, Project, TaskComment, TaskProgressLog, TaskAttachment, TaskModule, ProjectModule } from '../../../types';
-import { X, Send, Clock, Calendar, Paperclip, Plus, Edit2, Link2 } from 'lucide-react';
+import { X, Send, Clock, Calendar, Paperclip, Plus, Edit2, Link2, Trash2, FileText, Download } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Avatar } from '../../../components/Avatar';
@@ -235,7 +235,10 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
       if (!task) return;
       try {
           // Delete existing
-          await api.db.from('task_modules').delete().eq('task_id', task.id);
+          await apiClient.post('/rest/v1/delete', {
+            table: 'task_modules',
+            conditions: { task_id: task.id }
+          });
           
           // Insert new
           if (selectedModuleIds.length > 0) {
@@ -366,7 +369,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
     // In a real app, this would handle file upload to Supabase Storage
     const fakeUrl = prompt("请输入文件链接 (模拟上传):");
     if (!fakeUrl || !task) return;
-    
+
     try {
         const { error } = await api.db.from('task_attachments').insert({
             task_id: task.id,
@@ -381,6 +384,29 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
     } catch (error) {
         console.error('Error adding attachment:', error);
     }
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!task) return;
+    if (!confirm('确定要删除这个附件吗？')) return;
+
+    try {
+        const { error } = await api.db.from('task_attachments').delete().eq('id', attachmentId);
+        if (error) throw error;
+        // 刷新附件列表
+        fetchTaskDetails();
+    } catch (error) {
+        console.error('Error deleting attachment:', error);
+        alert('删除附件失败');
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   if (!open) return null;
@@ -637,26 +663,72 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ taskId, open, onClose, o
                     <div className="border-t pt-6">
                         <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
                             <Paperclip size={16} /> 附件
+                            {attachments.length > 0 && (
+                                <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                                    {attachments.length}
+                                </span>
+                            )}
                         </h3>
                         <div className="space-y-2">
                             {attachments.map(att => (
-                                <div key={att.id} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
-                                    <div className="flex items-center gap-2">
-                                        <Paperclip size={14} className="text-gray-400"/>
-                                        <a href={att.file_url} target="_blank" rel="noreferrer" className="text-sm text-indigo-600 hover:underline">
-                                            {att.file_name}
-                                        </a>
-                                        <span className="text-xs text-gray-400">({att.file_size} bytes)</span>
+                                <div key={att.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all group">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center flex-shrink-0 border border-gray-200">
+                                            <FileText className="w-5 h-5 text-indigo-500" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <a
+                                                href={att.file_url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:underline truncate block"
+                                                title={att.file_name}
+                                            >
+                                                {att.file_name}
+                                            </a>
+                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                <span>{formatFileSize(att.file_size)}</span>
+                                                <span>·</span>
+                                                <span>由 {att.uploader?.full_name || '未知用户'} 上传</span>
+                                                <span>·</span>
+                                                <span>{new Date(att.created_at).toLocaleDateString()}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <span className="text-xs text-gray-400">由 {att.uploader?.full_name || '未知用户'} 上传</span>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <a
+                                            href={att.file_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            download
+                                            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                            title="下载"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                        </a>
+                                        {(isOwner || user?.id === att.uploaded_by) && (
+                                            <button
+                                                onClick={() => handleDeleteAttachment(att.id)}
+                                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="删除"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
-                            {attachments.length === 0 && <p className="text-sm text-gray-400 italic">暂无附件</p>}
-                            <button 
+                            {attachments.length === 0 && (
+                                <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                                    <Paperclip className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                    <p className="text-sm text-gray-400">暂无附件</p>
+                                </div>
+                            )}
+                            <button
                                 onClick={handleAddAttachment}
-                                className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                                className="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
                             >
-                                <Plus size={14} /> 添加附件
+                                <Plus size={16} /> 添加附件
                             </button>
                         </div>
                     </div>

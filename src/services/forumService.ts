@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 论坛相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 
 // 论坛帖子
 export interface ForumPost {
@@ -169,7 +169,10 @@ export async function updatePost(
  * 删除帖子
  */
 export async function deletePost(postId: string): Promise<void> {
-  await api.db.from('forum_posts').delete().eq('id', postId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'forum_posts',
+    conditions: { id: postId }
+  });
 }
 
 /**
@@ -236,7 +239,10 @@ export async function updateReply(
  * 删除回复
  */
 export async function deleteReply(replyId: string): Promise<void> {
-  await api.db.from('forum_replies').delete().eq('id', replyId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'forum_replies',
+    conditions: { id: replyId }
+  });
 }
 
 /**

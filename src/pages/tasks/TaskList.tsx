@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, LayoutGrid, List, Calendar, User, Users, CheckCircle, Sparkles, CheckSquare, Clock, Flame, Play } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, apiClient } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { useTheme } from '../../context/ThemeContext';
 import { Profile, Project, TaskStatus } from '../../types';
@@ -900,7 +900,10 @@ export default function TaskList() {
                 onDelete={async (taskId) => {
                   if (confirm('确定要删除这个任务吗？')) {
                     try {
-                      await api.db.from('tasks').delete().eq('id', taskId);
+                      await apiClient.post('/rest/v1/delete', {
+                        table: 'tasks',
+                        conditions: { id: taskId }
+                      });
                       fetchTasks();
                     } catch (error) {
                       console.error('Error deleting task:', error);
@@ -958,7 +961,10 @@ export default function TaskList() {
             onDeleteTask={async (taskId) => {
               if (confirm('确定要删除这个任务吗？')) {
                 try {
-                  await api.db.from('tasks').delete().eq('id', taskId);
+                  await apiClient.post('/rest/v1/delete', {
+                    table: 'tasks',
+                    conditions: { id: taskId }
+                  });
                   fetchTasks();
                 } catch (error) {
                   console.error('Error deleting task:', error);

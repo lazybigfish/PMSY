@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 系统配置相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 
 // AI 提供商
 export interface AIProvider {
@@ -100,7 +100,10 @@ export async function updateAIProvider(id: string, data: Partial<AIProvider>): P
  * 删除 AI 提供商
  */
 export async function deleteAIProvider(id: string): Promise<void> {
-  await api.db.from('ai_providers').delete().eq('id', id);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'ai_providers',
+    conditions: { id: id }
+  });
 }
 
 /**
@@ -147,7 +150,10 @@ export async function updateAIRole(id: string, data: Partial<AIRole>): Promise<A
  * 删除 AI 角色
  */
 export async function deleteAIRole(id: string): Promise<void> {
-  await api.db.from('ai_roles').delete().eq('id', id);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'ai_roles',
+    conditions: { id: id }
+  });
 }
 
 /**
@@ -225,7 +231,10 @@ export async function updateMilestoneTemplate(id: string, data: { name?: string;
  * 删除里程碑模板
  */
 export async function deleteMilestoneTemplate(id: string): Promise<void> {
-  await api.db.from('milestone_templates').delete().eq('id', id);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'milestone_templates',
+    conditions: { id: id }
+  });
 }
 
 /**
@@ -257,7 +266,10 @@ export async function updateMilestoneTaskTemplate(taskId: string, data: { name?:
  * 删除里程碑任务模板
  */
 export async function deleteMilestoneTaskTemplate(taskId: string): Promise<void> {
-  await api.db.from('milestone_task_templates').delete().eq('id', taskId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'milestone_task_templates',
+    conditions: { id: taskId }
+  });
 }
 
 // 导出服务对象

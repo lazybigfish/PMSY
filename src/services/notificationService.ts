@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 通知相关调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 import type { Notification } from '../types';
 
 /**
@@ -64,10 +64,10 @@ export async function markAllAsRead(userId: string): Promise<void> {
  * 删除通知
  */
 export async function deleteNotification(notificationId: string): Promise<void> {
-  await api.db
-    .from('notifications')
-    .delete()
-    .eq('id', notificationId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'notifications',
+    conditions: { id: notificationId }
+  });
 }
 
 /**

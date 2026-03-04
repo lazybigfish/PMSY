@@ -5,7 +5,7 @@ import { recordTaskAssigneeChange, recordTaskModuleChange } from '../../services
 import { api, apiClient } from '../../lib/api';
 import { formatCreatedAtWithWeek } from '../../lib/utils';
 import { Task, Profile, Project, TaskComment, TaskProgressLog, ProjectModule, TaskModule } from '../../types';
-import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp, Edit2, Trash2, Calendar, Folder, User, Users, Tag, Clock, XCircle, Link2 } from 'lucide-react';
+import { ArrowLeft, FileText, MessageSquare, History, Sparkles, CheckCircle, AlertCircle, TrendingUp, Edit2, Trash2, Calendar, Folder, User, Users, Tag, Clock, XCircle, Link2, Paperclip, Download } from 'lucide-react';
 import { useAuth } from '../../context/AuthContextNew';
 import { TaskComments } from './components/TaskComments';
 import { TaskProgressUpdateModal } from './components/TaskProgressUpdateModal';
@@ -289,9 +289,10 @@ const TaskDetailPage = () => {
       setComments(mappedComments);
       setLogs(logsWithAttachments);
 
-      const latestLog = logsData?.[0];
-      if (latestLog?.progress !== undefined && latestLog?.progress !== null) {
-        setCurrentProgress(latestLog.progress);
+      // 使用包含附件的 logsWithAttachments 获取最新进度
+      const latestLogWithAttachments = logsWithAttachments?.[0];
+      if (latestLogWithAttachments?.progress !== undefined && latestLogWithAttachments?.progress !== null) {
+        setCurrentProgress(latestLogWithAttachments.progress);
       } else if (taskData.status === 'done') {
         setCurrentProgress(100);
       } else if (taskData.status === 'in_progress') {
@@ -472,6 +473,8 @@ const TaskDetailPage = () => {
       return;
     }
 
+    console.log('[TaskDetailPage] handleProgressUpdate called with attachments:', attachments);
+
     try {
       // 1. 创建进度更新记录
       const { data: progressLogData, error: logError } = await api.db
@@ -483,11 +486,14 @@ const TaskDetailPage = () => {
           description: content
         });
 
+      console.log('[TaskDetailPage] Progress log created:', progressLogData, 'error:', logError);
+
       if (logError) {
         throw new Error(`创建进度记录失败: ${logError.message}`);
       }
 
       const progressLog = progressLogData?.[0];
+      console.log('[TaskDetailPage] Progress log:', progressLog);
 
       // 2. 保存附件记录
       if (attachments.length > 0 && progressLog) {
@@ -496,16 +502,22 @@ const TaskDetailPage = () => {
           .map(att => ({
             progress_log_id: progressLog.id,
             file_name: att.file_name,
-            file_url: att.file_url,
-            file_type: att.file_type,
-            file_size: att.file_size
+            file_path: att.file_url,
+            mime_type: att.file_type,
+            file_size: att.file_size,
+            uploaded_by: user.id
           }));
 
+        console.log('[TaskDetailPage] Attachments to insert:', attachmentsToInsert);
+
         if (attachmentsToInsert.length > 0) {
-          await api.db
+          const { data: attData, error: attError } = await api.db
             .from('task_progress_attachments')
             .insert(attachmentsToInsert);
+          console.log('[TaskDetailPage] Attachments insert result:', attData, 'error:', attError);
         }
+      } else {
+        console.log('[TaskDetailPage] No attachments to save. attachments.length:', attachments.length, 'progressLog:', progressLog);
       }
 
       // 3. 更新任务进度和状态
@@ -550,6 +562,14 @@ const TaskDetailPage = () => {
       case 'todo': return 0;
       default: return 0;
     }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const getStatusBadge = (status: string) => {
@@ -651,8 +671,7 @@ const TaskDetailPage = () => {
     return 'text-dark-400 group-hover:text-dark-500';
   };
 
-  // 获取最近一条进度更新
-  const latestLog = logs[0];
+
 
   return (
     <div className="max-w-5xl mx-auto animate-fade-in">
@@ -1141,38 +1160,73 @@ const TaskDetailPage = () => {
                     </button>
                   )}
 
-                  {/* 最近更新 */}
-                  {latestLog && (
+                  {/* 更新历史 */}
+                  {logs.length > 0 && (
                     <div className="pt-4 border-t border-dark-100">
-                      <h4 className="text-sm font-medium text-dark-600 mb-3">最近更新</h4>
-                      <div className="bg-dark-50 rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Avatar
-                            userId={latestLog.creator?.id}
-                            avatarUrl={latestLog.creator?.avatar_url}
-                            name={latestLog.creator?.full_name}
-                            size="xs"
-                            rounded="md"
-                          />
-                          <span className="text-sm font-medium text-dark-700">{latestLog.creator?.full_name}</span>
-                          <span className="text-xs text-dark-400">
-                            {new Date(latestLog.created_at).toLocaleDateString('zh-CN')}
-                          </span>
-                        </div>
-                        
-                        {latestLog.progress !== undefined && latestLog.progress !== null && (
-                          <div className="mb-2">
-                            <span className="text-sm font-bold text-primary-600">进度: {latestLog.progress}%</span>
+                      <h4 className="text-sm font-medium text-dark-600 mb-3">更新历史</h4>
+                      <div className="max-h-[280px] overflow-y-auto pr-1 space-y-3">
+                        {logs.map((log, index) => (
+                          <div key={log.id} className={`bg-dark-50 rounded-xl p-4 ${index > 0 ? 'border-t border-dark-100' : ''}`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Avatar
+                                userId={log.creator?.id}
+                                avatarUrl={log.creator?.avatar_url}
+                                name={log.creator?.full_name}
+                                size="xs"
+                                rounded="md"
+                              />
+                              <span className="text-sm font-medium text-dark-700">{log.creator?.full_name}</span>
+                              <span className="text-xs text-dark-400">
+                                {new Date(log.created_at).toLocaleDateString('zh-CN')}
+                              </span>
+                            </div>
+                            
+                            {log.progress !== undefined && log.progress !== null && (
+                              <div className="mb-2">
+                                <span className="text-sm font-bold text-primary-600">进度: {log.progress}%</span>
+                              </div>
+                            )}
+                            
+                            <p className="text-sm text-dark-600 line-clamp-2">{log.description}</p>
+                            
+                            {log.attachments && log.attachments.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <div className="text-xs text-dark-500 font-medium flex items-center gap-1">
+                                  <Paperclip className="w-3 h-3" />
+                                  附件 ({log.attachments.length})
+                                </div>
+                                <div className="space-y-1.5">
+                                  {log.attachments.map((att: any) => (
+                                    <div
+                                      key={att.id}
+                                      className="flex items-center justify-between p-2 bg-white rounded-lg border border-dark-200 hover:border-primary-300 hover:shadow-sm transition-all group"
+                                    >
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <FileText className="w-4 h-4 text-primary-500 flex-shrink-0" />
+                                        <span className="text-sm text-dark-700 truncate" title={att.file_name}>
+                                          {att.file_name}
+                                        </span>
+                                        <span className="text-xs text-dark-400 flex-shrink-0">
+                                          ({formatFileSize(att.file_size)})
+                                        </span>
+                                      </div>
+                                      <a
+                                        href={att.file_path || att.file_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        download
+                                        className="p-1.5 text-dark-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                        title="下载"
+                                      >
+                                        <Download className="w-4 h-4" />
+                                      </a>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        
-                        <p className="text-sm text-dark-600 line-clamp-2">{latestLog.description}</p>
-                        
-                        {latestLog.attachments && latestLog.attachments.length > 0 && (
-                          <div className="mt-2 text-xs text-dark-400">
-                            📎 {latestLog.attachments.length} 个附件
-                          </div>
-                        )}
+                        ))}
                       </div>
                     </div>
                   )}

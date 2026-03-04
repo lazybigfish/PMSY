@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, apiClient } from '../../../lib/api';
 import { AIProvider, AIRole } from '../../../types';
 import { Loader2, Trash2 } from 'lucide-react';
 
@@ -51,13 +51,19 @@ const AIConfig = () => {
 
   const handleDeleteProvider = async (id: string) => {
     if (!confirm('确认删除？')) return;
-    await api.db.from('ai_providers').delete().eq('id', id);
+    await apiClient.post('/rest/v1/delete', {
+      table: 'ai_providers',
+      conditions: { id: id }
+    });
     fetchConfig();
   };
 
   const handleDeleteRole = async (id: string) => {
     if (!confirm('确认删除？')) return;
-    await api.db.from('ai_roles').delete().eq('id', id);
+    await apiClient.post('/rest/v1/delete', {
+      table: 'ai_roles',
+      conditions: { id: id }
+    });
     fetchConfig();
   };
 

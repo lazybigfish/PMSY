@@ -332,6 +332,7 @@ const ProfilePage: React.FC = () => {
         maxWidth="md"
         isSubmitting={changingPassword}
         submitDisabled={!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword}
+        closeOnBackdropClick={!changingPassword}
       >
         <div className="space-y-4">
           {/* 当前密码 */}

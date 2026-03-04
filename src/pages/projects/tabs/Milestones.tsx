@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, apiClient } from '../../../lib/api';
 import { Flag, Plus, Search, Download, Archive } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 import { MilestoneSidebar } from '../components/MilestoneSidebar';
@@ -34,10 +34,11 @@ interface MilestoneTask {
 
 interface MilestonesProps {
   projectId: string;
+  projectName?: string;
   canEdit?: boolean;
 }
 
-export default function Milestones({ projectId, canEdit = true }: MilestonesProps) {
+export default function Milestones({ projectId, projectName = '', canEdit = true }: MilestonesProps) {
   const { user } = useAuth();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -268,10 +269,10 @@ export default function Milestones({ projectId, canEdit = true }: MilestonesProp
 
   const removeOutputDocument = async (task: MilestoneTask, docIndex: number) => {
     if (!confirm('确定要删除此文档吗？')) return;
-    
+
     const docs = [...(task.output_documents || [])];
     docs.splice(docIndex, 1);
-    
+
     await api.db
       .from('milestone_tasks')
       .update({ output_documents: docs })
@@ -280,10 +281,71 @@ export default function Milestones({ projectId, canEdit = true }: MilestonesProp
     fetchMilestoneTasks(task.milestone_id);
   };
 
+  // 删除附件（同时删除存储的文件）
+  // 预设附件（有 required 字段）：只清除文件，保留文档名称
+  // 自定义附件（无 required 字段）：完全删除
+  const handleDeleteDoc = async (task: MilestoneTask, docIndex: number) => {
+    const doc = task.output_documents?.[docIndex];
+    if (!doc) return;
+
+    // 判断是否是预设附件：有 required 字段的是预设附件
+    const isPresetDoc = 'required' in doc;
+
+    const confirmMessage = isPresetDoc
+      ? `确定要清除附件"${doc.name}"吗？清除后可以重新上传。`
+      : `确定要删除附件"${doc.name}"吗？`;
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      // 如果有 URL，先从存储中删除文件
+      if (doc.url) {
+        // 从 URL 中提取文件路径
+        const urlMatch = doc.url.match(/\/project-documents\/(.+?)(?:\?|$)/);
+        if (urlMatch && urlMatch[1]) {
+          const filePath = urlMatch[1];
+          try {
+            await api.storage.from('project-documents').remove([filePath]);
+          } catch (storageError: any) {
+            // 文件不存在时忽略错误（可能已经被删除）
+            console.warn('Storage file not found or already deleted:', filePath);
+          }
+        }
+      }
+
+      const docs = [...(task.output_documents || [])];
+
+      if (isPresetDoc) {
+        // 预设附件：只清除文件相关字段，保留 name 和 required
+        docs[docIndex] = {
+          name: doc.name,
+          required: (doc as any).required
+        };
+      } else {
+        // 自定义附件：完全删除
+        docs.splice(docIndex, 1);
+      }
+
+      await api.db
+        .from('milestone_tasks')
+        .update({ output_documents: docs })
+        .eq('id', task.id);
+
+      fetchMilestoneTasks(task.milestone_id);
+      alert(isPresetDoc ? '附件已清除，可以重新上传' : '附件已删除');
+    } catch (error) {
+      console.error('Error deleting attachment:', error);
+      alert('删除附件失败');
+    }
+  };
+
   const handleDeleteTask = async (task: MilestoneTask) => {
     if (!confirm(`确定要删除任务"${task.name}"吗？`)) return;
 
-    await api.db.from('milestone_tasks').delete().eq('id', task.id);
+    await apiClient.post('/rest/v1/delete', {
+      table: 'milestone_tasks',
+      conditions: { id: task.id }
+    });
     fetchMilestoneTasks(task.milestone_id);
     fetchMilestones();
   };
@@ -292,7 +354,10 @@ export default function Milestones({ projectId, canEdit = true }: MilestonesProp
     e.stopPropagation();
     if (!confirm(`确定要删除阶段"${milestone.name}"吗？`)) return;
 
-    await api.db.from('project_milestones').delete().eq('id', milestone.id);
+    await apiClient.post('/rest/v1/delete', {
+      table: 'project_milestones',
+      conditions: { id: milestone.id }
+    });
     fetchMilestones();
   };
 
@@ -651,10 +716,12 @@ export default function Milestones({ projectId, canEdit = true }: MilestonesProp
             <div className="flex-1 overflow-y-auto p-4">
               <MilestoneTaskList
                 tasks={filteredTasks}
+                projectName={projectName}
                 onToggleTask={toggleTaskCompleted}
                 onAddDoc={handleAddDocClick}
                 onRemoveDoc={removeOutputDocument}
                 onDeleteTask={handleDeleteTask}
+                onDeleteDoc={handleDeleteDoc}
                 uploadingTaskId={uploadingTaskId}
               />
             </div>

@@ -204,11 +204,16 @@ router.post('/user/password', requireAuth, async (req: Request, res: Response, n
 
     await updatePassword(userId, old_password, new_password);
 
-    res.json({
+    console.log(`[Auth] Password updated successfully for user: ${userId}`);
+
+    // 确保响应正确发送
+    res.status(200).json({
       success: true,
       message: '密码更新成功',
     });
+    return;
   } catch (error) {
+    console.error('[Auth] Password update error:', error);
     next(error);
   }
 });

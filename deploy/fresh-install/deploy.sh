@@ -263,7 +263,7 @@ echo -e "${BLUE}[步骤 2/5] 检测生产服务器环境...${NC}"
 echo ""
 
 echo -e "${YELLOW}   检查服务器连接...${NC}"
-if ! ssh -p "$DEPLOY_SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
+if ! ssh -p "$DEPLOY_SERVER_PORT" -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
     echo -e "${RED}❌ 错误: 无法连接到服务器 $DEPLOY_SERVER_IP${NC}"
     echo "   请检查:"
     echo "   1. 服务器 IP 是否正确"
@@ -512,7 +512,7 @@ case $DEPLOY_MODE in
         fi
 
         echo "   检查 SSH 免密码登录..."
-        if ! ssh -p "$DEPLOY_SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
+        if ! ssh -p "$DEPLOY_SERVER_PORT" -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
             echo ""
             echo -e "${CYAN}   ========================================${NC}"
             echo -e "${CYAN}   需要配置 SSH 免密码登录${NC}"
@@ -688,7 +688,7 @@ REMOTE_SCRIPT
             ssh-keygen -t rsa -b 4096 -C "pmsy-deploy" -f "$HOME/.ssh/id_rsa" -N ""
         fi
 
-        if ! ssh -p "$DEPLOY_SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
+        if ! ssh -p "$DEPLOY_SERVER_PORT" -o ConnectTimeout=5 "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" "echo OK" 2>/dev/null; then
             SSH_CONFIG_SUCCESS=false
             for i in {1..3}; do
                 if ssh-copy-id -o StrictHostKeyChecking=no "$DEPLOY_SERVER_USER@$DEPLOY_SERVER_IP" 2>&1; then

@@ -3,7 +3,7 @@
  * 替代原有的 Supabase 角色权限调用
  */
 
-import { api } from '../lib/api';
+import { api, apiClient } from '../lib/api';
 import type { 
   AppRole, 
   RolePermission, 
@@ -102,7 +102,10 @@ export async function updateRole(roleKey: string, role: UpdateRoleRequest): Prom
  * 删除角色
  */
 export async function deleteRole(roleKey: string): Promise<void> {
-  await api.db.from('app_roles').delete().eq('key', roleKey);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'app_roles',
+    conditions: { key: roleKey }
+  });
 }
 
 /**
@@ -118,25 +121,25 @@ export async function getRolePermissions(roleKey: string): Promise<string[]> {
 
 /**
  * 保存角色权限（先删除旧权限，再插入新权限）
+ * 使用 POST /rest/v1/role_permissions/save 端点，避免 DELETE 请求被网络环境拦截
  */
 export async function saveRolePermissions(roleKey: string, moduleKeys: string[]): Promise<void> {
-  // 1. 删除现有权限
-  const deleteResult = await api.db.from('role_permissions').delete().eq('role_key', roleKey);
-  if (deleteResult.error) {
-    throw new Error(`删除权限失败: ${deleteResult.error.message || deleteResult.error}`);
-  }
-  
-  // 2. 插入新权限
-  if (moduleKeys.length > 0) {
-    const permissionsToInsert = moduleKeys.map(moduleKey => ({
+  // 使用新的 POST 端点，避免 DELETE 请求被拦截
+  const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/rest/v1/role_permissions/save`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+    },
+    body: JSON.stringify({
       role_key: roleKey,
-      module_key: moduleKey,
-    }));
-    
-    const insertResult = await api.db.from('role_permissions').insert(permissionsToInsert);
-    if (insertResult.error) {
-      throw new Error(`插入权限失败: ${insertResult.error.message || insertResult.error}`);
-    }
+      module_keys: moduleKeys,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: '保存权限失败' }));
+    throw new Error(error.message || `HTTP ${response.status}`);
   }
 }
 

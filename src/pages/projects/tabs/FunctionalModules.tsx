@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, apiClient } from '../../../lib/api';
 import { ProjectModule, Task, ProjectSupplier } from '../../../types';
 import { Loader2, Download, Upload, FileSpreadsheet, ChevronRight, ChevronDown, CheckCircle, AlertTriangle, Plus, Trash2, Play, CheckSquare, Building2, Move, X, CornerDownRight, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -465,7 +465,10 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
         return newRow;
       });
 
-      await api.db.from('project_modules').delete().eq('project_id', projectId);
+      await apiClient.post('/rest/v1/delete', {
+        table: 'project_modules',
+        conditions: { project_id: projectId }
+      });
 
       const parentStack: { id: string; level: number }[] = [];
       let insertedCount = 0;
@@ -551,8 +554,10 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     if (!window.confirm('确定要删除该模块及其所有子模块吗？此操作不可撤销。')) return;
 
     try {
-      const { error } = await api.db.from('project_modules').delete().eq('id', id);
-      if (error) throw error;
+      await apiClient.post('/rest/v1/delete', {
+        table: 'project_modules',
+        conditions: { id: id }
+      });
       
       if (selectedModuleId === id) setSelectedModuleId(null);
       fetchModules();

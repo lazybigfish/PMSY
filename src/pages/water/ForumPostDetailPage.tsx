@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2, Trash2, Pin, Star, MessageSquare, Eye, Clock, ChevronDown, ChevronUp, Reply, Image as ImageIcon, ZoomIn } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, apiClient } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { ForumPost, ForumReply, ForumCategory } from '../../types';
 import { format } from 'date-fns';
@@ -407,7 +407,10 @@ export default function ForumPostDetailPage() {
     if (!confirm('确定要删除这条回复吗？')) return;
 
     try {
-      await api.db.from('forum_replies').delete().eq('id', reply.id);
+      await apiClient.post('/rest/v1/delete', {
+        table: 'forum_replies',
+        conditions: { id: reply.id }
+      });
       await api.db
         .from('forum_posts')
         .update({ reply_count: Math.max(0, post.reply_count - 1) })

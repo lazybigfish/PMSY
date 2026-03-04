@@ -138,16 +138,8 @@ export function TaskProgressUpdateModal({
           idx === i ? { ...a, uploading: true } : a
         ));
 
-        // 检查 storage bucket 是否存在
-        const { data: buckets } = await api.storage.listBuckets();
-        const bucketExists = buckets?.some(b => b.name === 'task-attachments');
-
-        if (!bucketExists) {
-          console.warn('Storage bucket task-attachments does not exist. Skipping file upload.');
-          // 继续提交，只是不上传文件
-          continue;
-        }
-
+        // 注：后端 storageService.uploadFile 会自动创建存储桶
+        // 跳过存储桶存在性检查，直接上传
         const fileExt = attachment.file.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `task-progress/${fileName}`;

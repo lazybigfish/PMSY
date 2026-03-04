@@ -40,12 +40,18 @@ echo -e "${YELLOW}   - 重新构建 API Docker 镜像${NC}"
 echo -e "${YELLOW}   - 重启服务${NC}"
 echo ""
 
-# 配置
+# 加载部署配置
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [ -f "$PROJECT_ROOT/.env.deploy" ]; then
+    source "$PROJECT_ROOT/.env.deploy"
+    echo -e "${GREEN}   已加载部署配置: .env.deploy${NC}"
+fi
+
+# 配置（优先使用环境变量，其次使用 .env.deploy，最后使用默认值）
 SERVER_IP="${DEPLOY_SERVER_IP:-106.227.19.2}"
 SERVER_PORT="${DEPLOY_SERVER_PORT:-9022}"
-SERVER_USER="${DEPLOY_SERVER_USER:-ubuntu}"
+SERVER_USER="${DEPLOY_SERVER_USER:-root}"
 DEPLOY_DIR="${DEPLOY_REMOTE_DIR:-/opt/pmsy}"
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 echo -e "${CYAN}部署配置:${NC}"
 echo "  服务器: $SERVER_USER@$SERVER_IP:$SERVER_PORT"
@@ -69,7 +75,7 @@ fi
 echo -e "${GREEN}   使用配置文件: $ENV_FILE${NC}"
 
 echo -e "${GREEN}[2/7] 检查服务器连接...${NC}"
-if ! ssh -p "$SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=5 "$SERVER_USER@$SERVER_IP" "echo OK" 2>/dev/null; then
+if ! ssh -p "$SERVER_PORT" -o ConnectTimeout=5 "$SERVER_USER@$SERVER_IP" "echo OK" 2>/dev/null; then
     echo -e "${RED}❌ 错误: 无法连接到服务器${NC}"
     exit 1
 fi
@@ -138,19 +144,63 @@ rsync -avz --delete -e "ssh -p $SERVER_PORT" "$PROJECT_ROOT/dist/" "$SERVER_USER
 echo "   复制后端 dist..."
 rsync -avz --delete -e "ssh -p $SERVER_PORT" "$PROJECT_ROOT/api-new/dist/" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/dist/"
 echo "   复制后端 package.json..."
-scp "$PROJECT_ROOT/api-new/package.json" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/"
+scp -P "$SERVER_PORT" "$PROJECT_ROOT/api-new/package.json" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/"
 echo "   复制后端 Dockerfile..."
-scp "$PROJECT_ROOT/api-new/Dockerfile" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/"
+scp -P "$SERVER_PORT" "$PROJECT_ROOT/api-new/Dockerfile" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/"
 echo "   复制数据库迁移文件..."
 rsync -avz --delete -e "ssh -p $SERVER_PORT" "$PROJECT_ROOT/api-new/database/migrations/" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/database/migrations/"
 echo "   复制迁移脚本..."
-scp "$PROJECT_ROOT/api-new/database/migrate.sh" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/database/"
+scp -P "$SERVER_PORT" "$PROJECT_ROOT/api-new/database/migrate.sh" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/api-new/database/"
 echo "   复制 docker-compose.yml..."
-scp "$PROJECT_ROOT/config/docker/docker-compose.yml" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/"
+scp -P "$SERVER_PORT" "$PROJECT_ROOT/config/docker/docker-compose.yml" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/"
 echo "   复制 nginx.conf..."
-scp "$PROJECT_ROOT/config/nginx/nginx.conf" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/nginx.conf"
+scp -P "$SERVER_PORT" "$PROJECT_ROOT/config/nginx/nginx.conf" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/nginx.conf"
 
-echo -e "${GREEN}   ✅ 文件复制完成${NC}"
+# 检查服务器上是否已有 .env 文件，如果有，保留关键配置（如数据库密码）
+echo "   检查服务器环境配置..."
+if ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "test -f $DEPLOY_DIR/.env" 2>/dev/null; then
+    echo "   服务器上已有 .env 文件，保留关键配置..."
+    # 从服务器获取当前的 DB_PASSWORD 和 MINIO_SECRET_KEY
+    SERVER_DB_PASSWORD=$(ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "grep '^DB_PASSWORD=' $DEPLOY_DIR/.env | cut -d'=' -f2" 2>/dev/null)
+    SERVER_MINIO_SECRET=$(ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "grep '^MINIO_SECRET_KEY=' $DEPLOY_DIR/.env | cut -d'=' -f2" 2>/dev/null)
+    SERVER_JWT_SECRET=$(ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "grep '^JWT_SECRET=' $DEPLOY_DIR/.env | cut -d'=' -f2" 2>/dev/null)
+    
+    # 复制本地配置文件到临时文件
+    TEMP_ENV=$(mktemp)
+    cp "$PROJECT_ROOT/$ENV_FILE" "$TEMP_ENV"
+    
+    # 检测操作系统类型并使用相应的 sed 命令
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        SED_CMD="sed -i ''"
+    else
+        # Linux
+        SED_CMD="sed -i"
+    fi
+    
+    # 如果服务器上有这些配置，用服务器的值替换本地的值
+    if [ -n "$SERVER_DB_PASSWORD" ]; then
+        $SED_CMD "s/^DB_PASSWORD=.*/DB_PASSWORD=$SERVER_DB_PASSWORD/" "$TEMP_ENV"
+        echo "   保留服务器数据库密码"
+    fi
+    if [ -n "$SERVER_MINIO_SECRET" ]; then
+        $SED_CMD "s/^MINIO_SECRET_KEY=.*/MINIO_SECRET_KEY=$SERVER_MINIO_SECRET/" "$TEMP_ENV"
+        echo "   保留服务器 MinIO 密钥"
+    fi
+    if [ -n "$SERVER_JWT_SECRET" ]; then
+        $SED_CMD "s/^JWT_SECRET=.*/JWT_SECRET=$SERVER_JWT_SECRET/" "$TEMP_ENV"
+        echo "   保留服务器 JWT 密钥"
+    fi
+    
+    # 复制修改后的配置文件到服务器
+    scp -P "$SERVER_PORT" "$TEMP_ENV" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/.env"
+    rm -f "$TEMP_ENV"
+else
+    echo "   服务器上没有 .env 文件，复制新配置..."
+    scp -P "$SERVER_PORT" "$PROJECT_ROOT/$ENV_FILE" "$SERVER_USER@$SERVER_IP:$DEPLOY_DIR/.env"
+fi
+
+echo -e "${GREEN}   ✅ 文件复制完成${NC}}"
 
 echo -e "${GREEN}[6/7] 执行数据库迁移...${NC}"
 echo "   检查服务器容器状态..."
@@ -180,7 +230,7 @@ if [ $MIGRATION_EXIT_CODE -ne 0 ]; then
     echo "请检查数据库连接和迁移文件"
     echo ""
     echo "手动调试命令:"
-    echo "  ssh $SERVER_USER@$SERVER_IP"
+    echo "  ssh -p $SERVER_PORT $SERVER_USER@$SERVER_IP"
     echo "  cd $DEPLOY_DIR"
     echo "  sudo docker-compose ps"
     echo "  sudo docker-compose logs postgres"
@@ -191,7 +241,29 @@ if [ $MIGRATION_EXIT_CODE -ne 0 ]; then
 fi
 
 echo -e "${GREEN}[7/7] 重新构建并重启服务...${NC}"
-ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker-compose up -d --build --force-recreate api"
+
+# 使用 docker compose 重新构建并启动服务
+echo "   重新构建 API 镜像..."
+ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker compose build --no-cache api"
+
+echo "   启动 API 容器..."
+ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker compose up -d api"
+
+# 验证 nginx 配置语法
+echo "   验证 nginx 配置..."
+ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "docker exec pmsy-nginx nginx -t" 2>/dev/null || echo "   ⚠️ nginx 配置验证跳过"
+
+# 重启 nginx 以加载新的 nginx.conf 配置
+echo "   重启 nginx..."
+ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "cd $DEPLOY_DIR && sudo docker compose restart nginx"
+
+# 等待 nginx 启动
+sleep 2
+
+# 验证服务状态
+echo "   检查服务状态..."
+ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_IP" "docker compose ps" || true
+
 echo -e "${GREEN}   ✅ 服务已重启${NC}"
 
 echo ""
@@ -206,8 +278,8 @@ echo ""
 echo -e "${YELLOW}请测试登录功能确认更新成功${NC}"
 echo ""
 echo -e "${BLUE}查看日志:${NC}"
-echo "  ssh $SERVER_USER@$SERVER_IP 'cd $DEPLOY_DIR && sudo docker-compose logs -f api'"
+echo "  ssh -p $SERVER_PORT $SERVER_USER@$SERVER_IP 'cd $DEPLOY_DIR && sudo docker-compose logs -f api'"
 echo ""
 echo -e "${BLUE}查看迁移记录:${NC}"
-echo "  ssh $SERVER_USER@$SERVER_IP 'cd $DEPLOY_DIR && sudo docker-compose exec postgres psql -U pmsy -d pmsy -c \"SELECT filename, executed_at, execution_time_ms FROM schema_migrations ORDER BY executed_at DESC LIMIT 10;'\""
+echo "  ssh -p $SERVER_PORT $SERVER_USER@$SERVER_IP 'cd $DEPLOY_DIR && sudo docker-compose exec postgres psql -U pmsy -d pmsy -c \"SELECT filename, executed_at, execution_time_ms FROM schema_migrations ORDER BY executed_at DESC LIMIT 10;'\""
 echo ""

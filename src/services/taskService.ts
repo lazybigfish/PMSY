@@ -215,7 +215,10 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus): Prom
  * 删除任务
  */
 export async function deleteTask(taskId: string): Promise<void> {
-  await api.db.from('tasks').delete().eq('id', taskId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'tasks',
+    conditions: { id: taskId }
+  });
 }
 
 /**
@@ -292,7 +295,10 @@ export async function updateTaskProgress(
  */
 export async function assignTask(taskId: string, userIds: string[]): Promise<void> {
   // 1. 删除现有分配
-  await api.db.from('task_assignees').delete().eq('task_id', taskId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'task_assignees',
+    conditions: { task_id: taskId }
+  });
 
   // 2. 插入新分配
   if (userIds.length > 0) {
@@ -311,7 +317,10 @@ export async function assignTask(taskId: string, userIds: string[]): Promise<voi
  */
 export async function updateTaskModules(taskId: string, moduleIds: string[]): Promise<void> {
   // 1. 删除现有模块关联
-  await api.db.from('task_modules').delete().eq('task_id', taskId);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'task_modules',
+    conditions: { task_id: taskId }
+  });
 
   // 2. 插入新模块关联
   if (moduleIds.length > 0) {
@@ -548,7 +557,10 @@ export async function addTaskDependency(
  * 删除任务依赖
  */
 export async function removeTaskDependency(taskId: string, dependencyId: string): Promise<void> {
-  await apiClient.delete(`/api/task-dependencies/${taskId}/${dependencyId}`);
+  await apiClient.post('/rest/v1/delete', {
+    table: 'task_dependencies',
+    conditions: { task_id: taskId, depends_on_task_id: dependencyId }
+  });
 }
 
 /**

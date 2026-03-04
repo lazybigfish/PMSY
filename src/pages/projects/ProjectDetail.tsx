@@ -405,6 +405,7 @@ const ProjectDetail = () => {
         {activeTab === 'milestones' && canViewAll && (
           <Milestones
             projectId={id!}
+            projectName={project?.name || ''}
             canEdit={canEdit}
           />
         )}

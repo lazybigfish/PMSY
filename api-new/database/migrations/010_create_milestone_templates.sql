@@ -33,18 +33,18 @@ CREATE TABLE IF NOT EXISTS template_versions (
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
+-- 创建更新时间戳触发器
+CREATE TRIGGER update_template_versions_updated_at
+    BEFORE UPDATE ON template_versions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_template_versions_is_active ON template_versions(is_active);
 
 -- 添加唯一约束
 ALTER TABLE template_versions 
 ADD CONSTRAINT template_versions_version_number_unique UNIQUE (version_number);
-
--- 创建更新时间戳触发器
-CREATE TRIGGER update_template_versions_updated_at
-    BEFORE UPDATE ON template_versions
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
 
 -- 为 milestone_templates 添加 version_id 字段
 ALTER TABLE milestone_templates ADD COLUMN IF NOT EXISTS version_id UUID REFERENCES template_versions(id);

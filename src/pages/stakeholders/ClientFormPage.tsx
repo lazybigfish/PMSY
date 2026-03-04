@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, apiClient } from '../../lib/api';
 import { ArrowLeft, Plus, AlertTriangle, Save } from 'lucide-react';
 import { Client } from '../../types';
 
@@ -143,7 +143,10 @@ export default function ClientFormPage() {
           .update(clientData)
           .eq('id', id);
         if (error) throw error;
-        await api.db.from('client_contacts').delete().eq('client_id', id);
+        await apiClient.post('/rest/v1/delete', {
+          table: 'client_contacts',
+          conditions: { client_id: id }
+        });
       } else {
         const { data, error } = await api.db
           .from('clients')

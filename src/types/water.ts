@@ -65,43 +65,4 @@ export interface ForumReply {
   };
 }
 
-// 热点新闻
-export interface HotNews {
-  id: string;
-  title: string;
-  content: string;
-  summary: string | null;
-  source: string | null;
-  source_url: string | null;
-  url?: string;
-  image_url: string | null;
-  view_count: number;
-  comment_count: number;
-  comments_count?: number;
-  keywords?: string;
-  is_pinned: boolean;
-  published_at: string;
-  created_at: string;
-  updated_at: string;
-}
 
-// 新闻评论
-export interface NewsComment {
-  id: string;
-  news_id: string;
-  content: string;
-  author_id: string;
-  parent_id: string | null;
-  created_at: string;
-  updated_at: string;
-  author?: {
-    id: string;
-    full_name: string | null;
-    avatar_url: string | null;
-  };
-  user?: {
-    id: string;
-    full_name: string | null;
-    avatar_url: string | null;
-  };
-}

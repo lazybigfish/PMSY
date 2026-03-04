@@ -174,10 +174,7 @@ const tablePermissions: Record<string, TablePermission> = {
     adminRoles: ['admin'],
     ownerField: 'author_id',
   },
-  hot_news: {
-    adminRoles: ['admin'],
-    ownerField: 'created_by',
-  },
+
   clients: {
     adminRoles: ['admin'],
     memberCheck: {

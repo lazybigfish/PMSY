@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { Plus, Search, Edit2, Trash2, Eye, X, User, Phone, Mail, MapPin, Building2, Sparkles, TrendingUp, FolderOpen } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Eye, X, User, Phone, Mail, MapPin, Building2, Sparkles, TrendingUp, FolderOpen, LayoutGrid, List } from 'lucide-react';
 import { Supplier } from '../../types';
 import { formatAmount } from '../../lib/utils';
 
@@ -25,6 +25,7 @@ export default function SupplierList() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [viewMode, setViewMode] = useState<'compact' | 'list'>('compact');
   
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [currentSupplier, setCurrentSupplier] = useState<Partial<SupplierWithContacts>>({});
@@ -238,7 +239,7 @@ export default function SupplierList() {
       </div>
 
       <div className="card p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-dark-400" />
             <input
@@ -249,7 +250,7 @@ export default function SupplierList() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             {(['all', 'active', 'inactive'] as const).map((status) => (
               <button
                 key={status}
@@ -265,6 +266,22 @@ export default function SupplierList() {
                 {status === 'all' ? '全部' : status === 'active' ? '合作中' : '已终止'}
               </button>
             ))}
+            <div className="ml-2 flex gap-1 border-l border-dark-200 pl-2">
+              <button
+                onClick={() => setViewMode('compact')}
+                className={`p-2 rounded-xl transition-all ${viewMode === 'compact' ? 'bg-sun-100 text-sun-600' : 'text-dark-400 hover:bg-dark-100'}`}
+                title="紧凑视图"
+              >
+                <LayoutGrid className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-xl transition-all ${viewMode === 'list' ? 'bg-sun-100 text-sun-600' : 'text-dark-400 hover:bg-dark-100'}`}
+                title="列表视图"
+              >
+                <List className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -281,109 +298,121 @@ export default function SupplierList() {
             {searchTerm || statusFilter !== 'all' ? '尝试其他搜索条件' : '点击上方按钮添加第一个供应商'}
           </p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      ) : viewMode === 'compact' ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filteredSuppliers.map((supplier) => {
             const primaryContact = getPrimaryContact(supplier);
             return (
               <div 
                 key={supplier.id} 
-                className="card card-hover group cursor-pointer"
+                className="card card-hover group cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:border-sun-300 transition-all duration-200 ease-out"
                 onClick={() => openDetailModal(supplier)}
               >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center">
-                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${
-                        supplier.status === 'active' ? 'bg-sun-100' : 'bg-dark-100'
-                      }`}>
-                        <Building2 className={`h-6 w-6 ${supplier.status === 'active' ? 'text-sun-600' : 'text-dark-400'}`} />
-                      </div>
-                      <div className="ml-3">
-                        <h3 className="text-lg font-bold text-dark-900 line-clamp-1" title={supplier.name}>{supplier.name}</h3>
-                        <span className={`badge mt-2 ${supplier.status === 'active' ? 'badge-mint' : 'badge-dark'}`}>
-                          {supplier.status === 'active' ? '合作中' : '已终止'}
-                        </span>
-                      </div>
-                    </div>
+                <div className="p-3 flex items-start gap-3">
+                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-all duration-200 ${
+                    supplier.status === 'active' ? 'bg-sun-100 group-hover:bg-sun-200' : 'bg-dark-100'
+                  }`}>
+                    <Building2 className={`h-5 w-5 ${supplier.status === 'active' ? 'text-sun-600' : 'text-dark-400'}`} />
                   </div>
-                  
-                  <div className="space-y-3">
-                    {primaryContact && (
-                      <>
-                        <div className="flex items-center text-sm text-dark-600">
-                          <div className="w-8 h-8 rounded-lg bg-dark-100 flex items-center justify-center mr-3">
-                            <User className="w-4 h-4 text-dark-500" />
-                          </div>
-                          <span className="truncate">{primaryContact.name || '未填写联系人'}</span>
-                        </div>
-                        <div className="flex items-center text-sm text-dark-600">
-                          <div className="w-8 h-8 rounded-lg bg-dark-100 flex items-center justify-center mr-3">
-                            <Phone className="w-4 h-4 text-dark-500" />
-                          </div>
-                          <span className="truncate">{primaryContact.phone || '未填写电话'}</span>
-                        </div>
-                        {primaryContact.email && (
-                          <div className="flex items-center text-sm text-dark-600">
-                            <div className="w-8 h-8 rounded-lg bg-dark-100 flex items-center justify-center mr-3">
-                              <Mail className="w-4 h-4 text-dark-500" />
-                            </div>
-                            <span className="truncate" title={primaryContact.email}>{primaryContact.email}</span>
-                          </div>
-                        )}
-                      </>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-dark-900 truncate group-hover:text-sun-600 transition-colors duration-200" title={supplier.name}>{supplier.name}</h3>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${supplier.status === 'active' ? 'bg-mint-100 text-mint-700' : 'bg-dark-100 text-dark-500'}`}>
+                        {supplier.status === 'active' ? '合作中' : '已终止'}
+                      </span>
+                    </div>
+                    {primaryContact?.phone && (
+                      <p className="text-xs text-dark-500 mt-1 truncate">📞 {primaryContact.phone}</p>
                     )}
                     {supplier.address && (
-                      <div className="flex items-center text-sm text-dark-600">
-                        <div className="w-8 h-8 rounded-lg bg-dark-100 flex items-center justify-center mr-3">
-                          <MapPin className="w-4 h-4 text-dark-500" />
-                        </div>
-                        <span className="truncate" title={supplier.address}>{supplier.address}</span>
-                      </div>
+                      <p className="text-xs text-dark-400 mt-0.5 truncate">📍 {supplier.address}</p>
                     )}
                   </div>
-
-                  {supplier.contacts && supplier.contacts.length > 1 && (
-                    <div className="mt-3 text-xs text-dark-400 bg-dark-50 rounded-lg px-3 py-2">
-                      还有 {supplier.contacts.length - 1} 位联系人
-                    </div>
-                  )}
-
-                  {supplier.description && (
-                    <div className="mt-4 pt-4 border-t border-dark-100">
-                      <p className="text-sm text-dark-500 line-clamp-2 bg-dark-50 rounded-lg px-3 py-2">
-                        {supplier.description}
-                      </p>
-                    </div>
-                  )}
                 </div>
-                
-                <div className="border-t border-dark-100 p-4 bg-dark-50/50 rounded-b-2xl flex justify-end space-x-2">
+                <div className="border-t border-dark-100 px-3 py-2 bg-dark-50/50 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={(e) => { e.stopPropagation(); openDetailModal(supplier); }}
-                    className="p-2 text-dark-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors"
+                    className="p-1.5 text-dark-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
                     title="详情"
                   >
-                    <Eye className="w-4 h-4" />
+                    <Eye className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); navigate(`/stakeholders/suppliers/${supplier.id}/edit`); }}
-                    className="p-2 text-dark-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-colors"
+                    className="p-1.5 text-dark-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
                     title="编辑"
                   >
-                    <Edit2 className="w-4 h-4" />
+                    <Edit2 className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(supplier); }}
-                    className="p-2 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                    className="p-1.5 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                     title={supplier.status === 'active' ? '终止合作' : '彻底删除'}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
             );
           })}
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-dark-50 border-b border-dark-200">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">供应商</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">联系人</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">电话</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">地址</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">状态</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-dark-500 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSuppliers.map((supplier) => {
+                const primaryContact = getPrimaryContact(supplier);
+                return (
+                  <tr key={supplier.id} className="border-b border-dark-100 hover:bg-dark-50 transition-colors cursor-pointer" onClick={() => openDetailModal(supplier)}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${supplier.status === 'active' ? 'bg-sun-100' : 'bg-dark-100'}`}>
+                          <Building2 className={`h-4 w-4 ${supplier.status === 'active' ? 'text-sun-600' : 'text-dark-400'}`} />
+                        </div>
+                        <span className="font-medium text-dark-900">{supplier.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-dark-700 font-medium">{primaryContact?.name || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-dark-500">{primaryContact?.phone || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-dark-500 truncate max-w-[150px]">{supplier.address || '-'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full ${supplier.status === 'active' ? 'bg-mint-100 text-mint-700' : 'bg-dark-100 text-dark-500'}`}>
+                        {supplier.status === 'active' ? '合作中' : '已终止'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex gap-1 justify-end">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/stakeholders/suppliers/${supplier.id}/edit`); }}
+                          className="p-1.5 text-dark-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                          title="编辑"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(supplier); }}
+                          className="p-1.5 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title={supplier.status === 'active' ? '终止合作' : '彻底删除'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

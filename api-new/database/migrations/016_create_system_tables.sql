@@ -46,32 +46,6 @@ CREATE INDEX IF NOT EXISTS idx_operation_logs_action ON operation_logs(action);
 CREATE INDEX IF NOT EXISTS idx_operation_logs_resource ON operation_logs(resource_type, resource_id);
 CREATE INDEX IF NOT EXISTS idx_operation_logs_created_at ON operation_logs(created_at);
 
--- 创建 news_comments 表（新闻评论）
-CREATE TABLE IF NOT EXISTS news_comments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    news_id UUID REFERENCES hot_news(id) ON DELETE CASCADE NOT NULL,
-    parent_id UUID REFERENCES news_comments(id) ON DELETE CASCADE,
-    author_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-    content TEXT NOT NULL,
-    like_count INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'hidden', 'deleted')),
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-);
-
--- 创建索引
-CREATE INDEX IF NOT EXISTS idx_news_comments_news_id ON news_comments(news_id);
-CREATE INDEX IF NOT EXISTS idx_news_comments_parent_id ON news_comments(parent_id);
-CREATE INDEX IF NOT EXISTS idx_news_comments_author_id ON news_comments(author_id);
-CREATE INDEX IF NOT EXISTS idx_news_comments_status ON news_comments(status);
-CREATE INDEX IF NOT EXISTS idx_news_comments_created_at ON news_comments(created_at);
-
--- 创建更新时间戳触发器
-CREATE TRIGGER update_news_comments_updated_at
-    BEFORE UPDATE ON news_comments
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
 -- 创建 stakeholders 表（项目干系人）
 CREATE TABLE IF NOT EXISTS stakeholders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

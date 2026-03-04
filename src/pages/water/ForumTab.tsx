@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Loader2, MessageSquare, Filter } from 'lucide-react';
+import { Search, Plus, Loader2, MessageSquare, Filter, Pin, Star, Edit2, Trash2, Eye } from 'lucide-react';
 import { api, apiClient } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { useTheme } from '../../context/ThemeContext';
 import { ForumPost, ForumCategory } from '../../types';
 import { ForumPostList } from './components/ForumPostList';
-import { ModalForm } from '../../components/Modal';
+import { ModalForm, ConfirmModal } from '../../components/Modal';
 import { ImagePreview } from '../../components/ImagePreview';
 import { LikeButton } from '../../components/LikeButton';
 import { Avatar } from '../../components/Avatar';
 import { ThemedButton } from '../../components/theme/ThemedButton';
 import { ThemedCard } from '../../components/theme/ThemedCard';
 import { ImageUploader } from '../../components/upload';
+import { Pagination } from '../../components/Pagination';
 
 // 辅助函数：解析帖子内容
 const parseContent = (content: any): { text: string; images: string[] } => {
@@ -58,6 +59,11 @@ export default function ForumTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ForumCategory | 'all'>('all');
 
+  // 分页相关状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const pageSize = 10;
+
   // Create post modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formTitle, setFormTitle] = useState('');
@@ -69,22 +75,55 @@ export default function ForumTab() {
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // 编辑相关状态
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPost, setEditingPost] = useState<ForumPost | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editCategory, setEditCategory] = useState<ForumCategory>('tech');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  // 删除确认弹窗
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingPost, setDeletingPost] = useState<ForumPost | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
   const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
     loadPosts();
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, currentPage]);
 
   const loadPosts = async () => {
     try {
       setLoading(true);
-      let query = api.db
+      
+      // 先获取总数
+      let countQuery: any = api.db
+        .from('forum_posts')
+        .select('id');
+      
+      if (selectedCategory !== 'all') {
+        countQuery = countQuery.eq('category', selectedCategory);
+      }
+      
+      const countResult = await countQuery;
+      const totalCount = countResult.data?.length || 0;
+      setTotalItems(totalCount);
+
+      // 获取分页数据
+      let query: any = api.db
         .from('forum_posts')
         .select('*');
 
       if (selectedCategory !== 'all') {
         query = query.eq('category', selectedCategory);
       }
+
+      // 分页
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
 
       const { data: postsData, error } = await query;
       if (error) throw error;
@@ -99,6 +138,15 @@ export default function ForumTab() {
             (post.content?.text || parseContent(post.content).text)?.toLowerCase().includes(searchLower)
         );
       }
+
+      // 排序：置顶帖子优先，然后按创建时间倒序
+      filteredPosts.sort((a: any, b: any) => {
+        // 首先按 is_pinned 排序（true 在前）
+        if (a.is_pinned && !b.is_pinned) return -1;
+        if (!a.is_pinned && b.is_pinned) return 1;
+        // 然后按 created_at 倒序
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
 
       // Fetch user info
       const userIds = new Set<string>();
@@ -209,19 +257,72 @@ export default function ForumTab() {
     loadPosts();
   };
 
-  const deletePost = async (post: ForumPost, e: React.MouseEvent) => {
+  // 打开删除确认弹窗
+  const openDeleteConfirm = (post: ForumPost, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`确定要删除帖子「${post.title}」吗？`)) return;
+    setDeletingPost(post);
+    setShowDeleteConfirm(true);
+  };
 
-    await apiClient.post('/rest/v1/delete', {
-      table: 'forum_replies',
-      conditions: { post_id: post.id }
-    });
-    await apiClient.post('/rest/v1/delete', {
-      table: 'forum_posts',
-      conditions: { id: post.id }
-    });
-    loadPosts();
+  // 执行删除
+  const executeDelete = async () => {
+    if (!deletingPost) return;
+
+    try {
+      setDeleteSubmitting(true);
+      await apiClient.post('/rest/v1/delete', {
+        table: 'forum_replies',
+        conditions: { post_id: deletingPost.id }
+      });
+      await apiClient.post('/rest/v1/delete', {
+        table: 'forum_posts',
+        conditions: { id: deletingPost.id }
+      });
+      setShowDeleteConfirm(false);
+      setDeletingPost(null);
+      loadPosts();
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      alert('删除失败');
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
+
+  // 打开编辑弹窗
+  const openEditModal = (post: ForumPost, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingPost(post);
+    setEditTitle(post.title);
+    setEditContent(parseContent(post.content).text);
+    setEditCategory(post.category);
+    setShowEditModal(true);
+  };
+
+  // 提交编辑
+  const submitEdit = async () => {
+    if (!editingPost || !editTitle.trim() || !editContent.trim()) return;
+
+    try {
+      setEditSubmitting(true);
+      const currentImages = parseContent(editingPost.content).images;
+
+      await api.db.from('forum_posts').update({
+        title: editTitle.trim(),
+        content: { text: editContent.trim(), images: currentImages },
+        category: editCategory,
+        updated_at: new Date().toISOString()
+      }).eq('id', editingPost.id);
+
+      setShowEditModal(false);
+      setEditingPost(null);
+      loadPosts();
+    } catch (error) {
+      console.error('Error updating post:', error);
+      alert('更新失败');
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   const openPostDetail = (post: ForumPost) => {
@@ -411,14 +512,16 @@ export default function ForumTab() {
           return (
             <div
               key={post.id}
-              onClick={() => openPostDetail(post)}
-              className={`card p-5 cursor-pointer transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5 hover:border-primary-300 ${
+              className={`card p-5 cursor-pointer transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5 hover:border-primary-300 group ${
                 post.is_pinned ? 'border-l-4 border-l-yellow-400 bg-gradient-to-r from-yellow-50/50 to-transparent' : ''
               }`}
             >
               <div className="flex items-start gap-4">
                 {/* Author Avatar */}
-                <div className="flex-shrink-0">
+                <div 
+                  className="flex-shrink-0"
+                  onClick={() => openPostDetail(post)}
+                >
                   <Avatar
                     userId={post.author?.id}
                     avatarUrl={post.author?.avatar_url}
@@ -430,7 +533,10 @@ export default function ForumTab() {
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 min-w-0">
+                <div 
+                  className="flex-1 min-w-0"
+                  onClick={() => openPostDetail(post)}
+                >
                   {/* Title Row */}
                   <div className="flex items-center gap-2 flex-wrap mb-2">
                     <span className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${category.bgColor} ${category.color} ${category.borderColor}`}>
@@ -438,11 +544,13 @@ export default function ForumTab() {
                     </span>
                     {post.is_pinned && (
                       <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-yellow-700 bg-yellow-100 rounded-md">
+                        <Pin className="w-3 h-3" />
                         置顶
                       </span>
                     )}
                     {post.is_essence && (
                       <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-orange-700 bg-orange-100 rounded-md">
+                        <Star className="w-3 h-3" />
                         精华
                       </span>
                     )}
@@ -461,7 +569,8 @@ export default function ForumTab() {
                         <div 
                           key={idx} 
                           className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-dark-100 cursor-pointer group"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setPreviewImages(parseContent(post.content).images);
                             setPreviewIndex(idx);
                             setShowPreview(true);
@@ -485,12 +594,23 @@ export default function ForumTab() {
                     </div>
                   )}
 
-                  {/* Meta Info */}
+                  {/* Meta Info - 包含阅读量、回复量、点赞量 */}
                   <div className="flex items-center justify-between mt-3">
-                    <div className="flex items-center gap-3 text-xs text-dark-500">
+                    <div className="flex items-center gap-4 text-xs text-dark-500">
                       <span className="font-medium text-dark-700">{post.author?.full_name || '未知用户'}</span>
                       <span className="w-1 h-1 rounded-full bg-dark-300"></span>
                       <span>{new Date(post.created_at).toLocaleDateString()}</span>
+                      <span className="w-1 h-1 rounded-full bg-dark-300"></span>
+                      {/* 阅读量 */}
+                      <span className="flex items-center gap-1">
+                        <Eye className="w-3.5 h-3.5" />
+                        {post.view_count || 0}
+                      </span>
+                      {/* 回复量 */}
+                      <span className="flex items-center gap-1">
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        {post.reply_count || 0}
+                      </span>
                     </div>
                     
                     {/* Like Button */}
@@ -502,6 +622,57 @@ export default function ForumTab() {
                       stopPropagation={true}
                     />
                   </div>
+                </div>
+
+                {/* Actions - 管理员和作者操作按钮（水平排列） */}
+                <div 
+                  className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" 
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isAdmin && (
+                    <>
+                      <button
+                        onClick={(e) => togglePin(post, e)}
+                        className={`p-1.5 rounded-md transition-all ${
+                          post.is_pinned 
+                            ? 'text-yellow-600 bg-yellow-100 hover:bg-yellow-200' 
+                            : 'text-dark-400 hover:text-yellow-600 hover:bg-yellow-50'
+                        }`}
+                        title={post.is_pinned ? '取消置顶' : '置顶'}
+                      >
+                        <Pin className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => toggleEssence(post, e)}
+                        className={`p-1.5 rounded-md transition-all ${
+                          post.is_essence 
+                            ? 'text-orange-600 bg-orange-100 hover:bg-orange-200' 
+                            : 'text-dark-400 hover:text-orange-600 hover:bg-orange-50'
+                        }`}
+                        title={post.is_essence ? '取消精华' : '设为精华'}
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
+                  {(isAuthor || isAdmin) && (
+                    <>
+                      <button
+                        onClick={(e) => openEditModal(post, e)}
+                        className="p-1.5 text-dark-400 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-all"
+                        title="编辑"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => openDeleteConfirm(post, e)}
+                        className="p-1.5 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all"
+                        title="删除"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -583,6 +754,89 @@ export default function ForumTab() {
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
       />
+
+      {/* 编辑帖子弹窗 */}
+      <ModalForm
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingPost(null);
+        }}
+        onSubmit={submitEdit}
+        title="编辑帖子"
+        maxWidth="2xl"
+        submitText="保存"
+        isSubmitting={editSubmitting}
+        submitDisabled={!editTitle.trim() || !editContent.trim()}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">分类</label>
+            <select
+              value={editCategory}
+              onChange={(e) => setEditCategory(e.target.value as ForumCategory)}
+              className="input w-full"
+            >
+              {categories.map(cat => (
+                <option key={cat.key} value={cat.key}>{cat.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">
+              标题 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="input w-full"
+              placeholder="请输入标题"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-dark-700 mb-1">
+              内容 <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={6}
+              className="input w-full resize-none"
+              placeholder="请输入内容"
+              required
+            />
+          </div>
+        </div>
+      </ModalForm>
+
+      {/* 删除确认弹窗 */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeletingPost(null);
+        }}
+        onConfirm={executeDelete}
+        title="删除帖子"
+        message={`确定要删除帖子「${deletingPost?.title}」吗？此操作将同时删除该帖子下的所有回复，且无法恢复。`}
+        confirmText="删除"
+        cancelText="取消"
+        isLoading={deleteSubmitting}
+        type="danger"
+      />
+
+      {/* 分页组件 */}
+      {!loading && posts.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={Math.ceil(totalItems / pageSize)}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={(page) => setCurrentPage(page)}
+        />
+      )}
     </div>
   );
 }

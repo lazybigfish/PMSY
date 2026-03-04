@@ -44,7 +44,6 @@ const TABLE_IMPORT_ORDER = [
   'risks',
   'files',
   'storage_quotas',
-  'hot_news',
   'tasks',
   'supplier_contacts',
   'supplier_payment_plans',

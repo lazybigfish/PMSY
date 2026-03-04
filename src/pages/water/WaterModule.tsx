@@ -1,24 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Waves, MessageSquare } from 'lucide-react';
+import { Waves, MessageSquare, Lightbulb } from 'lucide-react';
 import ForumTab from './ForumTab';
+import { FeedbackTab } from './FeedbackTab';
 
 export default function WaterModule() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab');
-  // 暂时只开放水底探宝，默认显示 forum
-  const [activeTab, setActiveTab] = useState<'forum'>(
-    'forum'
-  );
+  const [activeTab, setActiveTab] = useState<'forum' | 'feedback'>('forum');
 
   // 当 URL 参数变化时更新状态
   useEffect(() => {
     const tab = searchParams.get('tab');
-    // 暂时只支持 forum
-    if (tab === 'forum') {
-      setActiveTab(tab);
+    if (tab === 'feedback') {
+      setActiveTab('feedback');
+    } else {
+      setActiveTab('forum');
     }
   }, [searchParams]);
+
+  // 切换 Tab
+  const handleTabChange = (tab: 'forum' | 'feedback') => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -39,21 +44,38 @@ export default function WaterModule() {
             </div>
           </div>
 
-          {/* Tab 导航 - 暂时只显示水底探宝 */}
+          {/* Tab 导航 */}
           <div className="flex gap-6 mt-6 border-b border-gray-200">
             <button
-              className="flex items-center gap-2 pb-3 text-sm font-medium transition-all duration-200 ease-out border-b-2 rounded-t-lg px-3 -mb-px border-blue-500 text-blue-600 bg-blue-50/50"
+              onClick={() => handleTabChange('forum')}
+              className={`flex items-center gap-2 pb-3 text-sm font-medium transition-all duration-200 ease-out border-b-2 rounded-t-lg px-3 -mb-px ${
+                activeTab === 'forum'
+                  ? 'border-blue-500 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
             >
               <MessageSquare className="w-4 h-4" />
               水底探宝
+            </button>
+            <button
+              onClick={() => handleTabChange('feedback')}
+              className={`flex items-center gap-2 pb-3 text-sm font-medium transition-all duration-200 ease-out border-b-2 rounded-t-lg px-3 -mb-px ${
+                activeTab === 'feedback'
+                  ? 'border-blue-500 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Lightbulb className="w-4 h-4" />
+              优化与反馈
             </button>
           </div>
         </div>
       </div>
 
       {/* 内容区域 */}
-      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <ForumTab />
+      <div className="w-full mx-auto">
+        {activeTab === 'forum' && <ForumTab />}
+        {activeTab === 'feedback' && <FeedbackTab />}
       </div>
     </div>
   );

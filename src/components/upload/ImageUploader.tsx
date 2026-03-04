@@ -9,7 +9,7 @@ import { useUpload } from '../../hooks/useUpload';
 import { UploadResult, UploadProgress } from '../../lib/upload/UploadCore';
 import { ImagePreviewModal } from '../ImagePreviewModal';
 
-interface ImageUploaderProps {
+export interface ImageUploaderProps {
   value?: string[];
   onChange?: (urls: string[]) => void;
   maxCount?: number;

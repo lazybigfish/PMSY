@@ -40,6 +40,7 @@ export interface ProjectModule {
   name: string;
   description: string | null;
   sort_order: number;
+  path?: string;  // 层级路径标识，如 1, 1.1, 2.1.1
   created_at: string;
   // 扩展字段（用于层级结构）
   parent_id?: string | null;

@@ -37,7 +37,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
         .from('project_modules')
         .select('*')
         .eq('project_id', projectId)
-        .order('sort_order', { ascending: true });
+        .order('path', { ascending: true });
 
       if (error) throw error;
       const treeData = buildTree(data || []);
@@ -116,16 +116,16 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
       }
     });
 
-    const sortByOrder = (nodes: ProjectModule[]) => {
-      nodes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    const sortByPath = (nodes: ProjectModule[]) => {
+      nodes.sort((a, b) => (a.path || '').localeCompare(b.path || ''));
       nodes.forEach(node => {
         if (node.children && node.children.length > 0) {
-          sortByOrder(node.children);
+          sortByPath(node.children);
         }
       });
     };
 
-    sortByOrder(roots);
+    sortByPath(roots);
     return roots;
   };
 
@@ -230,6 +230,32 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     setMovingModuleId(null);
   };
 
+  // 生成 path 的辅助函数
+  const generatePath = (parentPath: string | null | undefined, siblingIndex: number): string => {
+    if (!parentPath) {
+      return String(siblingIndex + 1);
+    }
+    return `${parentPath}.${siblingIndex + 1}`;
+  };
+
+  // 递归更新节点及其子节点的 path
+  const updatePathRecursive = (node: ProjectModule, parentPath: string): ProjectModule => {
+    const siblings = node.parent_id 
+      ? allModules.filter(m => m.parent_id === node.parent_id && m.id !== node.id)
+      : allModules.filter(m => !m.parent_id && m.id !== node.id);
+    const siblingIndex = siblings.findIndex(s => s.id === node.id);
+    const actualIndex = siblingIndex === -1 ? siblings.length : siblingIndex;
+    const newPath = generatePath(parentPath, actualIndex);
+    
+    const updatedNode = { ...node, path: newPath };
+    if (updatedNode.children && updatedNode.children.length > 0) {
+      updatedNode.children = updatedNode.children.map(child =>
+        updatePathRecursive(child, newPath)
+      );
+    }
+    return updatedNode;
+  };
+
   // 执行移动
   const executeMove = async (targetId: string, action: MoveAction) => {
     if (!movingModuleId || movingModuleId === targetId) return;
@@ -259,45 +285,51 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
       let newParentId: string | null = null;
       let newLevel: number;
       let newSortOrder: number;
+      let newPath: string;
 
       // 使用 allModules（包含所有模块，不考虑展开状态）来计算
-      const siblings = allModules.filter(m => m.parent_id === targetModule.parent_id);
-      const targetIndex = siblings.findIndex(s => s.id === targetId);
+      const targetSiblings = allModules.filter(m => m.parent_id === targetModule.parent_id);
+      const targetIndex = targetSiblings.findIndex(s => s.id === targetId);
 
       switch (action) {
         case 'before':
           newParentId = targetModule.parent_id;
           newLevel = targetModule.level || 1;
           newSortOrder = targetIndex;
+          newPath = generatePath(targetModule.path?.split('.').slice(0, -1).join('.') || null, targetIndex);
           break;
         case 'after':
           newParentId = targetModule.parent_id;
           newLevel = targetModule.level || 1;
           newSortOrder = targetIndex + 1;
+          newPath = generatePath(targetModule.path?.split('.').slice(0, -1).join('.') || null, targetIndex + 1);
           break;
         case 'child':
           newParentId = targetId;
           newLevel = (targetModule.level || 1) + 1;
           const targetChildren = allModules.filter(m => m.parent_id === targetId);
           newSortOrder = targetChildren.length;
+          newPath = generatePath(targetModule.path, targetChildren.length);
           break;
       }
 
       // 乐观更新
-      setModules(prev => moveModuleInTree(prev, movingModuleId, newParentId, newLevel, newSortOrder));
+      setModules(prev => moveModuleInTree(prev, movingModuleId, newParentId, newLevel, newSortOrder, newPath));
       setMoveMode(false);
       setMovingModuleId(null);
 
-      // 更新数据库
+      // 更新数据库 - 同时更新 path
       const { error } = await api.db.from('project_modules').update({
         parent_id: newParentId,
         level: newLevel,
-        sort_order: newSortOrder
+        sort_order: newSortOrder,
+        path: newPath
       }).eq('id', movingModuleId);
 
       if (error) throw error;
 
-      // 乐观更新已完成，无需重新获取数据
+      // 重新获取数据以确保子模块的 path 也被更新
+      fetchModules();
     } catch (err) {
       console.error('Error moving module:', err);
       alert('移动模块失败，正在恢复...');
@@ -311,7 +343,8 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     movedId: string,
     newParentId: string | null,
     newLevel: number,
-    newSortOrder: number
+    newSortOrder: number,
+    newPath: string
   ): ProjectModule[] => {
     const deepClone = (items: ProjectModule[]): ProjectModule[] => {
       return items.map(node => ({
@@ -320,12 +353,16 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
       }));
     };
 
-    // 递归更新节点及其子节点的层级
-    const updateLevelRecursive = (node: ProjectModule, parentLevel: number): ProjectModule => {
-      const updatedNode = { ...node, level: parentLevel + 1 };
+    // 递归更新节点及其子节点的层级和 path
+    const updateLevelAndPathRecursive = (node: ProjectModule, parentLevel: number, parentPath: string): ProjectModule => {
+      const updatedNode = { 
+        ...node, 
+        level: parentLevel + 1,
+        path: parentPath ? `${parentPath}.${node.path?.split('.').pop() || '1'}` : (node.path || '1')
+      };
       if (updatedNode.children && updatedNode.children.length > 0) {
         updatedNode.children = updatedNode.children.map(child =>
-          updateLevelRecursive(child, updatedNode.level)
+          updateLevelAndPathRecursive(child, updatedNode.level, updatedNode.path || '')
         );
       }
       return updatedNode;
@@ -351,10 +388,11 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     const addToTree = (items: ProjectModule[]): ProjectModule[] => {
       if (!movedNode) return items;
 
-      // 更新被移动节点及其所有子节点的层级
-      const updatedNode = updateLevelRecursive(
-        { ...movedNode, parent_id: newParentId, sort_order: newSortOrder },
-        newLevel - 1
+      // 更新被移动节点及其所有子节点的层级和 path
+      const updatedNode = updateLevelAndPathRecursive(
+        { ...movedNode, parent_id: newParentId, sort_order: newSortOrder, path: newPath },
+        newLevel - 1,
+        newPath.split('.').slice(0, -1).join('.')
       );
 
       if (newParentId === null) {
@@ -381,18 +419,18 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     let result = removeFromTree(nodes);
     result = addToTree(result);
 
-    // 只排序，不重新分配 sort_order，保持数据库中的顺序值
-    const resortOnly = (items: ProjectModule[]): ProjectModule[] => {
-      items.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    // 按 path 排序
+    const resortByPath = (items: ProjectModule[]): ProjectModule[] => {
+      items.sort((a, b) => (a.path || '').localeCompare(b.path || ''));
       items.forEach(node => {
         if (node.children && node.children.length > 0) {
-          resortOnly(node.children);
+          resortByPath(node.children);
         }
       });
       return items;
     };
 
-    return resortOnly(result);
+    return resortByPath(result);
   };
 
   const handleExport = () => {
@@ -470,7 +508,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
         conditions: { project_id: projectId }
       });
 
-      const parentStack: { id: string; level: number }[] = [];
+      const parentStack: { id: string; level: number; path: string }[] = [];
       let insertedCount = 0;
       
       for (let i = 0; i < normalizedData.length; i++) {
@@ -486,11 +524,21 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
 
         const status = reverseTranslateStatus(statusStr);
         
+        // 维护 parentStack，保持正确的父子关系
         while (parentStack.length > 0 && parentStack[parentStack.length - 1].level >= level) {
           parentStack.pop();
         }
         
         const parentId = parentStack.length > 0 ? parentStack[parentStack.length - 1].id : null;
+        const parentPath = parentStack.length > 0 ? parentStack[parentStack.length - 1].path : null;
+        
+        // 计算当前模块的 path
+        const siblingIndex = parentStack.length > 0 
+          ? parentStack.filter(p => p.level === level - 1).length - 1
+          : i;
+        const path = parentPath 
+          ? `${parentPath}.${siblingIndex + 1}`
+          : String(siblingIndex + 1);
 
         const { data: inserted, error } = await api.db.from('project_modules').insert({
           project_id: projectId,
@@ -499,13 +547,14 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
           status: status,
           level: level,
           parent_id: parentId,
-          sort_order: i
+          sort_order: i,
+          path: path
         });
 
         if (error) throw error;
 
         if (inserted && inserted[0]) {
-          parentStack.push({ id: inserted[0].id, level: level });
+          parentStack.push({ id: inserted[0].id, level: level, path: path });
           insertedCount++;
         }
       }
@@ -526,20 +575,31 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     if (!name || !name.trim()) return;
     
     let level = 1;
+    let parentPath: string | null = null;
     if (parentId) {
       const parent = findModule(modules, parentId);
       if (parent) {
-        level = parent.level + 1;
+        level = (parent.level || 1) + 1;
+        parentPath = parent.path || null;
       }
     }
 
     try {
+      // 获取同级模块数量以计算 path
+      const siblings = allModules.filter(m => m.parent_id === parentId);
+      const siblingCount = siblings.length;
+      const path = parentPath 
+        ? `${parentPath}.${siblingCount + 1}`
+        : String(siblingCount + 1);
+
       const { error } = await api.db.from('project_modules').insert({
         project_id: projectId,
         parent_id: parentId,
         name: name.trim(),
         level: level,
-        status: 'not_started'
+        status: 'not_started',
+        path: path,
+        sort_order: siblingCount
       });
       
       if (error) throw error;
@@ -625,7 +685,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
   };
 
   // 渲染模块节点
-  const renderNode = (node: ProjectModule, indexPath: number[] = []) => {
+  const renderNode = (node: ProjectModule) => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expanded[node.id];
     const supplier = getModuleSupplier(node.id);
@@ -633,8 +693,8 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
     const isMoving = movingModuleId === node.id;
     const level = node.level || 1;
     
-    // 生成序号显示，如 1, 1.1, 1.1.1
-    const displayIndex = indexPath.length > 0 ? indexPath.join('.') : '';
+    // 使用 path 字段显示层级标识，如 1, 1.1, 1.1.1
+    const displayIndex = node.path || '';
 
     return (
       <div key={node.id} className="border-l border-gray-200 ml-4 pl-4">
@@ -652,7 +712,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
           
-          {/* 序号显示 */}
+          {/* 序号显示 - 使用 path 字段 */}
           {displayIndex && (
             <span className="text-xs text-gray-400 mr-2 font-mono min-w-[2rem]">
               {displayIndex}
@@ -784,7 +844,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
 
         {hasChildren && isExpanded && (
           <div className="ml-4">
-            {node.children?.map((child, idx) => renderNode(child, [...indexPath, idx + 1]))}
+            {node.children?.map((child) => renderNode(child))}
           </div>
         )}
       </div>
@@ -974,7 +1034,7 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
           {modules.length === 0 ? (
             <div className="text-center text-gray-500 py-8">暂无功能模块。请从Excel导入开始。</div>
           ) : (
-            modules.map((module, idx) => renderNode(module, [idx + 1]))
+            modules.map((module) => renderNode(module))
           )}
         </div>
 

@@ -117,32 +117,4 @@ CREATE TRIGGER trg_forum_likes_delete
     WHEN (OLD.target_type = 'post')
     EXECUTE FUNCTION decrement_post_like_count();
 
--- 创建 hot_news 表（热点资讯）
-CREATE TABLE IF NOT EXISTS hot_news (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title TEXT NOT NULL,
-    content TEXT,
-    summary TEXT,
-    source TEXT,
-    source_url TEXT,
-    image_url TEXT,
-    category TEXT DEFAULT 'general',
-    is_pinned BOOLEAN DEFAULT false,
-    view_count INTEGER DEFAULT 0,
-    published_at TIMESTAMPTZ,
-    created_by UUID REFERENCES profiles(id),
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-);
 
--- 创建索引
-CREATE INDEX IF NOT EXISTS idx_hot_news_category ON hot_news(category);
-CREATE INDEX IF NOT EXISTS idx_hot_news_is_pinned ON hot_news(is_pinned);
-CREATE INDEX IF NOT EXISTS idx_hot_news_published_at ON hot_news(published_at);
-CREATE INDEX IF NOT EXISTS idx_hot_news_created_at ON hot_news(created_at);
-
--- 创建更新时间戳触发器
-CREATE TRIGGER update_hot_news_updated_at
-    BEFORE UPDATE ON hot_news
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();

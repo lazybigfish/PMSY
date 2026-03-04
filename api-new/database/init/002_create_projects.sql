@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS project_modules (
     progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
     sort_order INTEGER DEFAULT 0,
     level INTEGER DEFAULT 1,
+    path TEXT,  -- 层级路径标识，如 1, 1.1, 2.1.1
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS project_modules (
 CREATE INDEX IF NOT EXISTS idx_project_modules_project_id ON project_modules(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_modules_parent_id ON project_modules(parent_id);
 CREATE INDEX IF NOT EXISTS idx_project_modules_status ON project_modules(status);
+CREATE INDEX IF NOT EXISTS idx_project_modules_path ON project_modules(path);
 
 -- 创建更新时间戳触发器
 CREATE TRIGGER update_project_modules_updated_at

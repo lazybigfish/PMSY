@@ -5,7 +5,7 @@ import UserManagement from './tabs/UserManagement';
 import RoleManagement from './tabs/RoleManagement';
 import MilestoneTemplates from './tabs/MilestoneTemplates';
 import GeneralConfig from './tabs/GeneralConfig';
-import HotNewsConfig from './tabs/HotNewsConfig';
+
 import LoginThemeConfig from './tabs/LoginThemeConfig';
 import DataBackup from './tabs/DataBackup';
 import { useAuth } from '../../context/AuthContextNew';
@@ -24,7 +24,6 @@ const SystemSettings = () => {
     { id: 'milestone-templates', label: '里程碑模板' },
     { id: 'report-templates', label: '报告模板' },
     { id: 'ai-config', label: 'AI配置' },
-    ...(isAdmin ? [{ id: 'hot-news', label: '热点配置' }] : []),
     { id: 'general', label: '通用设置' },
     { id: 'login-theme', label: '登录页管理' },
     ...(isAdmin ? [{ id: 'data-backup', label: '数据备份' }] : []),
@@ -70,8 +69,6 @@ const SystemSettings = () => {
         return <ReportTemplates />;
       case 'ai-config':
         return <AIConfig />;
-      case 'hot-news':
-        return isAdmin ? <HotNewsConfig /> : null;
       case 'general':
         return <GeneralConfig />;
       case 'login-theme':

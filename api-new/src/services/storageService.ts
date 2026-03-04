@@ -73,8 +73,8 @@ export async function uploadFile(
     'X-Upload-Date': new Date().toISOString(),
   });
 
-  // 生成文件 URL - 根据 bucket 自动选择访问策略
-  const url = fileAccessService.getDirectUrl(bucket, filePath);
+  // 生成文件 URL - 根据 bucket 自动选择访问策略（使用代理模式避免 minio:9000 无法访问）
+  const url = await fileAccessService.getFileUrl(bucket, filePath);
 
   return {
     filename: path.basename(filePath),

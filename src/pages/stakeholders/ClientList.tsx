@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { Plus, Search, Building2, Phone, MapPin, User, Edit2, Trash2, Eye, X, Sparkles, TrendingUp, FolderOpen, Mail } from 'lucide-react';
+import { Plus, Search, Building2, Phone, MapPin, User, Edit2, Trash2, Eye, X, Sparkles, TrendingUp, FolderOpen, Mail, LayoutGrid, List } from 'lucide-react';
 import { Client, ClientContact } from '../../types';
 import { formatAmount } from '../../lib/utils';
 
@@ -15,6 +15,7 @@ const ClientList = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [viewMode, setViewMode] = useState<'compact' | 'list'>('compact');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState<ClientWithContacts | null>(null);
 
@@ -146,7 +147,7 @@ const ClientList = () => {
       </div>
 
       <div className="card p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-dark-400" />
             <input
@@ -157,7 +158,7 @@ const ClientList = () => {
               className="input pl-12 w-full"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             {(['all', 'active', 'inactive'] as const).map((status) => (
               <button
                 key={status}
@@ -173,6 +174,22 @@ const ClientList = () => {
                 {status === 'all' ? '全部' : status === 'active' ? '合作中' : '已终止'}
               </button>
             ))}
+            <div className="ml-2 flex gap-1 border-l border-dark-200 pl-2">
+              <button
+                onClick={() => setViewMode('compact')}
+                className={`p-2 rounded-xl transition-all ${viewMode === 'compact' ? 'bg-primary-100 text-primary-600' : 'text-dark-400 hover:bg-dark-100'}`}
+                title="紧凑视图"
+              >
+                <LayoutGrid className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-xl transition-all ${viewMode === 'list' ? 'bg-primary-100 text-primary-600' : 'text-dark-400 hover:bg-dark-100'}`}
+                title="列表视图"
+              >
+                <List className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -189,108 +206,123 @@ const ClientList = () => {
             {searchTerm || statusFilter !== 'all' ? '尝试其他搜索条件' : '点击上方按钮添加第一个客户'}
           </p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      ) : viewMode === 'compact' ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filteredClients.map((client) => {
             const primaryContact = getPrimaryContact(client);
             return (
               <div
                 key={client.id}
-                className="card card-hover cursor-pointer group flex flex-col hover:-translate-y-0.5 hover:shadow-lg hover:border-primary-300 transition-all duration-200 ease-out"
+                className="card card-hover cursor-pointer group hover:-translate-y-0.5 hover:shadow-lg hover:border-primary-300 transition-all duration-200 ease-out"
                 onClick={() => { setSelectedClient(client); setShowDetailModal(true); }}
               >
-                <div className="p-6 flex-1">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center">
-                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-all duration-200 ${
-                        client.status === 'active' ? 'bg-primary-100 group-hover:bg-primary-200' : 'bg-dark-100'
-                      }`}>
-                        <Building2 className={`h-6 w-6 ${client.status === 'active' ? 'text-primary-600' : 'text-dark-400'}`} />
-                      </div>
-                      <div className="ml-3">
-                        <h3 className="text-lg font-bold text-dark-900 line-clamp-1 group-hover:text-primary-600 transition-colors duration-200" title={client.name}>{client.name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          {client.location && (
-                            <span className="flex items-center text-sm text-dark-500">
-                              <MapPin className="h-3.5 w-3.5 mr-1" />
-                              {client.location}
-                            </span>
-                          )}
-                          <span className={`badge ${client.status === 'active' ? 'badge-mint' : 'badge-dark'}`}>
-                            {client.status === 'active' ? '合作中' : '已终止'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                <div className="p-3 flex items-start gap-3">
+                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-all duration-200 ${
+                    client.status === 'active' ? 'bg-primary-100 group-hover:bg-primary-200' : 'bg-dark-100'
+                  }`}>
+                    <Building2 className={`h-5 w-5 ${client.status === 'active' ? 'text-primary-600' : 'text-dark-400'}`} />
                   </div>
-
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {client.code && (
-                      <span className="px-2 py-1 bg-dark-50 text-dark-500 text-xs rounded-lg font-mono">
-                        {client.code}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-dark-900 truncate group-hover:text-primary-600 transition-colors duration-200" title={client.name}>{client.name}</h3>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${client.status === 'active' ? 'bg-mint-100 text-mint-700' : 'bg-dark-100 text-dark-500'}`}>
+                        {client.status === 'active' ? '合作中' : '已终止'}
                       </span>
+                    </div>
+                    {client.location && (
+                      <p className="text-xs text-dark-500 mt-1 truncate">📍 {client.location}</p>
+                    )}
+                    {primaryContact && (
+                      <p className="text-xs text-dark-400 mt-0.5 truncate">📞 {primaryContact.phone}</p>
                     )}
                   </div>
-
-                  {primaryContact && (
-                    <div className="space-y-3">
-                      <div className="flex items-center text-sm text-dark-600">
-                        <div className="w-8 h-8 rounded-lg bg-dark-100 flex items-center justify-center mr-3">
-                          <User className="h-4 w-4 text-dark-500" />
-                        </div>
-                        <div>
-                          <span className="font-semibold text-dark-900">{primaryContact.name}</span>
-                          {primaryContact.position && (
-                            <span className="text-dark-400 text-xs ml-2">{primaryContact.position}</span>
-                          )}
-                          <div className="flex items-center text-dark-400 mt-0.5 text-xs">
-                            <Phone className="h-3 w-3 mr-1" />
-                            {primaryContact.phone}
-                            {primaryContact.email && (
-                              <>
-                                <span className="mx-1">·</span>
-                                <Mail className="h-3 w-3 mr-1" />
-                                {primaryContact.email}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      {client.contacts && client.contacts.length > 1 && (
-                        <div className="text-xs text-dark-400 bg-dark-50 rounded-lg px-3 py-2">
-                          还有 {client.contacts.length - 1} 位联系人
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
-                
-                <div className="border-t border-dark-100 p-4 bg-dark-50/50 rounded-b-2xl flex justify-end space-x-2">
+                <div className="border-t border-dark-100 px-3 py-2 bg-dark-50/50 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={(e) => { e.stopPropagation(); setSelectedClient(client); setShowDetailModal(true); }}
-                    className="p-2 text-dark-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all duration-200 ease-out hover:scale-105"
+                    className="p-1.5 text-dark-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
                     title="查看详情"
                   >
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); navigate(`/stakeholders/clients/${client.id}/edit`); }}
-                    className="p-2 text-dark-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all duration-200 ease-out hover:scale-105"
+                    className="p-1.5 text-dark-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
                     title="编辑"
                   >
-                    <Edit2 className="h-4 w-4" />
+                    <Edit2 className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(client); }}
-                    className="p-2 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 ease-out hover:scale-105"
+                    className="p-1.5 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                     title={client.status === 'active' ? '终止合作' : '彻底删除'}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
             );
           })}
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-dark-50 border-b border-dark-200">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">客户</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">编码</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">地点</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">联系人</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">电话</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-dark-500 uppercase">状态</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-dark-500 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredClients.map((client) => {
+                const primaryContact = getPrimaryContact(client);
+                return (
+                  <tr key={client.id} className="border-b border-dark-100 hover:bg-dark-50 transition-colors cursor-pointer" onClick={() => { setSelectedClient(client); setShowDetailModal(true); }}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${client.status === 'active' ? 'bg-primary-100' : 'bg-dark-100'}`}>
+                          <Building2 className={`h-4 w-4 ${client.status === 'active' ? 'text-primary-600' : 'text-dark-400'}`} />
+                        </div>
+                        <span className="font-medium text-dark-900">{client.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-dark-500 font-mono">{client.code || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-dark-500">{client.location || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-dark-700 font-medium">{primaryContact?.name || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-dark-500">{primaryContact?.phone || '-'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full ${client.status === 'active' ? 'bg-mint-100 text-mint-700' : 'bg-dark-100 text-dark-500'}`}>
+                        {client.status === 'active' ? '合作中' : '已终止'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex gap-1 justify-end">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/stakeholders/clients/${client.id}/edit`); }}
+                          className="p-1.5 text-dark-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                          title="编辑"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(client); }}
+                          className="p-1.5 text-dark-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title={client.status === 'active' ? '终止合作' : '彻底删除'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

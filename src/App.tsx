@@ -19,6 +19,7 @@ import TaskCreatePage from './pages/tasks/TaskCreatePage';
 import AnalysisDashboard from './pages/analysis/AnalysisDashboard';
 import WaterModule from './pages/water/WaterModule';
 import ForumPostDetailPage from './pages/water/ForumPostDetailPage';
+import { FeedbackDetailPage } from './pages/water/FeedbackDetailPage';
 import FileManager from './pages/files/FileManager';
 import StakeholderLayout from './pages/stakeholders/StakeholderLayout';
 import ClientList from './pages/stakeholders/ClientList';
@@ -68,6 +69,7 @@ function App() {
               <Route path="/analysis" element={<AnalysisDashboard />} />
               <Route path="/water" element={<WaterModule />} />
               <Route path="/water/forum/:id" element={<ForumPostDetailPage />} />
+              <Route path="/water/feedback/:id" element={<FeedbackDetailPage />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/system" element={<SystemSettings />} />
             </Route>

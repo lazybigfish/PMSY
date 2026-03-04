@@ -202,16 +202,21 @@ const TaskDetailPage = () => {
         .select('module_id, created_at')
         .eq('task_id', id);
 
-      // 获取模块详情
+      // 获取模块详情并按 path 排序
       let taskModulesWithModule: any[] = [];
       if (taskModulesData && taskModulesData.length > 0) {
         const moduleIds = taskModulesData.map(tm => tm.module_id);
-        const { data: modulesData } = await api.db.from('project_modules').select('*').in('id', moduleIds);
+        const { data: modulesData } = await api.db
+          .from('project_modules')
+          .select('*')
+          .in('id', moduleIds)
+          .order('path', { ascending: true });
         const modulesMap = new Map(modulesData?.map(m => [m.id, m]) || []);
         taskModulesWithModule = taskModulesData.map(tm => ({
           ...tm,
           module: modulesMap.get(tm.module_id)
-        }));
+        })).filter(tm => tm.module)  // 过滤掉可能不存在的模块
+        .sort((a, b) => (a.module?.path || '').localeCompare(b.module?.path || ''));
       }
 
       const fullTaskData = {

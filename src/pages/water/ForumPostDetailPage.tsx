@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Loader2, Trash2, Pin, Star, MessageSquare, Eye, Clock, ChevronDown, ChevronUp, Reply, Image as ImageIcon, ZoomIn } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Trash2, Pin, Star, MessageSquare, Eye, Clock, ChevronDown, ChevronUp, Reply, Image as ImageIcon, ZoomIn, Edit2, MoreVertical } from 'lucide-react';
 import { api, apiClient } from '../../lib/api';
 import { useAuth } from '../../context/AuthContextNew';
 import { ForumPost, ForumReply, ForumCategory } from '../../types';
@@ -10,6 +10,7 @@ import { LikeButton } from '../../components/LikeButton';
 import { Avatar } from '../../components/Avatar';
 import { ImagePreview } from '../../components/ImagePreview';
 import { PostImageUploader, PostImage } from './components/PostImageUploader';
+import { ConfirmModal } from '../../components/Modal';
 
 // 辅助函数：解析帖子内容
 const parseContent = (content: any): { text: string; images: string[] } => {
@@ -196,7 +197,22 @@ export default function ForumPostDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ForumReply | null>(null);
 
+  // 编辑相关状态
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editCategory, setEditCategory] = useState<ForumCategory>('tech');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  // 删除确认弹窗
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
+  // 管理菜单显示状态
+  const [showManageMenu, setShowManageMenu] = useState(false);
+
   const isAdmin = profile?.role === 'admin';
+  const isAuthor = post?.author_id === user?.id;
 
   useEffect(() => {
     if (id) {
@@ -440,6 +456,121 @@ export default function ForumPostDetailPage() {
     setReplyContent('');
   };
 
+  // 打开编辑弹窗
+  const openEditModal = () => {
+    if (!post) return;
+    setEditTitle(post.title);
+    setEditContent(parseContent(post.content).text);
+    setEditCategory(post.category);
+    setShowEditModal(true);
+  };
+
+  // 提交编辑
+  const submitEdit = async () => {
+    if (!post || !editTitle.trim() || !editContent.trim()) return;
+
+    try {
+      setEditSubmitting(true);
+      const currentImages = parseContent(post.content).images;
+      
+      await api.db.from('forum_posts').update({
+        title: editTitle.trim(),
+        content: { text: editContent.trim(), images: currentImages },
+        category: editCategory,
+        updated_at: new Date().toISOString()
+      }).eq('id', post.id);
+
+      // 更新本地状态
+      setPost(prev => prev ? {
+        ...prev,
+        title: editTitle.trim(),
+        content: { text: editContent.trim(), images: currentImages },
+        category: editCategory,
+        updated_at: new Date().toISOString()
+      } : null);
+
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Error updating post:', error);
+      alert('更新失败');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  // 删除帖子
+  const deletePost = async () => {
+    if (!post) return;
+
+    try {
+      setDeleteSubmitting(true);
+      
+      // 先删除相关回复
+      await apiClient.post('/rest/v1/delete', {
+        table: 'forum_replies',
+        conditions: { post_id: post.id }
+      });
+      
+      // 删除相关点赞记录
+      await apiClient.post('/rest/v1/delete', {
+        table: 'forum_likes',
+        conditions: { target_id: post.id, target_type: 'post' }
+      });
+      
+      // 删除帖子
+      await apiClient.post('/rest/v1/delete', {
+        table: 'forum_posts',
+        conditions: { id: post.id }
+      });
+
+      // 返回列表页
+      navigate('/water?tab=forum');
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      alert('删除失败');
+      setDeleteSubmitting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  // 置顶/取消置顶
+  const togglePin = async () => {
+    if (!post || !isAdmin) return;
+
+    try {
+      const newPinned = !post.is_pinned;
+      await api.db.from('forum_posts').update({ 
+        is_pinned: newPinned,
+        updated_at: new Date().toISOString()
+      }).eq('id', post.id);
+      
+      setPost(prev => prev ? { ...prev, is_pinned: newPinned } : null);
+      setShowManageMenu(false);
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+      alert('操作失败');
+    }
+  };
+
+  // 设精华/取消精华
+  const toggleEssence = async () => {
+    if (!post || !isAdmin) return;
+
+    try {
+      const newEssence = !post.is_essence;
+      await api.db.from('forum_posts').update({ 
+        is_essence: newEssence,
+        updated_at: new Date().toISOString()
+      }).eq('id', post.id);
+      
+      setPost(prev => prev ? { ...prev, is_essence: newEssence } : null);
+      setShowManageMenu(false);
+    } catch (error) {
+      console.error('Error toggling essence:', error);
+      alert('操作失败');
+    }
+  };
+
   const getCategoryStyle = (key: ForumCategory) => {
     return categories.find(c => c.key === key) || categories[4];
   };
@@ -543,13 +674,65 @@ export default function ForumPostDetailPage() {
   return (
     <div className="animate-fade-in">
       {/* 返回按钮 */}
-      <button
-        onClick={() => navigate('/water?tab=forum')}
-        className="flex items-center gap-2 text-dark-500 hover:text-dark-700 hover:bg-dark-100 rounded-lg px-3 py-2 mb-6 transition-all duration-200 ease-out"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        返回列表
-      </button>
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={() => navigate('/water?tab=forum')}
+          className="flex items-center gap-2 text-dark-500 hover:text-dark-700 hover:bg-dark-100 rounded-lg px-3 py-2 transition-all duration-200 ease-out"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          返回列表
+        </button>
+
+        {/* 管理操作按钮 */}
+        {(isAuthor || isAdmin) && (
+          <div className="flex items-center gap-2">
+            {(isAuthor || isAdmin) && (
+              <button
+                onClick={openEditModal}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-all"
+              >
+                <Edit2 className="w-4 h-4" />
+                编辑
+              </button>
+            )}
+            {isAdmin && (
+              <>
+                <button
+                  onClick={togglePin}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                    post.is_pinned
+                      ? 'text-yellow-700 bg-yellow-100 hover:bg-yellow-200'
+                      : 'text-dark-600 bg-dark-100 hover:bg-dark-200'
+                  }`}
+                >
+                  <Pin className="w-4 h-4" />
+                  {post.is_pinned ? '取消置顶' : '置顶'}
+                </button>
+                <button
+                  onClick={toggleEssence}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                    post.is_essence
+                      ? 'text-orange-700 bg-orange-100 hover:bg-orange-200'
+                      : 'text-dark-600 bg-dark-100 hover:bg-dark-200'
+                  }`}
+                >
+                  <Star className="w-4 h-4" />
+                  {post.is_essence ? '取消精华' : '设精华'}
+                </button>
+              </>
+            )}
+            {(isAuthor || isAdmin) && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+                删除
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* 帖子内容卡片 */}
       <div className="card p-6 md:p-8 mb-6">
@@ -749,6 +932,97 @@ export default function ForumPostDetailPage() {
         initialIndex={previewIndex}
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
+      />
+
+      {/* 编辑帖子弹窗 */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-dark-100 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-dark-900">编辑帖子</h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 text-dark-400 hover:text-dark-600 hover:bg-dark-100 rounded-lg transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
+              <div>
+                <label className="block text-sm font-medium text-dark-700 mb-1">分类</label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value as ForumCategory)}
+                  className="input w-full"
+                >
+                  {categories.map(cat => (
+                    <option key={cat.key} value={cat.key}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-700 mb-1">
+                  标题 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="input w-full"
+                  placeholder="请输入标题"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-700 mb-1">
+                  内容 <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={6}
+                  className="input w-full resize-none"
+                  placeholder="请输入内容"
+                  required
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-dark-100 flex justify-end gap-3">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-4 py-2 text-dark-600 hover:text-dark-800 hover:bg-dark-100 rounded-lg transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={submitEdit}
+                disabled={!editTitle.trim() || !editContent.trim() || editSubmitting}
+                className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {editSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  '保存'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认弹窗 */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={deletePost}
+        title="删除帖子"
+        message={`确定要删除帖子「${post?.title}」吗？此操作将同时删除该帖子下的所有回复，且无法恢复。`}
+        confirmText="删除"
+        cancelText="取消"
+        isLoading={deleteSubmitting}
+        type="danger"
       />
     </div>
   );

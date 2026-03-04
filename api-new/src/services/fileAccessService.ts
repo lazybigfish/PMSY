@@ -30,7 +30,8 @@ export interface FileAccessConfig {
 }
 
 // 公开访问的 bucket 列表（可以直接访问）
-const PUBLIC_BUCKETS = ['images', 'forum', 'avatars'];
+// 注意：服务器环境只有 6969 端口可外部访问，所有 bucket 都通过后端代理访问
+const PUBLIC_BUCKETS: string[] = [];
 
 // 私有 bucket 列表（需要权限控制）
 const PRIVATE_BUCKETS = ['documents', 'contracts', 'private'];

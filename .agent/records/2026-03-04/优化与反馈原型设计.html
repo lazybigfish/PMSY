@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>优化与反馈 - 原型设计</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .prototype-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .screen {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+            background: rgba(59, 130, 246, 0.05);
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-pending { background: #f3f4f6; color: #6b7280; }
+        .status-accepted { background: #fef3c7; color: #d97706; }
+        .status-rejected { background: #fee2e2; color: #dc2626; }
+        .status-developing { background: #fef3c7; color: #d97706; }
+        .status-testing { background: #fef3c7; color: #d97706; }
+        .status-ready { background: #d1fae5; color: #059669; }
+        .status-completed { background: #d1fae5; color: #059669; }
+        
+        .feedback-card {
+            transition: all 0.2s ease;
+            border: 1px solid #e5e7eb;
+        }
+        .feedback-card:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1);
+        }
+        
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        
+        .stat-card {
+            transition: all 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 图片上传占位 */
+        .image-placeholder {
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .image-placeholder:hover {
+            border-color: #3b82f6;
+            color: #3b82f6;
+        }
+
+        /* 评论样式 */
+        .comment-item {
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .comment-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body class="prototype-container p-8">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold text-white mb-8 text-center">优化与反馈 - 原型设计（已更新）</h1>
+        
+        <!-- 页面切换按钮 -->
+        <div class="flex justify-center gap-4 mb-8 flex-wrap">
+            <button onclick="showScreen('list')" class="px-6 py-2 bg-white text-purple-700 rounded-full font-medium hover:bg-opacity-90 transition">反馈列表页</button>
+            <button onclick="showScreen('detail-user')" class="px-6 py-2 bg-white text-purple-700 rounded-full font-medium hover:bg-opacity-90 transition">详情页-用户视角</button>
+            <button onclick="showScreen('detail-admin')" class="px-6 py-2 bg-white text-purple-700 rounded-full font-medium hover:bg-opacity-90 transition">详情页-管理员视角</button>
+            <button onclick="showScreen('submit')" class="px-6 py-2 bg-white text-purple-700 rounded-full font-medium hover:bg-opacity-90 transition">提交弹窗</button>
+            <button onclick="showScreen('handle')" class="px-6 py-2 bg-white text-purple-700 rounded-full font-medium hover:bg-opacity-90 transition">处理弹窗</button>
+        </div>
+
+        <!-- 屏幕1: 反馈列表页 -->
+        <div id="screen-list" class="screen max-w-5xl mx-auto overflow-hidden">
+            <!-- 头部 -->
+            <div class="bg-white border-b border-gray-200">
+                <div class="px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-blue-100 rounded-lg">
+                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h1 class="text-xl font-bold text-gray-900">水漫金山</h1>
+                                <p class="text-sm text-gray-500">分享经验，交流心得，共同成长</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tab 导航 -->
+                    <div class="flex gap-6 mt-4 border-b border-gray-200">
+                        <button class="flex items-center gap-2 pb-3 text-sm font-medium text-gray-500 hover:text-gray-700 transition-all">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            水底探宝
+                        </button>
+                        <button class="flex items-center gap-2 pb-3 text-sm font-medium tab-active px-3 -mb-px rounded-t-lg">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                            </svg>
+                            优化与反馈
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 内容区域 -->
+            <div class="p-6 bg-gray-50">
+                <!-- 标题栏 -->
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-lg font-semibold text-gray-900">优化与反馈</h2>
+                    <button onclick="showScreen('submit')" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        提交反馈
+                    </button>
+                </div>
+                
+                <!-- 统计卡片 -->
+                <div class="grid grid-cols-4 gap-4 mb-6">
+                    <div class="stat-card bg-white rounded-xl p-4 border border-gray-200">
+                        <div class="text-2xl font-bold text-gray-900">12</div>
+                        <div class="text-sm text-gray-500 mt-1">全部反馈</div>
+                    </div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-gray-200">
+                        <div class="text-2xl font-bold text-orange-600">3</div>
+                        <div class="text-sm text-gray-500 mt-1">待处理</div>
+                    </div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-gray-200">
+                        <div class="text-2xl font-bold text-blue-600">4</div>
+                        <div class="text-sm text-gray-500 mt-1">进行中</div>
+                    </div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-gray-200">
+                        <div class="text-2xl font-bold text-green-600">5</div>
+                        <div class="text-sm text-gray-500 mt-1">已完成</div>
+                    </div>
+                </div>
+                
+                <!-- 筛选栏 -->
+                <div class="flex items-center gap-3 mb-4">
+                    <select class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option>全部状态</option>
+                        <option>待处理</option>
+                        <option>进行中</option>
+                        <option>已完成</option>
+                    </select>
+                    <select class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option>全部类型</option>
+                        <option>问题反馈</option>
+                        <option>新需求</option>
+                        <option>优化建议</option>
+                    </select>
+                    <div class="flex-1"></div>
+                    <span class="text-sm text-gray-500">共 12 条反馈</span>
+                </div>
+                
+                <!-- 反馈列表 -->
+                <div class="space-y-3">
+                    <!-- 已拒绝（沉底显示） -->
+                    <div class="feedback-card bg-white rounded-xl p-4 cursor-pointer opacity-75" onclick="showScreen('detail-user')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3 flex-1">
+                                <span class="status-badge status-rejected">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                    </svg>
+                                    已拒绝
+                                </span>
+                                <div class="flex-1">
+                                    <h3 class="font-medium text-gray-900">登录页面加载慢的问题</h3>
+                                    <div class="flex items-center gap-3 mt-1">
+                                        <span class="text-sm text-gray-500">类型：问题反馈 · 提交人：张三</span>
+                                        <span class="flex items-center gap-1 text-sm text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                            </svg>
+                                            2
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-400">3天前</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 已完成（沉底显示） -->
+                    <div class="feedback-card bg-white rounded-xl p-4 cursor-pointer opacity-75" onclick="showScreen('detail-user')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3 flex-1">
+                                <span class="status-badge status-completed">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                    </svg>
+                                    已完成
+                                </span>
+                                <div class="flex-1">
+                                    <h3 class="font-medium text-gray-900">增加导出Excel功能</h3>
+                                    <div class="flex items-center gap-3 mt-1">
+                                        <span class="text-sm text-gray-500">类型：新需求 · 提交人：李四</span>
+                                        <span class="flex items-center gap-1 text-sm text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                            </svg>
+                                            8
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-400">5天前</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 待发版 -->
+                    <div class="feedback-card bg-white rounded-xl p-4 cursor-pointer" onclick="showScreen('detail-user')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3 flex-1">
+                                <span class="status-badge status-ready">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                    </svg>
+                                    待发版
+                                </span>
+                                <div class="flex-1">
+                                    <h3 class="font-medium text-gray-900">报表筛选条件记忆功能</h3>
+                                    <div class="flex items-center gap-3 mt-1">
+                                        <span class="text-sm text-gray-500">类型：优化建议 · 提交人：王五</span>
+                                        <span class="flex items-center gap-1 text-sm text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                            </svg>
+                                            3
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-400">1周前</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 测试中 -->
+                    <div class="feedback-card bg-white rounded-xl p-4 cursor-pointer" onclick="showScreen('detail-user')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3 flex-1">
+                                <span class="status-badge status-testing">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                    </svg>
+                                    测试中
+                                </span>
+                                <div class="flex-1">
+                                    <h3 class="font-medium text-gray-900">移动端适配优化</h3>
+                                    <div class="flex items-center gap-3 mt-1">
+                                        <span class="text-sm text-gray-500">类型：优化建议 · 提交人：赵六</span>
+                                        <span class="flex items-center gap-1 text-sm text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                            </svg>
+                                            5
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-400">3天前</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 开发中 -->
+                    <div class="feedback-card bg-white rounded-xl p-4 cursor-pointer" onclick="showScreen('detail-user')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3 flex-1">
+                                <span class="status-badge status-developing">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+                                    </svg>
+                                    开发中
+                                </span>
+                                <div class="flex-1">
+                                    <h3 class="font-medium text-gray-900">希望增加暗黑模式</h3>
+                                    <div class="flex items-center gap-3 mt-1">
+                                        <span class="text-sm text-gray-500">类型：优化建议 · 提交人：王五</span>
+                                        <span class="flex items-center gap-1 text-sm text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                            </svg>
+                                            12
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-400">1周前</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 已接受 -->
+                    <div class="feedback-card bg-white rounded-xl p-4 cursor-pointer" onclick="showScreen('detail-user')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3 flex-1">
+                                <span class="status-badge status-accepted">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                    </svg>
+                                    已接受
+                                </span>
+                                <div class="flex-1">
+                                    <h3 class="font-medium text-gray-900">任务批量操作功能</h3>
+                                    <div class="flex items-center gap-3 mt-1">
+                                        <span class="text-sm text-gray-500">类型：新需求 · 提交人：李四</span>
+                                        <span class="flex items-center gap-1 text-sm text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                            </svg>
+                                            6
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-400">2天前</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 待处理 -->
+                    <div class="feedback-card bg-white rounded-xl p-4 cursor-pointer" onclick="showScreen('detail-user')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start gap-3 flex-1">
+                                <span class="status-badge status-pending">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                                    </svg>
+                                    待处理
+                                </span>
+                                <div class="flex-1">
+                                    <h3 class="font-medium text-gray-900">报表页面数据显示不正确</h3>
+                                    <div class="flex items-center gap-3 mt-1">
+                                        <span class="text-sm text-gray-500">类型：问题反馈 · 提交人：赵六</span>
+                                        <span class="flex items-center gap-1 text-sm text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                            </svg>
+                                            0
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-400">2小时前</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 屏幕2: 详情页-用户视角 -->
+        <div id="screen-detail-user" class="screen max-w-3xl mx-auto overflow-hidden hidden">
+            <div class="bg-white">
+                <!-- 头部 -->
+                <div class="border-b border-gray-200 px-6 py-4">
+                    <button onclick="showScreen('list')" class="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                        </svg>
+                        返回列表
+                    </button>
+                </div>
+                
+                <!-- 内容 -->
+                <div class="p-6">
+                    <!-- 标题和状态 -->
+                    <div class="flex items-start justify-between mb-4">
+                        <h1 class="text-xl font-bold text-gray-900">报表页面数据显示不正确</h1>
+                        <span class="status-badge status-pending">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                            </svg>
+                            待处理
+                        </span>
+                    </div>
+                    
+                    <!-- 元信息 -->
+                    <div class="flex items-center gap-4 text-sm text-gray-500 mb-6 pb-6 border-b border-gray-200">
+                        <span>类型：问题反馈</span>
+                        <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                        <span>提交人：赵六</span>
+                        <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                        <span>2小时前</span>
+                    </div>
+                    
+                    <!-- 问题描述 -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-2">问题描述</h3>
+                        <p class="text-gray-700 leading-relaxed">
+                            在查看项目报表时，发现部分数据没有正确显示，特别是金额字段显示为0，但实际应该有数值。
+                            <br><br>
+                            复现步骤：<br>
+                            1. 进入项目管理页面<br>
+                            2. 点击报表 tab<br>
+                            3. 选择时间范围为"本月"<br>
+                            4. 查看金额列，发现显示为0
+                        </p>
+                    </div>
+                    
+                    <!-- 图片 -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">相关截图</h3>
+                        <div class="flex gap-3">
+                            <div class="w-24 h-24 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400">
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                            </div>
+                            <div class="w-24 h-24 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400">
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 处理记录 -->
+                    <div class="bg-gray-50 rounded-xl p-4 mb-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">处理记录</h3>
+                        <p class="text-sm text-gray-500">暂无处理记录</p>
+                    </div>
+                    
+                    <!-- 评论区 -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
+                            评论 
+                            <span class="text-gray-400 font-normal">(3)</span>
+                        </h3>
+                        
+                        <!-- 评论列表 -->
+                        <div class="space-y-4 mb-6">
+                            <!-- 评论1 -->
+                            <div class="comment-item pb-4">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-sm font-medium">
+                                        张
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="font-medium text-gray-900">张三</span>
+                                            <span class="text-xs text-gray-400">1小时前</span>
+                                        </div>
+                                        <p class="text-gray-700 text-sm">我也遇到了同样的问题，希望能尽快修复</p>
+                                        <button class="text-xs text-blue-600 hover:text-blue-700 mt-2">回复</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 评论2 - 回复 -->
+                            <div class="comment-item pb-4 pl-11">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-sm font-medium">
+                                        李
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="font-medium text-gray-900">李四</span>
+                                            <span class="text-xs text-gray-400">30分钟前</span>
+                                        </div>
+                                        <p class="text-gray-700 text-sm">
+                                            <span class="text-blue-600">@张三</span> 是的，这个问题挺影响使用的，特别是在月底出报表的时候
+                                        </p>
+                                        <button class="text-xs text-blue-600 hover:text-blue-700 mt-2">回复</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 评论3 -->
+                            <div class="comment-item pb-4">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 text-sm font-medium">
+                                        王
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="font-medium text-gray-900">王五</span>
+                                            <span class="text-xs text-gray-400">10分钟前</span>
+                                        </div>
+                                        <p class="text-gray-700 text-sm">+1，期待修复</p>
+                                        <button class="text-xs text-blue-600 hover:text-blue-700 mt-2">回复</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 发表评论 -->
+                        <div class="bg-gray-50 rounded-xl p-4">
+                            <textarea rows="3" placeholder="发表你的评论..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white"></textarea>
+                            <div class="flex justify-end mt-3">
+                                <button class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">
+                                    发表评论
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 屏幕3: 详情页-管理员视角 -->
+        <div id="screen-detail-admin" class="screen max-w-3xl mx-auto overflow-hidden hidden">
+            <div class="bg-white">
+                <!-- 头部 -->
+                <div class="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                    <button onclick="showScreen('list')" class="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                        </svg>
+                        返回列表
+                    </button>
+                    <button onclick="showScreen('handle')" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">
+                        处理反馈
+                    </button>
+                </div>
+                
+                <!-- 内容 -->
+                <div class="p-6">
+                    <!-- 标题和状态 -->
+                    <div class="flex items-start justify-between mb-4">
+                        <h1 class="text-xl font-bold text-gray-900">报表页面数据显示不正确</h1>
+                        <span class="status-badge status-pending">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                            </svg>
+                            待处理
+                        </span>
+                    </div>
+                    
+                    <!-- 元信息 -->
+                    <div class="flex items-center gap-4 text-sm text-gray-500 mb-6 pb-6 border-b border-gray-200">
+                        <span>类型：问题反馈</span>
+                        <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                        <span>提交人：赵六</span>
+                        <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                        <span>2小时前</span>
+                    </div>
+                    
+                    <!-- 问题描述 -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-2">问题描述</h3>
+                        <p class="text-gray-700 leading-relaxed">
+                            在查看项目报表时，发现部分数据没有正确显示，特别是金额字段显示为0，但实际应该有数值。
+                            <br><br>
+                            复现步骤：<br>
+                            1. 进入项目管理页面<br>
+                            2. 点击报表 tab<br>
+                            3. 选择时间范围为"本月"<br>
+                            4. 查看金额列，发现显示为0
+                        </p>
+                    </div>
+                    
+                    <!-- 图片 -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">相关截图</h3>
+                        <div class="flex gap-3">
+                            <div class="w-24 h-24 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400">
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                            </div>
+                            <div class="w-24 h-24 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400">
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 处理记录 -->
+                    <div class="bg-gray-50 rounded-xl p-4 mb-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">处理记录</h3>
+                        <p class="text-sm text-gray-500">暂无处理记录</p>
+                    </div>
+                    
+                    <!-- 评论区 -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
+                            评论 
+                            <span class="text-gray-400 font-normal">(3)</span>
+                        </h3>
+                        
+                        <!-- 评论列表 -->
+                        <div class="space-y-4 mb-6">
+                            <!-- 评论1 -->
+                            <div class="comment-item pb-4">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-sm font-medium">
+                                        张
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="font-medium text-gray-900">张三</span>
+                                            <span class="text-xs text-gray-400">1小时前</span>
+                                        </div>
+                                        <p class="text-gray-700 text-sm">我也遇到了同样的问题，希望能尽快修复</p>
+                                        <div class="flex items-center gap-3 mt-2">
+                                            <button class="text-xs text-blue-600 hover:text-blue-700">回复</button>
+                                            <button class="text-xs text-red-600 hover:text-red-700">删除</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 评论2 - 回复 -->
+                            <div class="comment-item pb-4 pl-11">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-sm font-medium">
+                                        李
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="font-medium text-gray-900">李四</span>
+                                            <span class="text-xs text-gray-400">30分钟前</span>
+                                        </div>
+                                        <p class="text-gray-700 text-sm">
+                                            <span class="text-blue-600">@张三</span> 是的，这个问题挺影响使用的，特别是在月底出报表的时候
+                                        </p>
+                                        <div class="flex items-center gap-3 mt-2">
+                                            <button class="text-xs text-blue-600 hover:text-blue-700">回复</button>
+                                            <button class="text-xs text-red-600 hover:text-red-700">删除</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 评论3 -->
+                            <div class="comment-item pb-4">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 text-sm font-medium">
+                                        王
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="font-medium text-gray-900">王五</span>
+                                            <span class="text-xs text-gray-400">10分钟前</span>
+                                        </div>
+                                        <p class="text-gray-700 text-sm">+1，期待修复</p>
+                                        <div class="flex items-center gap-3 mt-2">
+                                            <button class="text-xs text-blue-600 hover:text-blue-700">回复</button>
+                                            <button class="text-xs text-red-600 hover:text-red-700">删除</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 发表评论 -->
+                        <div class="bg-gray-50 rounded-xl p-4">
+                            <textarea rows="3" placeholder="发表你的评论..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white"></textarea>
+                            <div class="flex justify-end mt-3">
+                                <button class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">
+                                    发表评论
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 屏幕4: 提交反馈弹窗 -->
+        <div id="screen-submit" class="hidden">
+            <div class="modal-overlay fixed inset-0 flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                    <!-- 头部 -->
+                    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">提交反馈</h3>
+                        <button onclick="showScreen('list')" class="text-gray-400 hover:text-gray-600 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <!-- 表单 -->
+                    <div class="p-6 space-y-4">
+                        <!-- 反馈类型 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                反馈类型 <span class="text-red-500">*</span>
+                            </label>
+                            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">请选择类型</option>
+                                <option value="bug">问题反馈</option>
+                                <option value="feature">新需求</option>
+                                <option value="improvement">优化建议</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 标题 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                标题 <span class="text-red-500">*</span>
+                            </label>
+                            <input type="text" placeholder="简要描述你的反馈" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        
+                        <!-- 详细描述 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                详细描述 <span class="text-red-500">*</span>
+                            </label>
+                            <textarea rows="4" placeholder="请详细描述问题或需求，如果是Bug请提供复现步骤..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"></textarea>
+                        </div>
+                        
+                        <!-- 上传图片 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                上传图片 <span class="text-gray-400 font-normal">（可选，最多3张）</span>
+                            </label>
+                            <div class="flex gap-3">
+                                <div class="image-placeholder w-20 h-20">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                </div>
+                                <div class="image-placeholder w-20 h-20">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                </div>
+                                <div class="image-placeholder w-20 h-20">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 底部按钮 -->
+                    <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
+                        <button onclick="showScreen('list')" class="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium transition">
+                            取消
+                        </button>
+                        <button onclick="showScreen('list')" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">
+                            提交
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 屏幕5: 处理反馈弹窗 -->
+        <div id="screen-handle" class="hidden">
+            <div class="modal-overlay fixed inset-0 flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                    <!-- 头部 -->
+                    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">处理反馈</h3>
+                        <button onclick="showScreen('detail-admin')" class="text-gray-400 hover:text-gray-600 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <!-- 表单 -->
+                    <div class="p-6 space-y-4">
+                        <!-- 处理结果 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-3">处理结果</label>
+                            <div class="space-y-2">
+                                <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition">
+                                    <input type="radio" name="result" value="accept" class="w-4 h-4 text-blue-600">
+                                    <div>
+                                        <div class="font-medium text-gray-900">接受</div>
+                                        <div class="text-sm text-gray-500">该反馈将进入开发流程</div>
+                                    </div>
+                                </label>
+                                <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition">
+                                    <input type="radio" name="result" value="reject" class="w-4 h-4 text-blue-600" checked>
+                                    <div>
+                                        <div class="font-medium text-gray-900">拒绝</div>
+                                        <div class="text-sm text-gray-500">该反馈不会被采纳</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- 拒绝原因 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                拒绝原因 <span class="text-gray-400 font-normal">（可选）</span>
+                            </label>
+                            <textarea rows="3" placeholder="请说明拒绝的原因，方便用户理解..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- 底部按钮 -->
+                    <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
+                        <button onclick="showScreen('detail-admin')" class="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium transition">
+                            取消
+                        </button>
+                        <button onclick="showScreen('detail-admin')" class="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition">
+                            确认拒绝
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showScreen(screenName) {
+            // 隐藏所有屏幕
+            document.querySelectorAll('[id^="screen-"]').forEach(el => {
+                el.classList.add('hidden');
+            });
+            
+            // 显示目标屏幕
+            const targetScreen = document.getElementById('screen-' + screenName);
+            if (targetScreen) {
+                targetScreen.classList.remove('hidden');
+            }
+        }
+        
+        // 默认显示列表页
+        showScreen('list');
+    </script>
+</body>
+</html>

@@ -86,7 +86,6 @@ const TABLE_DEFINITIONS: TableDefinition[] = [
   { name: 'risks', dependencies: ['projects', 'profiles'] },
   { name: 'files', dependencies: ['projects', 'folders', 'profiles'] },
   { name: 'storage_quotas', dependencies: ['projects'] },
-  { name: 'hot_news', dependencies: ['profiles'] },
   
   // 第四层
   { name: 'tasks', dependencies: ['projects', 'project_modules', 'project_milestones', 'profiles'] },

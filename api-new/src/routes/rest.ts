@@ -387,17 +387,53 @@ router.post('/:table', requireAuth, async (req: Request, res: Response, next: Ne
     const isBatchInsert = Array.isArray(data);
     const dataArray = isBatchInsert ? data : [data];
 
-    // 获取表的列信息，检查是否有 created_by 字段
+    // 获取表的列信息，检查是否有 created_by、created_by_name、created_by_avatar 字段
     const columns = await dbService.getTableColumns(table);
     const hasCreatedBy = columns.includes('created_by');
+    const hasCreatedByName = columns.includes('created_by_name');
+    const hasCreatedByAvatar = columns.includes('created_by_avatar');
 
-    // 处理数据：添加 created_by 并处理 JSONB 字段
+    // 获取当前用户信息
+    let currentUserName = req.user?.email || '';
+    let currentUserAvatar = '';
+    if (req.user?.sub) {
+      try {
+        const { db } = await import('../config/database');
+        const profile = await db('profiles')
+          .where('id', req.user.sub)
+          .select('full_name', 'avatar_url')
+          .first();
+        if (profile?.full_name) {
+          currentUserName = profile.full_name;
+        }
+        if (profile?.avatar_url) {
+          currentUserAvatar = profile.avatar_url;
+        }
+      } catch (e) {
+        // 如果查询失败，使用 email
+      }
+    }
+
+    // 处理数据：添加 created_by 和 created_by_name 并处理 JSONB 字段
+    console.log('[REST] Insert into', table, '- hasCreatedBy:', hasCreatedBy, 'hasCreatedByName:', hasCreatedByName, 'currentUserName:', currentUserName);
+    
     const insertData = dataArray.map(item => {
       const processedItem: any = { ...item };
       
       // 添加创建者 ID（仅当表有 created_by 字段时）
       if (hasCreatedBy && req.user?.sub) {
         processedItem.created_by = req.user.sub;
+      }
+      
+      // 添加创建者名称（仅当表有 created_by_name 字段时）
+      if (hasCreatedByName && currentUserName) {
+        processedItem.created_by_name = currentUserName;
+        console.log('[REST] Added created_by_name:', currentUserName);
+      }
+      
+      // 添加创建者头像（仅当表有 created_by_avatar 字段时）
+      if (hasCreatedByAvatar && currentUserAvatar) {
+        processedItem.created_by_avatar = currentUserAvatar;
       }
       
       // 处理 JSONB 字段：确保它们是对象/数组而不是字符串
@@ -549,6 +585,49 @@ router.patch('/:table/:id', requireAuth, async (req: Request, res: Response, nex
     // 添加更新者 ID（仅当表有 updated_by 字段时）
     if (hasUpdatedBy && userId) {
       updateData.updated_by = userId;
+    }
+
+    // 如果是 feedback 表且更新了状态，记录状态历史
+    if (table === 'feedback' && updateData.status && id) {
+      try {
+        console.log('[REST] Checking status update for feedback:', id, 'new status:', updateData.status);
+        // 获取当前反馈的状态
+        const currentFeedback = await dbService.findById(table, id, 'status');
+        console.log('[REST] Current feedback status:', currentFeedback?.status);
+        if (currentFeedback && currentFeedback.status !== updateData.status) {
+          console.log('[REST] Status changed, recording history...');
+          // 获取当前用户信息
+          let currentUserName = req.user?.email || '';
+          if (req.user?.sub) {
+            const { db } = await import('../config/database');
+            const profile = await db('profiles')
+              .where('id', req.user.sub)
+              .select('full_name')
+              .first();
+            if (profile?.full_name) {
+              currentUserName = profile.full_name;
+            }
+          }
+          
+          // 插入状态历史记录
+          const historyRecord = {
+            feedback_id: id,
+            from_status: currentFeedback.status,
+            to_status: updateData.status,
+            remark: updateData.remark || null,
+            created_by: userId,
+            created_by_name: currentUserName,
+          };
+          console.log('[REST] Inserting status history:', historyRecord);
+          await dbService.insert('feedback_status_history', historyRecord);
+          console.log('[REST] Status history recorded successfully');
+        } else {
+          console.log('[REST] Status not changed or feedback not found, skipping history');
+        }
+      } catch (historyError) {
+        console.error('[REST] Failed to record status history:', historyError);
+        // 不影响主流程，继续执行
+      }
     }
 
     // 调用 dbService.updateById，传递 currentUserId 供触发器使用

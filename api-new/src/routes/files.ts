@@ -14,11 +14,11 @@ const router = Router();
 
 /**
  * GET /api/files/:bucket/:path(*)
- * 通过后端代理访问文件（需要认证，支持权限控制）
+ * 通过后端代理访问文件（公开访问，无需认证）
+ * 注意：图片等静态资源需要公开访问，因为前端 <img> 标签无法携带认证信息
  */
 router.get(
   '/:bucket/:path(*)',
-  requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { bucket } = req.params;
@@ -79,7 +79,7 @@ router.get(
         logger.warn('[Files] Failed to update view count:', error);
       }
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 );
@@ -129,12 +129,12 @@ router.post(
         })
       );
 
-      res.json({
+      return res.json({
         success: true,
         data: results,
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 );

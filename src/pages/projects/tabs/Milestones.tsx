@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { api, apiClient } from '../../../lib/api';
-import { Flag, Plus, Search, Download, Archive } from 'lucide-react';
+import { Flag, Plus, Search, Download, Archive, Save, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 import { MilestoneSidebar } from '../components/MilestoneSidebar';
 import { MilestoneTaskList } from '../components/MilestoneTaskList';
+import { MilestoneInitGuide } from '../components/MilestoneInitGuide';
+import { SaveAsTemplateModal } from '../components/SaveAsTemplateModal';
+import { TemplateSelectionModal } from '../components/TemplateSelectionModal';
 import { ModalForm } from '../../../components/Modal';
+import { checkMilestoneInitStatus, initProjectMilestones } from '../../../services/projectService';
 import JSZip from 'jszip';
 
 interface Milestone {
@@ -28,7 +32,7 @@ interface MilestoneTask {
   is_completed: boolean;
   completed_at: string;
   completed_by: string;
-  output_documents: { name: string; url?: string; uploaded_at?: string; uploaded_by?: string; required?: boolean }[];
+  output_documents: { name: string; url?: string; uploaded_at?: string; uploaded_by?: string; is_required?: boolean }[];
   is_custom?: boolean;
 }
 
@@ -42,6 +46,8 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
   const { user } = useAuth();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initChecked, setInitChecked] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [tasksByMilestone, setTasksByMilestone] = useState<Record<string, MilestoneTask[]>>({});
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'pending'>('all');
@@ -54,6 +60,8 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
   const [docForm, setDocForm] = useState({ name: '', url: '' });
   const [showAddMilestoneModal, setShowAddMilestoneModal] = useState(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [showReinitModal, setShowReinitModal] = useState(false);
   const [newMilestoneForm, setNewMilestoneForm] = useState({ 
     name: '', 
     description: '', 
@@ -64,14 +72,56 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
     name: '', 
     description: '', 
     is_required: false,
-    output_documents: [] as { name: string; required: boolean }[]
+    output_documents: [] as { name: string; is_required: boolean }[]
   });
 
   useEffect(() => {
     if (projectId) {
-      fetchMilestones();
+      checkInitStatus();
     }
   }, [projectId]);
+
+  // 检查里程碑初始化状态
+  const checkInitStatus = async () => {
+    try {
+      setLoading(true);
+      const status = await checkMilestoneInitStatus(projectId);
+      setInitChecked(true);
+      setIsInitialized(status.initialized);
+      
+      if (status.initialized) {
+        // 已初始化，获取里程碑数据
+        await fetchMilestones();
+      }
+    } catch (error) {
+      console.error('Error checking init status:', error);
+      alert('检查初始化状态失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 初始化里程碑
+  const handleInitMilestones = async (templateId?: string) => {
+    try {
+      setLoading(true);
+      const result = await initProjectMilestones(projectId, templateId);
+      
+      if (result.success) {
+        setIsInitialized(true);
+        alert(result.message || '初始化成功');
+        // 重新获取里程碑数据
+        await fetchMilestones();
+      } else {
+        alert(result.message || '初始化失败');
+      }
+    } catch (error: any) {
+      console.error('Error initializing milestones:', error);
+      alert(error.message || '初始化失败');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchMilestones = async () => {
     try {
@@ -288,8 +338,8 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
     const doc = task.output_documents?.[docIndex];
     if (!doc) return;
 
-    // 判断是否是预设附件：有 required 字段的是预设附件
-    const isPresetDoc = 'required' in doc;
+    // 判断是否是预设附件：有 is_required 字段的是预设附件
+    const isPresetDoc = 'is_required' in doc;
 
     const confirmMessage = isPresetDoc
       ? `确定要清除附件"${doc.name}"吗？清除后可以重新上传。`
@@ -316,10 +366,10 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
       const docs = [...(task.output_documents || [])];
 
       if (isPresetDoc) {
-        // 预设附件：只清除文件相关字段，保留 name 和 required
+        // 预设附件：只清除文件相关字段，保留 name 和 is_required
         docs[docIndex] = {
           name: doc.name,
-          required: (doc as any).required
+          is_required: (doc as any).is_required
         };
       } else {
         // 自定义附件：完全删除
@@ -352,6 +402,13 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
 
   const handleDeleteMilestone = async (e: React.MouseEvent, milestone: Milestone) => {
     e.stopPropagation();
+    
+    // 检查是否只剩下一个阶段
+    if (milestones.length <= 1) {
+      alert('至少保留一个阶段，无法删除');
+      return;
+    }
+    
     if (!confirm(`确定要删除阶段"${milestone.name}"吗？`)) return;
 
     await apiClient.post('/rest/v1/delete', {
@@ -359,6 +416,34 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
       conditions: { id: milestone.id }
     });
     fetchMilestones();
+  };
+
+  // 处理重新初始化
+  const handleReinitialize = () => {
+    if (!confirm('重新初始化将删除所有里程碑阶段、任务及相关附件，此操作不可恢复。确定要继续吗？')) {
+      return;
+    }
+    setShowReinitModal(true);
+  };
+
+  // 处理重新初始化确认
+  const handleReinitConfirm = async (templateId: string | null) => {
+    setShowReinitModal(false);
+    
+    try {
+      // 调用后端API删除现有里程碑并重新初始化
+      await apiClient.post(`/api/projects/${projectId}/milestones/reinitialize`, {
+        templateId: templateId
+      });
+      
+      alert(templateId ? '已使用模板重新初始化里程碑' : '已清空里程碑，请自定义配置');
+      
+      // 刷新里程碑列表（fetchMilestones 会自动选中第一个阶段）
+      await fetchMilestones();
+    } catch (error) {
+      console.error('重新初始化失败:', error);
+      alert('重新初始化失败，请重试');
+    }
   };
 
   const handleAddMilestone = async (e: React.FormEvent) => {
@@ -433,20 +518,40 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
     e.preventDefault();
     if (!newTaskForm.name || !selectedMilestoneId) return;
 
-    await api.db.from('milestone_tasks').insert({
-      milestone_id: selectedMilestoneId,
-      name: newTaskForm.name,
-      description: newTaskForm.description,
-      is_required: newTaskForm.is_required,
-      is_completed: false,
-      is_custom: true,
-      output_documents: newTaskForm.output_documents
-    });
+    try {
+      // 暂时不发送 output_documents，使用数据库默认值
+      const insertData: any = {
+        milestone_id: selectedMilestoneId,
+        name: newTaskForm.name,
+        description: newTaskForm.description,
+        is_required: newTaskForm.is_required,
+        is_completed: false,
+        is_custom: true
+      };
+      
+      // 只有在有输出物时才添加
+      if (newTaskForm.output_documents && newTaskForm.output_documents.length > 0) {
+        insertData.output_documents = newTaskForm.output_documents;
+      }
+      
+      // 使用 apiClient 直接发送请求
+      await apiClient.post('/rest/v1/milestone_tasks', insertData);
 
-    fetchMilestoneTasks(selectedMilestoneId);
-    fetchMilestones();
-    setShowAddTaskModal(false);
-    setNewTaskForm({ name: '', description: '', is_required: false, output_documents: [] });
+      // const { error } = await api.db.from('milestone_tasks').insert(insertData);
+      // if (error) {
+      //   console.error('Error adding task:', error);
+      //   alert('添加任务失败: ' + error.message);
+      //   return;
+      // }
+
+      fetchMilestoneTasks(selectedMilestoneId);
+      fetchMilestones();
+      setShowAddTaskModal(false);
+      setNewTaskForm({ name: '', description: '', is_required: false, output_documents: [] });
+    } catch (error: any) {
+      console.error('Error adding task:', error);
+      alert('添加任务失败: ' + (error.message || '未知错误'));
+    }
   };
 
   const getFilteredTasks = (milestoneId: string) => {
@@ -608,7 +713,18 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
   const selectedMilestone = milestones.find(m => m.id === selectedMilestoneId);
   const filteredTasks = selectedMilestoneId ? getFilteredTasks(selectedMilestoneId) : [];
 
-  if (loading) return <div className="p-4 text-center">加载中...</div>;
+  if (loading && !initChecked) return <div className="p-4 text-center">加载中...</div>;
+
+  // 如果未初始化，显示初始化引导
+  if (!isInitialized) {
+    return (
+      <MilestoneInitGuide
+        projectId={projectId}
+        onInit={handleInitMilestones}
+        loading={loading}
+      />
+    );
+  }
 
   return (
     <div className="h-full flex">
@@ -639,6 +755,22 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowSaveTemplateModal(true)}
+                    className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 h-[38px] whitespace-nowrap"
+                    title="将当前里程碑保存为模板"
+                  >
+                    <Save className="h-4 w-4 mr-1 flex-shrink-0" />
+                    保存为模板
+                  </button>
+                  <button
+                    onClick={handleReinitialize}
+                    className="inline-flex items-center px-3 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 h-[38px] whitespace-nowrap"
+                    title="重新初始化里程碑，将删除现有里程碑及附件"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-1 flex-shrink-0" />
+                    重新初始化
+                  </button>
                   <button
                     onClick={() => downloadMilestoneDocs(selectedMilestone)}
                     className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 h-[38px] whitespace-nowrap"
@@ -830,6 +962,27 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
         </div>
       </ModalForm>
 
+      {/* Save as Template Modal */}
+      <SaveAsTemplateModal
+        isOpen={showSaveTemplateModal}
+        onClose={() => setShowSaveTemplateModal(false)}
+        projectId={projectId}
+        milestones={milestones.map(m => ({
+          ...m,
+          tasks: tasksByMilestone[m.id] || [],
+        }))}
+        onSuccess={() => {
+          alert('模板保存成功');
+        }}
+      />
+
+      {/* Reinitialize Modal */}
+      <TemplateSelectionModal
+        isOpen={showReinitModal}
+        onClose={() => setShowReinitModal(false)}
+        onSelect={handleReinitConfirm}
+      />
+
       {/* Add Task Modal */}
       <ModalForm
         isOpen={showAddTaskModal}
@@ -889,10 +1042,10 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
                   <label className="flex items-center text-sm">
                     <input
                       type="checkbox"
-                      checked={doc.required}
+                      checked={doc.is_required}
                       onChange={(e) => {
                         const newDocs = [...newTaskForm.output_documents];
-                        newDocs[index].required = e.target.checked;
+                        newDocs[index].is_required = e.target.checked;
                         setNewTaskForm({ ...newTaskForm, output_documents: newDocs });
                       }}
                       className="h-4 w-4 rounded mr-1"
@@ -916,7 +1069,7 @@ export default function Milestones({ projectId, projectName = '', canEdit = true
                 onClick={() => {
                   setNewTaskForm({
                     ...newTaskForm,
-                    output_documents: [...newTaskForm.output_documents, { name: '', required: true }]
+                    output_documents: [...newTaskForm.output_documents, { name: '', is_required: true }]
                   });
                 }}
                 className="text-indigo-600 hover:text-indigo-800 text-sm"

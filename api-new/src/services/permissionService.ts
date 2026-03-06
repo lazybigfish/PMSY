@@ -233,6 +233,22 @@ const tablePermissions: Record<string, TablePermission> = {
       resourceField: 'project_id',
     },
   },
+  project_milestones: {
+    adminRoles: ['admin'],
+    memberCheck: {
+      table: 'project_members',
+      userField: 'user_id',
+      resourceField: 'project_id',
+    },
+  },
+  milestone_tasks: {
+    adminRoles: ['admin'],
+    memberCheck: {
+      table: 'project_members',
+      userField: 'user_id',
+      resourceField: 'project_id',
+    },
+  },
   // 系统表 - 仅管理员可访问
   app_roles: {
     adminRoles: ['admin'],

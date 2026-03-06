@@ -4,7 +4,6 @@
 
 import React, { useState } from 'react';
 import { ModalForm } from '../../../components/Modal';
-import { ImageUploader } from '../../../components/upload/ImageUploader';
 import { useCreateFeedback } from '../../../hooks/useFeedback';
 import {
   FeedbackType,
@@ -29,7 +28,6 @@ export function FeedbackSubmitModal({
     type: 'bug',
     images: [],
   });
-  const [images, setImages] = useState<string[]>([]);
 
   const { createFeedback, loading } = useCreateFeedback();
 
@@ -43,7 +41,7 @@ export function FeedbackSubmitModal({
     try {
       await createFeedback({
         ...formData,
-        images,
+        images: [],
       });
       onSuccess?.();
       handleClose();
@@ -59,7 +57,6 @@ export function FeedbackSubmitModal({
       type: 'bug',
       images: [],
     });
-    setImages([]);
     onClose();
   };
 
@@ -128,21 +125,6 @@ export function FeedbackSubmitModal({
           />
         </div>
 
-        {/* 上传图片 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            上传图片 <span className="text-gray-400 font-normal">（可选，最多3张）</span>
-          </label>
-          <ImageUploader
-            value={images}
-            onChange={setImages}
-            maxCount={3}
-            maxSize={5 * 1024 * 1024}
-            compress="post"
-            bucket="images"
-            folder="feedback"
-          />
-        </div>
       </div>
     </ModalForm>
   );

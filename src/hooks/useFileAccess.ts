@@ -52,7 +52,7 @@ async function getMinioConfig(): Promise<MinioConfig> {
   }
 
   try {
-    const response = await apiClient.get('/api/files/config');
+    const response = await apiClient.get('/files/config');
     if (response.data?.success) {
       minioConfigCache = response.data.data;
       return minioConfigCache;
@@ -111,7 +111,7 @@ async function getPresignedUrl(
   expirySeconds: number = 3600
 ): Promise<string> {
   try {
-    const response = await apiClient.post('/api/files/presigned-urls', {
+    const response = await apiClient.post('/files/presigned-urls', {
       files: [{ bucket, filePath }],
       expirySeconds,
     });

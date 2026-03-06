@@ -14,6 +14,13 @@ import { checkTablePermission } from '../services/permissionService';
 
 const router = Router();
 
+// 全局 POST 请求调试
+router.post('*', (req: Request, res: Response, next: NextFunction) => {
+  console.log('[REST] Global POST handler:', req.path);
+  console.log('[REST] Request body:', JSON.stringify(req.body));
+  next();
+});
+
 /**
  * 解析查询参数
  * 将 URL 查询参数转换为 QueryOptions
@@ -375,6 +382,9 @@ router.post('/:table', requireAuth, async (req: Request, res: Response, next: Ne
     const { select } = req.query;
     const data = req.body;
 
+    console.log('[REST] POST /:table called, table:', table);
+    console.log('[REST] Request body:', JSON.stringify(data));
+
     if (!validateTableName(table)) {
       throw new ValidationError('无效的表名');
     }
@@ -416,6 +426,7 @@ router.post('/:table', requireAuth, async (req: Request, res: Response, next: Ne
 
     // 处理数据：添加 created_by 和 created_by_name 并处理 JSONB 字段
     console.log('[REST] Insert into', table, '- hasCreatedBy:', hasCreatedBy, 'hasCreatedByName:', hasCreatedByName, 'currentUserName:', currentUserName);
+    console.log('[REST] Raw request body:', JSON.stringify(data));
     
     const insertData = dataArray.map(item => {
       const processedItem: any = { ...item };
@@ -465,7 +476,20 @@ router.post('/:table', requireAuth, async (req: Request, res: Response, next: Ne
       return processedItem;
     });
 
-    const result = await dbService.insert(table, isBatchInsert ? insertData : insertData[0], select as string);
+    console.log('[REST] Insert data before dbService.insert:', JSON.stringify(insertData));
+    
+    // 处理 JSONB 字段：确保它们是字符串格式，让 PostgreSQL 自动解析
+    const processedInsertData = insertData.map((item: any) => {
+      const processed = { ...item };
+      if (table === 'milestone_tasks' && processed.output_documents) {
+        // 将数组转换为 JSON 字符串
+        processed.output_documents = JSON.stringify(processed.output_documents);
+      }
+      return processed;
+    });
+    
+    console.log('[REST] Processed insert data:', JSON.stringify(processedInsertData));
+    const result = await dbService.insert(table, isBatchInsert ? processedInsertData : processedInsertData[0], select as string);
     
     res.status(201).json(result);
   } catch (error) {

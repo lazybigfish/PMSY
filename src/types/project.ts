@@ -16,6 +16,8 @@ export interface Project {
   status: ProjectStatus;
   manager_id: string | null;
   current_milestone_id: string | null;
+  start_date: string | null;  // 开工日期
+  end_date: string | null;    // 结束日期
   created_at: string;
   updated_at: string;
 }

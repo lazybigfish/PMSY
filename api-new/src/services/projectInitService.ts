@@ -29,30 +29,49 @@ export interface TaskTemplate {
 
 /**
  * 根据里程碑模板初始化项目里程碑和任务
+ * @param projectId 项目ID
+ * @param createdBy 创建者ID
+ * @param templateVersionId 指定的模板版本ID（可选，不传则使用当前激活的模板）
  */
 export async function initializeProjectMilestones(
   projectId: string,
-  createdBy: string
+  createdBy: string,
+  templateVersionId?: string
 ): Promise<{ success: boolean; firstMilestoneId?: string; error?: string }> {
   const trx = await db.transaction();
 
   try {
-    // 1. 获取当前激活的模板版本
-    const activeVersion = await trx('template_versions')
-      .where('is_active', true)
-      .first();
+    let activeVersion;
+    
+    if (templateVersionId) {
+      // 使用指定的模板版本
+      activeVersion = await trx('template_versions')
+        .where('id', templateVersionId)
+        .first();
+      
+      if (!activeVersion) {
+        await trx.rollback();
+        return { success: false, error: '指定的模板版本不存在' };
+      }
+      
+      logger.info(`[ProjectInit] 使用指定模板版本: ${activeVersion.name} (v${activeVersion.version_number})`);
+    } else {
+      // 获取当前激活的模板版本
+      activeVersion = await trx('template_versions')
+        .where('is_active', true)
+        .first();
 
-    if (!activeVersion) {
-      await trx.rollback();
-      return { success: false, error: '没有激活的里程碑模板版本' };
+      if (!activeVersion) {
+        await trx.rollback();
+        return { success: false, error: '没有激活的里程碑模板版本' };
+      }
+
+      logger.info(`[ProjectInit] 使用激活模板版本: ${activeVersion.name} (v${activeVersion.version_number})`);
     }
-
-    logger.info(`[ProjectInit] 使用模板版本: ${activeVersion.name} (v${activeVersion.version_number})`);
 
     // 2. 获取该版本的所有里程碑模板
     const milestoneTemplates = await trx('milestone_templates')
       .where('version_id', activeVersion.id)
-      .where('is_active', true)
       .orderBy('phase_order')
       .select('*');
 

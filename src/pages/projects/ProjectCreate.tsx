@@ -292,18 +292,15 @@ const ProjectCreate = () => {
           </label>
         </div>
 
-        {/* 模板版本信息 */}
-        {templateVersion && (
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-            <p className="text-sm text-blue-800">
-              <span className="font-medium">里程碑模板版本：</span>
-              {templateVersion.name} (v{templateVersion.version_number})
-            </p>
-            <p className="text-xs text-blue-600 mt-1">
-              {templateVersion.description || '创建项目后将自动根据此模板初始化里程碑阶段和任务'}
-            </p>
-          </div>
-        )}
+        {/* 里程碑初始化提示 */}
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+          <p className="text-sm text-blue-800">
+            <span className="font-medium">里程碑初始化</span>
+          </p>
+          <p className="text-xs text-blue-600 mt-1">
+            创建项目后，您可以在里程碑页面选择模板初始化或自定义配置
+          </p>
+        </div>
 
         {/* 操作按钮 */}
         <div className="flex justify-end space-x-3 pt-4">

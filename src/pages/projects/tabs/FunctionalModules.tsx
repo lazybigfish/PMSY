@@ -509,6 +509,8 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
       });
 
       const parentStack: { id: string; level: number; path: string }[] = [];
+      // 按层级统计兄弟节点数量，用于生成正确的 path
+      const levelSiblingCount: Record<number, number> = {};
       let insertedCount = 0;
       
       for (let i = 0; i < normalizedData.length; i++) {
@@ -532,10 +534,15 @@ const FunctionalModules: React.FC<FunctionalModulesProps> = ({ projectId, canEdi
         const parentId = parentStack.length > 0 ? parentStack[parentStack.length - 1].id : null;
         const parentPath = parentStack.length > 0 ? parentStack[parentStack.length - 1].path : null;
         
-        // 计算当前模块的 path
-        const siblingIndex = parentStack.length > 0 
-          ? parentStack.filter(p => p.level === level - 1).length - 1
-          : i;
+        // 初始化当前层级的兄弟计数
+        if (levelSiblingCount[level] === undefined) {
+          levelSiblingCount[level] = 0;
+        }
+        // 当前层级的兄弟索引
+        const siblingIndex = levelSiblingCount[level];
+        // 递增当前层级的兄弟计数
+        levelSiblingCount[level]++;
+        
         const path = parentPath 
           ? `${parentPath}.${siblingIndex + 1}`
           : String(siblingIndex + 1);

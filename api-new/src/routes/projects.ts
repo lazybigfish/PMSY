@@ -25,6 +25,7 @@ import {
 } from '../services/extraRequirementService';
 import { ValidationError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import * as storageService from '../services/storageService';
 
 const router = Router();
 
@@ -109,20 +110,10 @@ router.post('/', requireAuth, async (req: Request, res: Response, next: NextFunc
       // 不阻断主流程，继续执行
     }
 
-    // 4. 初始化里程碑和任务
-    const initResult = await initializeProjectMilestones(projectId, userId);
-
-    if (!initResult.success) {
-      logger.error(`[Projects] 项目里程碑初始化失败: ${projectId} - ${initResult.error}`);
-      // 返回警告信息，但项目已创建成功
-      res.status(201).json({
-        ...project,
-        warning: `项目创建成功，但里程碑初始化失败: ${initResult.error}`,
-      });
-      return;
-    }
-
-    logger.info(`[Projects] 项目创建完成（含里程碑初始化）: ${projectId}`);
+    // 4. 【里程碑功能升级】不再自动初始化里程碑
+    // 里程碑将在用户首次访问里程碑页面时手动初始化
+    // 这样可以支持选择不同模板或自定义空白里程碑
+    logger.info(`[Projects] 项目创建成功（里程碑待初始化）: ${projectId}`);
 
     // 5. 返回完整的项目信息
     const completeProject = await dbService.queryOne('projects', { eq: { id: projectId } });
@@ -817,6 +808,393 @@ router.delete('/extra-requirement-expenses/:expenseId', requireAuth, async (req:
     await deleteExpense(expenseId);
     res.status(204).send();
   } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// 里程碑功能升级 - 新增接口
+// ============================================
+
+/**
+ * GET /api/projects/:projectId/milestones/init-status
+ * 检查项目里程碑初始化状态
+ */
+router.get('/:projectId/milestones/init-status', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+
+    // 检查项目是否存在
+    const project = await dbService.queryOne('projects', { eq: { id: projectId } });
+    if (!project) {
+      throw new ValidationError('项目不存在');
+    }
+
+    // 检查权限
+    const isAdmin = userRole === 'admin';
+    const hasAccess = isAdmin || project.is_public || project.manager_id === userId ||
+      await dbService.getDb()('project_members')
+        .where({ project_id: projectId, user_id: userId })
+        .first();
+
+    if (!hasAccess) {
+      throw new ValidationError('无权访问该项目');
+    }
+
+    // 查询里程碑数量
+    const countResult = await dbService.getDb()('project_milestones')
+      .where('project_id', projectId)
+      .count('id as count')
+      .first();
+    
+    logger.info(`[Projects] 查询里程碑数量: projectId=${projectId}, countResult=${JSON.stringify(countResult)}`);
+
+    const count = parseInt(countResult?.count as string, 10) || 0;
+    
+    logger.info(`[Projects] 返回初始化状态: projectId=${projectId}, count=${count}, initialized=${count > 0}`);
+
+    res.json({
+      initialized: count > 0,
+      count,
+      projectId,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/milestones/init
+ * 延迟初始化项目里程碑（支持选择模板或空白初始化）
+ */
+router.post('/:projectId/milestones/init', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { projectId } = req.params;
+    const { templateId } = req.body; // 可选，不传则创建空白
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+
+    // 检查项目是否存在
+    const project = await dbService.queryOne('projects', { eq: { id: projectId } });
+    if (!project) {
+      throw new ValidationError('项目不存在');
+    }
+
+    // 检查权限（只有项目经理或管理员可以初始化）
+    const isAdmin = userRole === 'admin';
+    const isManager = project.manager_id === userId;
+
+    if (!isAdmin && !isManager) {
+      throw new ValidationError('无权初始化该项目里程碑');
+    }
+
+    // 检查是否已初始化（幂等性）
+    const existingCount = await dbService.getDb()('project_milestones')
+      .where('project_id', projectId)
+      .count('id as count')
+      .first();
+
+    if (parseInt(existingCount?.count as string, 10) > 0) {
+      // 已初始化，返回现有里程碑
+      const existingMilestones = await dbService.getDb()('project_milestones')
+        .where('project_id', projectId)
+        .orderBy('phase_order')
+        .select('*');
+
+      logger.info(`[Projects] 项目里程碑已初始化，返回现有数据: ${projectId}`);
+
+      res.json({
+        success: true,
+        milestones: existingMilestones,
+        message: '项目里程碑已存在',
+        isExisting: true,
+      });
+      return;
+    }
+
+    let milestones;
+    let initSource: string;
+
+    if (templateId) {
+      // 从指定模板初始化
+      logger.info(`[Projects] 从模板初始化里程碑: ${projectId}, templateId: ${templateId}`);
+
+      // 检查模板是否存在且可用
+      const template = await dbService.getDb()('template_versions')
+        .where('id', templateId)
+        .where('is_active', true)
+        .first();
+
+      if (!template) {
+        throw new ValidationError('指定的模板不存在或已禁用');
+      }
+
+      // 使用现有的初始化服务，传入用户选择的模板ID
+      if (!userId) {
+        throw new ValidationError('用户未登录');
+      }
+      const initResult = await initializeProjectMilestones(projectId, userId, templateId);
+
+      if (!initResult.success) {
+        throw new ValidationError(`里程碑初始化失败: ${initResult.error}`);
+      }
+
+      // 更新初始化来源
+      await dbService.getDb()('project_milestones')
+        .where('project_id', projectId)
+        .update({ init_source: 'template' });
+
+      // 更新模板使用次数
+      await dbService.getDb()('template_versions')
+        .where('id', templateId)
+        .increment('use_count', 1);
+
+      initSource = 'template';
+      milestones = await dbService.getDb()('project_milestones')
+        .where('project_id', projectId)
+        .orderBy('phase_order')
+        .select('*');
+    } else {
+      // 空白初始化（不创建任何里程碑，等待用户自定义）
+      logger.info(`[Projects] 空白初始化里程碑: ${projectId}, userId: ${userId}`);
+
+      // 创建一个空的里程碑记录标记为自定义
+      const insertData = {
+        project_id: projectId,
+        name: '自定义里程碑',
+        description: '用户自定义里程碑阶段',
+        status: 'pending',
+        phase_order: 1,
+        is_current: true,
+        is_custom: true,
+        init_source: 'custom',
+        created_by: userId,
+      };
+      logger.info(`[Projects] 插入里程碑数据: ${JSON.stringify(insertData)}`);
+      
+      const inserted = await dbService.insert('project_milestones', insertData);
+      logger.info(`[Projects] 插入结果: ${JSON.stringify(inserted)}`);
+
+      initSource = 'custom';
+      milestones = await dbService.getDb()('project_milestones')
+        .where('project_id', projectId)
+        .orderBy('phase_order')
+        .select('*');
+    }
+
+    logger.info(`[Projects] 项目里程碑初始化成功: ${projectId}, source: ${initSource}`);
+
+    res.json({
+      success: true,
+      milestones,
+      initSource,
+      message: templateId ? '已从模板初始化里程碑' : '已创建空白里程碑',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/milestones/reinitialize
+ * 重新初始化项目里程碑（删除现有里程碑及附件，然后重新初始化）
+ */
+router.post('/:projectId/milestones/reinitialize', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  const trx = await dbService.getDb().transaction();
+  
+  try {
+    const { projectId } = req.params;
+    const { templateId } = req.body; // 可选，不传则创建空白
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+
+    logger.info(`[Projects] 重新初始化项目里程碑: ${projectId}, templateId: ${templateId}, userId: ${userId}`);
+
+    // 检查项目是否存在
+    const project = await trx('projects')
+      .where('id', projectId)
+      .first();
+
+    if (!project) {
+      throw new ValidationError('项目不存在');
+    }
+
+    // 检查权限（管理员或项目经理）
+    if (userRole !== 'admin' && project.manager_id !== userId) {
+      throw new ValidationError('没有权限重新初始化此项目的里程碑');
+    }
+
+    // 1. 获取所有里程碑任务ID（用于删除附件）
+    const milestoneIds = await trx('project_milestones')
+      .where('project_id', projectId)
+      .pluck('id');
+
+    const taskIds = await trx('milestone_tasks')
+      .whereIn('milestone_id', milestoneIds)
+      .pluck('id');
+
+    logger.info(`[Projects] 准备删除 ${milestoneIds.length} 个里程碑, ${taskIds.length} 个任务`);
+
+    // 2. 删除任务附件（从 MinIO）
+    const attachments = await trx('task_attachments')
+      .whereIn('task_id', taskIds)
+      .select('file_path', 'storage_type');
+
+    for (const attachment of attachments) {
+      try {
+        if (attachment.storage_type === 'minio' && attachment.file_path) {
+          await storageService.deleteFile(process.env.MINIO_BUCKET_NAME || 'pmsy', attachment.file_path);
+          logger.info(`[Projects] 删除附件: ${attachment.file_path}`);
+        }
+      } catch (err) {
+        logger.warn(`[Projects] 删除附件失败: ${attachment.file_path}, error: ${err}`);
+        // 继续删除其他附件
+      }
+    }
+
+    // 3. 删除数据库记录（按依赖顺序）
+    // 先删除任务附件记录
+    await trx('task_attachments')
+      .whereIn('task_id', taskIds)
+      .delete();
+    logger.info(`[Projects] 删除任务附件记录`);
+
+    // 删除任务
+    await trx('milestone_tasks')
+      .whereIn('milestone_id', milestoneIds)
+      .delete();
+    logger.info(`[Projects] 删除任务`);
+
+    // 删除里程碑
+    await trx('project_milestones')
+      .where('project_id', projectId)
+      .delete();
+    logger.info(`[Projects] 删除里程碑`);
+
+    // 4. 重新初始化里程碑
+    let milestones;
+    let initSource: string;
+
+    if (templateId) {
+      // 从指定模板初始化
+      logger.info(`[Projects] 从模板重新初始化: ${projectId}, templateId: ${templateId}`);
+      
+      const template = await trx('template_versions')
+        .where('id', templateId)
+        .first();
+
+      if (!template) {
+        throw new ValidationError('模板不存在');
+      }
+
+      // 复制模板阶段到项目
+      const templatePhases = await trx('milestone_templates')
+        .where('version_id', templateId)
+        .orderBy('phase_order');
+
+      for (const phase of templatePhases) {
+        const phaseData = {
+          project_id: projectId,
+          name: phase.name,
+          description: phase.description,
+          status: 'pending',
+          phase_order: phase.phase_order,
+          is_current: phase.phase_order === 1,
+          init_source: 'template',
+          created_by: userId,
+        };
+
+        const [newPhase] = await trx('project_milestones')
+          .insert(phaseData)
+          .returning('*');
+
+        // 复制任务
+        const templateTasks = await trx('milestone_task_templates')
+          .where('milestone_template_id', phase.id)
+          .orderBy('sort_order');
+
+        for (const task of templateTasks) {
+          // 处理 output_documents，确保是有效的 JSON
+          let outputDocs = task.output_documents;
+          if (typeof outputDocs === 'string') {
+            try {
+              outputDocs = JSON.parse(outputDocs);
+            } catch {
+              outputDocs = [];
+            }
+          }
+          if (!outputDocs || !Array.isArray(outputDocs)) {
+            outputDocs = [];
+          }
+
+          const taskData = {
+            milestone_id: newPhase.id,
+            name: task.name,
+            description: task.description,
+            is_required: task.is_required,
+            is_completed: false,
+            is_custom: false,
+            sort_order: task.sort_order,
+            output_documents: JSON.stringify(outputDocs),
+            created_by: userId,
+          };
+
+          await trx('milestone_tasks').insert(taskData);
+        }
+      }
+
+      // 更新模板使用次数
+      await trx('template_versions')
+        .where('id', templateId)
+        .increment('use_count', 1);
+
+      initSource = 'template';
+      milestones = await trx('project_milestones')
+        .where('project_id', projectId)
+        .orderBy('phase_order')
+        .select('*');
+    } else {
+      // 空白初始化
+      logger.info(`[Projects] 空白重新初始化: ${projectId}`);
+      
+      const insertData = {
+        project_id: projectId,
+        name: '自定义里程碑',
+        description: '用户自定义里程碑阶段',
+        status: 'pending',
+        phase_order: 1,
+        is_current: true,
+        is_custom: true,
+        init_source: 'custom',
+        created_by: userId,
+      };
+
+      await trx('project_milestones').insert(insertData);
+
+      initSource = 'custom';
+      milestones = await trx('project_milestones')
+        .where('project_id', projectId)
+        .orderBy('phase_order')
+        .select('*');
+    }
+
+    // 提交事务
+    await trx.commit();
+
+    logger.info(`[Projects] 重新初始化成功: ${projectId}, source: ${initSource}, milestones: ${milestones.length}`);
+
+    res.json({
+      success: true,
+      milestones,
+      initSource,
+      message: templateId ? '已使用模板重新初始化' : '已清空里程碑',
+    });
+  } catch (error) {
+    // 回滚事务
+    await trx.rollback();
+    logger.error(`[Projects] 重新初始化失败: ${error}`);
     next(error);
   }
 });

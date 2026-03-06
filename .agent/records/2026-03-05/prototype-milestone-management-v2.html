@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>里程碑模板管理 - PMSY</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        .tab-active { background-color: #4F46E5; color: white; }
+        .tab-inactive { color: #374151; }
+        .tab-inactive:hover { background-color: #F3F4F6; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 模拟系统设置页面结构 -->
+    <div class="p-6 max-w-7xl mx-auto">
+        <!-- 页面标题 -->
+        <h1 class="text-2xl font-bold text-gray-900 mb-6">系统设置</h1>
+
+        <!-- Tab 导航栏 - 与现有系统一致 -->
+        <div class="flex space-x-1 rounded-xl bg-gray-100 p-1 overflow-x-auto mb-4">
+            <button class="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200 ease-out focus:outline-none tab-inactive">
+                用户管理
+            </button>
+            <button class="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200 ease-out focus:outline-none tab-inactive">
+                角色权限
+            </button>
+            <button class="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200 ease-out focus:outline-none tab-active shadow-md">
+                里程碑模板
+            </button>
+            <button class="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200 ease-out focus:outline-none tab-inactive">
+                报告模板
+            </button>
+            <button class="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200 ease-out focus:outline-none tab-inactive">
+                AI配置
+            </button>
+            <button class="flex-1 min-w-[100px] rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200 ease-out focus:outline-none tab-inactive">
+                通用设置
+            </button>
+        </div>
+
+        <!-- 内容区域 - 白色卡片背景 -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            
+            <!-- Header - 标题和新建按钮 -->
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-semibold text-gray-900">里程碑模板管理</h2>
+                <button onclick="showCreateModal()" class="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors">
+                    <i class="fas fa-plus w-4 h-4 mr-2"></i>
+                    新建模板
+                </button>
+            </div>
+
+            <!-- 统计卡片 - 简洁风格 -->
+            <div class="grid grid-cols-4 gap-4 mb-6">
+                <div class="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">全部模板</p>
+                            <p class="text-2xl font-bold text-gray-900 mt-1">12</p>
+                        </div>
+                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-layer-group text-blue-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">系统模板</p>
+                            <p class="text-2xl font-bold text-purple-600 mt-1">2</p>
+                        </div>
+                        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-shield-alt text-purple-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">公开模板</p>
+                            <p class="text-2xl font-bold text-green-600 mt-1">8</p>
+                        </div>
+                        <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-globe text-green-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">已启用</p>
+                            <p class="text-2xl font-bold text-indigo-600 mt-1">10</p>
+                        </div>
+                        <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-check-circle text-indigo-600"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 筛选栏 - 与现有系统一致 -->
+            <div class="flex flex-wrap items-center gap-3 mb-4">
+                <div class="relative flex-1 min-w-[240px] max-w-md">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" placeholder="搜索模板名称、描述..." 
+                        class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                </div>
+                <select class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    <option>全部类型</option>
+                    <option>系统模板</option>
+                    <option>公开模板</option>
+                    <option>私有模板</option>
+                </select>
+                <select class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    <option>全部状态</option>
+                    <option>已启用</option>
+                    <option>已禁用</option>
+                </select>
+                <select class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    <option>全部标签</option>
+                    <option>政府项目</option>
+                    <option>软件开发</option>
+                    <option>工程建设</option>
+                </select>
+            </div>
+
+            <!-- 模板列表 - 与现有用户管理表格风格一致 -->
+            <div class="bg-white shadow rounded-lg overflow-hidden border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">模板信息</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">类型</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">统计</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">状态</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-32">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <!-- 系统模板 1 -->
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                                        <i class="fas fa-flag-checkered text-white text-sm"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium text-gray-900">
+                                            标准项目里程碑模板
+                                            <span class="ml-2 text-xs text-gray-500">V1.0</span>
+                                        </div>
+                                        <div class="text-sm text-gray-500">适用于一般项目的标准里程碑流程</div>
+                                        <div class="flex items-center space-x-2 mt-1">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">政府项目</span>
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">软件开发</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                                    系统
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">7 阶段</div>
+                                <div class="text-sm text-gray-500">32 任务 · 156 使用</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                    启用
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex items-center justify-end space-x-2">
+                                    <button onclick="showDetailModal()" class="text-indigo-600 hover:text-indigo-900 p-1" title="查看">
+                                        <i class="fas fa-eye w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-indigo-600 hover:text-indigo-900 p-1" title="编辑">
+                                        <i class="fas fa-edit w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-orange-600 hover:text-orange-900 p-1" title="禁用">
+                                        <i class="fas fa-ban w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-gray-300 cursor-not-allowed p-1" title="系统模板不可删除">
+                                        <i class="fas fa-trash w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- 公开模板 1 -->
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 h-10 w-10 rounded-lg bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center">
+                                        <i class="fas fa-rocket text-white text-sm"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium text-gray-900">
+                                            敏捷开发里程碑模板
+                                            <span class="ml-2 text-xs text-gray-500">V2.1</span>
+                                        </div>
+                                        <div class="text-sm text-gray-500">适用于敏捷开发项目的里程碑管理</div>
+                                        <div class="flex items-center space-x-2 mt-1">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">敏捷开发</span>
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">互联网</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                    公开
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">4 阶段</div>
+                                <div class="text-sm text-gray-500">18 任务 · 89 使用</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                    启用
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex items-center justify-end space-x-2">
+                                    <button onclick="showDetailModal()" class="text-indigo-600 hover:text-indigo-900 p-1" title="查看">
+                                        <i class="fas fa-eye w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-indigo-600 hover:text-indigo-900 p-1" title="编辑">
+                                        <i class="fas fa-edit w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-orange-600 hover:text-orange-900 p-1" title="禁用">
+                                        <i class="fas fa-ban w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-red-600 hover:text-red-900 p-1" title="删除">
+                                        <i class="fas fa-trash w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- 私有模板 -->
+                        <tr class="hover:bg-gray-50 bg-gray-50/50">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
+                                        <i class="fas fa-lock text-white text-sm"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium text-gray-900">
+                                            政府项目专用模板
+                                            <span class="ml-2 text-xs text-gray-500">V1.2</span>
+                                        </div>
+                                        <div class="text-sm text-gray-500">针对政府项目的合规要求定制</div>
+                                        <div class="flex items-center space-x-2 mt-1">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">政府项目</span>
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">合规</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                    私有
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">6 阶段</div>
+                                <div class="text-sm text-gray-500">24 任务 · 12 使用</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                    禁用
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex items-center justify-end space-x-2">
+                                    <button onclick="showDetailModal()" class="text-indigo-600 hover:text-indigo-900 p-1" title="查看">
+                                        <i class="fas fa-eye w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-indigo-600 hover:text-indigo-900 p-1" title="编辑">
+                                        <i class="fas fa-edit w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-green-600 hover:text-green-900 p-1" title="启用">
+                                        <i class="fas fa-check-circle w-4 h-4"></i>
+                                    </button>
+                                    <button class="text-red-600 hover:text-red-900 p-1" title="删除">
+                                        <i class="fas fa-trash w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            <div class="flex items-center justify-between mt-4">
+                <div class="text-sm text-gray-500">
+                    共 12 条记录
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button class="px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50 text-sm">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button class="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-sm font-medium">1</button>
+                    <button class="px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md text-sm transition-colors">2</button>
+                    <button class="px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded-md transition-colors text-sm">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模板详情弹窗 - 使用 ModalForm 风格 -->
+    <div id="detailModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDetailModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden">
+                <!-- Header -->
+                <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">模板详情</h3>
+                    <button onclick="closeDetailModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Content -->
+                <div class="overflow-y-auto max-h-[calc(85vh-140px)] p-6">
+                    <div class="flex items-start mb-6">
+                        <div class="flex-shrink-0 h-16 w-16 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                            <i class="fas fa-flag-checkered text-white text-2xl"></i>
+                        </div>
+                        <div class="ml-4 flex-1">
+                            <h2 class="text-xl font-bold text-gray-900">标准项目里程碑模板 v1.0</h2>
+                            <div class="flex items-center space-x-3 mt-2 text-sm text-gray-500">
+                                <span>版本: V1.0</span>
+                                <span>·</span>
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">系统模板</span>
+                                <span>·</span>
+                                <span class="text-green-600 font-medium">● 已启用</span>
+                            </div>
+                            <div class="flex items-center space-x-2 mt-2">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">政府项目</span>
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">软件开发</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                        <p class="text-sm text-gray-600">适用于一般项目的标准里程碑流程，包含7个阶段32个任务，涵盖从进场前到运维阶段的全生命周期管理。</p>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-4 mb-6">
+                        <div class="text-center p-3 bg-indigo-50 rounded-lg">
+                            <div class="text-2xl font-bold text-indigo-600">7</div>
+                            <div class="text-xs text-gray-500 mt-1">阶段数</div>
+                        </div>
+                        <div class="text-center p-3 bg-indigo-50 rounded-lg">
+                            <div class="text-2xl font-bold text-indigo-600">32</div>
+                            <div class="text-xs text-gray-500 mt-1">任务数</div>
+                        </div>
+                        <div class="text-center p-3 bg-indigo-50 rounded-lg">
+                            <div class="text-2xl font-bold text-indigo-600">156</div>
+                            <div class="text-xs text-gray-500 mt-1">使用次数</div>
+                        </div>
+                        <div class="text-center p-3 bg-indigo-50 rounded-lg">
+                            <div class="text-2xl font-bold text-indigo-600">89</div>
+                            <div class="text-xs text-gray-500 mt-1">关联项目</div>
+                        </div>
+                    </div>
+
+                    <h4 class="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">阶段与任务详情</h4>
+                    <div class="space-y-2">
+                        <div class="border border-gray-200 rounded-lg">
+                            <div class="bg-gray-50 px-4 py-2 flex items-center justify-between cursor-pointer" onclick="togglePhase(this)">
+                                <div class="flex items-center">
+                                    <i class="fas fa-chevron-down text-gray-400 mr-2 text-xs"></i>
+                                    <span class="text-sm font-medium text-gray-900">阶段1: 进场前阶段</span>
+                                    <span class="ml-2 text-xs text-gray-500">(5个任务)</span>
+                                </div>
+                            </div>
+                            <div class="px-4 py-2 space-y-1">
+                                <div class="flex items-center text-sm text-gray-600 py-1">
+                                    <i class="far fa-square text-gray-400 mr-2 text-xs"></i>
+                                    <span>获取基础材料</span>
+                                </div>
+                                <div class="flex items-center text-sm text-gray-600 py-1">
+                                    <i class="far fa-square text-gray-400 mr-2 text-xs"></i>
+                                    <span>明确干系人</span>
+                                </div>
+                                <div class="flex items-center text-sm text-gray-600 py-1">
+                                    <i class="far fa-square text-gray-400 mr-2 text-xs"></i>
+                                    <span>组建项目团队</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg">
+                            <div class="bg-gray-50 px-4 py-2 flex items-center justify-between cursor-pointer" onclick="togglePhase(this)">
+                                <div class="flex items-center">
+                                    <i class="fas fa-chevron-right text-gray-400 mr-2 text-xs"></i>
+                                    <span class="text-sm font-medium text-gray-900">阶段2: 启动阶段</span>
+                                    <span class="ml-2 text-xs text-gray-500">(6个任务)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="flex items-center justify-end space-x-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+                    <button onclick="closeDetailModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-md transition-colors text-sm">
+                        关闭
+                    </button>
+                    <button class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm">
+                        编辑
+                    </button>
+                    <button class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm">
+                        禁用
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建模板弹窗 -->
+    <div id="createModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeCreateModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+                <!-- Header -->
+                <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">新建里程碑模板</h3>
+                    <button onclick="closeCreateModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Content -->
+                <div class="overflow-y-auto max-h-[calc(90vh-140px)] p-6">
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    模板名称 <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" placeholder="如：标准项目里程碑模板" 
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    版本号 <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" placeholder="如：V1.0" 
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">描述</label>
+                            <textarea rows="2" placeholder="请输入模板描述..." 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm resize-none"></textarea>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">标签</label>
+                                <div class="flex flex-wrap gap-2 p-2 border border-gray-300 rounded-md min-h-[38px]">
+                                    <span class="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded flex items-center">
+                                        政府项目 <i class="fas fa-times ml-1 cursor-pointer hover:text-red-500"></i>
+                                    </span>
+                                    <button class="text-gray-400 hover:text-gray-600 text-xs">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">可见性</label>
+                                <div class="flex items-center space-x-4 mt-2">
+                                    <label class="flex items-center text-sm">
+                                        <input type="radio" name="visibility" class="w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                                        <span class="ml-2">私有</span>
+                                    </label>
+                                    <label class="flex items-center text-sm">
+                                        <input type="radio" name="visibility" checked class="w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                                        <span class="ml-2">公开</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
+                                <div class="flex items-center space-x-4 mt-2">
+                                    <label class="flex items-center text-sm">
+                                        <input type="radio" name="status" checked class="w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                                        <span class="ml-2">启用</span>
+                                    </label>
+                                    <label class="flex items-center text-sm">
+                                        <input type="radio" name="status" class="w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                                        <span class="ml-2">禁用</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-gray-200 pt-4">
+                            <h4 class="text-sm font-semibold text-gray-900 mb-3">里程碑阶段配置</h4>
+                            <div class="space-y-3">
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-thumbtack text-indigo-500 mr-2 text-xs"></i>
+                                            <span class="text-sm font-medium text-gray-900">阶段1: 进场前阶段</span>
+                                        </div>
+                                        <button class="text-red-500 hover:text-red-700 text-xs">
+                                            <i class="fas fa-trash-alt mr-1"></i>删除
+                                        </button>
+                                    </div>
+                                    <div class="space-y-1 pl-5">
+                                        <div class="flex items-center justify-between bg-white p-2 rounded">
+                                            <div class="flex items-center">
+                                                <i class="far fa-square text-gray-400 mr-2 text-xs"></i>
+                                                <span class="text-sm text-gray-700">获取基础材料</span>
+                                            </div>
+                                            <button class="text-red-400 hover:text-red-600 text-xs">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        <button class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                                            <i class="fas fa-plus mr-1"></i>添加任务
+                                        </button>
+                                    </div>
+                                </div>
+                                <button class="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-indigo-600 hover:border-indigo-300 transition-colors text-sm">
+                                    <i class="fas fa-plus mr-1"></i>添加新阶段
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="flex items-center justify-end space-x-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+                    <button onclick="closeCreateModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-md transition-colors text-sm">
+                        取消
+                    </button>
+                    <button class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm">
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showDetailModal() {
+            document.getElementById('detailModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        function showCreateModal() {
+            document.getElementById('createModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeCreateModal() {
+            document.getElementById('createModal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        function togglePhase(element) {
+            const icon = element.querySelector('.fa-chevron-down, .fa-chevron-right');
+            const content = element.nextElementSibling;
+            if (content && !content.classList.contains('hidden')) {
+                content.classList.add('hidden');
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            } else if (content) {
+                content.classList.remove('hidden');
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+            }
+        }
+    </script>
+</body>
+</html>

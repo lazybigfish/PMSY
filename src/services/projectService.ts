@@ -404,6 +404,42 @@ export async function getProjectProgress(projectId: string): Promise<number> {
   return stats.progress;
 }
 
+// ============================================
+// 里程碑功能升级 - 新增接口
+// ============================================
+
+/**
+ * 检查项目里程碑初始化状态
+ */
+export async function checkMilestoneInitStatus(projectId: string): Promise<{
+  initialized: boolean;
+  count: number;
+}> {
+  const response = await apiClient.get(`/api/projects/${projectId}/milestones/init-status`);
+  return response || { initialized: false, count: 0 };
+}
+
+/**
+ * 初始化项目里程碑（延迟初始化）
+ * @param projectId 项目ID
+ * @param templateId 模板ID（可选，不传则创建空白）
+ */
+export async function initProjectMilestones(
+  projectId: string,
+  templateId?: string
+): Promise<{
+  success: boolean;
+  milestones?: ProjectMilestone[];
+  initSource?: string;
+  message?: string;
+  isExisting?: boolean;
+}> {
+  const response = await apiClient.post(`/api/projects/${projectId}/milestones/init`, {
+    templateId,
+  });
+  return response || { success: false, message: '初始化失败' };
+}
+
 // 导出服务对象
 export const projectService = {
   getProjects,
@@ -430,4 +466,7 @@ export const projectService = {
   addProjectMember,
   removeProjectMember,
   getProjectProgress,
+  // 里程碑功能升级（新增）
+  checkMilestoneInitStatus,
+  initProjectMilestones,
 };

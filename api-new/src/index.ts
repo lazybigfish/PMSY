@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -25,6 +25,8 @@ import taskDependenciesRouter from './routes/taskDependencies';
 import backupRouter from './routes/system/backup.routes';
 import uploadRouter from './routes/upload';
 import filesRouter from './routes/files';
+import milestoneTemplatesRouter from './routes/milestone-templates';
+import adminMilestoneTemplatesRouter from './routes/admin/milestone-templates';
 
 // 导入定时备份调度器
 import { initBackupScheduler } from './jobs/backup.scheduler';
@@ -50,6 +52,13 @@ if (NODE_ENV === 'development') {
   app.use(morgan('combined', { stream: { write: (message) => logger.info(message.trim()) } }));
 }
 
+// 调试中间件：捕获所有 /rest/v1 请求
+app.use('/rest/v1', (req: Request, res: Response, next: NextFunction) => {
+  console.log('[Index] REST request:', req.method, req.path);
+  console.log('[Index] Request body:', JSON.stringify(req.body));
+  next();
+});
+
 // 路由（兼容直接访问）
 app.use('/health', healthRouter);
 app.use('/auth/v1', authRouter);
@@ -62,6 +71,8 @@ app.use('/api/task-dependencies', taskDependenciesRouter);
 app.use('/api/system/backup', backupRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/files', filesRouter);
+app.use('/api/milestone-templates', milestoneTemplatesRouter);
+app.use('/api/admin/milestone-templates', adminMilestoneTemplatesRouter);
 
 // 路由（带 /api 前缀，兼容 Nginx 代理配置）
 app.use('/api/health', healthRouter);

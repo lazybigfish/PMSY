@@ -212,7 +212,7 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async testConnection(): Promise<boolean> {
     try {
-      await apiClient.get('/api/storage/test');
+      await apiClient.get('/storage/test');
       return true;
     } catch {
       return false;

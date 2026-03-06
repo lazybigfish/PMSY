@@ -160,7 +160,9 @@ const ProjectDetail = () => {
         customer_name: editForm.customer_name,
         amount: editForm.amount,
         description: editForm.description,
-        is_public: editForm.is_public
+        is_public: editForm.is_public,
+        start_date: editForm.start_date,
+        end_date: editForm.end_date
       };
 
       await api.db

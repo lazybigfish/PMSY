@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>里程碑初始化 - PMSY</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .icon-box {
+            background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 顶部导航 -->
+    <nav class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <span class="text-white font-bold text-sm">P</span>
+                </div>
+                <span class="text-gray-600">/</span>
+                <span class="text-gray-900 font-medium">项目详情</span>
+                <span class="text-gray-600">/</span>
+                <span class="text-gray-900 font-medium">里程碑</span>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button class="text-gray-600 hover:text-gray-900 text-sm">返回项目</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="container mx-auto px-6 py-12">
+        <!-- 初始化引导卡片 -->
+        <div class="max-w-2xl mx-auto">
+            <div class="bg-white rounded-2xl shadow-xl p-8 text-center">
+                <!-- 插图区域 -->
+                <div class="mb-8">
+                    <div class="w-24 h-24 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+                        <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <h1 class="text-2xl font-bold text-gray-900 mb-3">初始化项目里程碑</h1>
+                <p class="text-gray-600 mb-8 max-w-md mx-auto">
+                    当前项目尚未设置里程碑阶段。请选择初始化方式，从模板快速创建或自定义配置。
+                </p>
+
+                <!-- 选项卡片 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <!-- 选择模板 -->
+                    <button onclick="showTemplateModal()" class="card-hover group relative bg-white border-2 border-blue-100 rounded-xl p-6 text-left hover:border-blue-500">
+                        <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">选择模板初始化</h3>
+                        <p class="text-sm text-gray-500">从预设模板快速创建里程碑阶段和任务</p>
+                        <div class="mt-4 flex items-center text-sm text-blue-600 font-medium">
+                            <span>查看可用模板</span>
+                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
+                            </svg>
+                        </div>
+                    </button>
+
+                    <!-- 自定义空白 -->
+                    <button class="card-hover group relative bg-white border-2 border-gray-100 rounded-xl p-6 text-left hover:border-gray-300">
+                        <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </div>
+                        <div class="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-gray-100 transition-colors">
+                            <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">自定义空白里程碑</h3>
+                        <p class="text-sm text-gray-500">从零开始，自由定义里程碑阶段和任务</p>
+                        <div class="mt-4 flex items-center text-sm text-gray-500 font-medium">
+                            <span>开始自定义</span>
+                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
+                            </svg>
+                        </div>
+                    </button>
+                </div>
+
+                <!-- 提示信息 -->
+                <div class="bg-blue-50 rounded-lg p-4 text-left">
+                    <div class="flex items-start space-x-3">
+                        <svg class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div class="text-sm text-blue-700">
+                            <p class="font-medium mb-1">💡 提示</p>
+                            <p>选择模板初始化后，您仍可以自定义修改阶段和任务。自定义配置还可以保存为模板供后续项目使用。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 模板选择弹窗 -->
+    <div id="templateModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeTemplateModal()"></div>
+        <div class="absolute inset-4 md:inset-10 bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <!-- 弹窗头部 -->
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900">选择里程碑模板</h2>
+                    <p class="text-sm text-gray-500 mt-1">选择适合该项目的里程碑模板，或从空白开始</p>
+                </div>
+                <button onclick="closeTemplateModal()" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- 弹窗内容 -->
+            <div class="flex-1 flex overflow-hidden">
+                <!-- 左侧筛选 -->
+                <div class="w-64 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
+                    <div class="mb-6">
+                        <h3 class="text-sm font-semibold text-gray-900 mb-3">模板分类</h3>
+                        <div class="space-y-2">
+                            <label class="flex items-center space-x-3 p-2 rounded-lg bg-white border border-blue-200 cursor-pointer">
+                                <input type="radio" name="category" checked class="w-4 h-4 text-blue-600">
+                                <span class="text-sm text-gray-700">全部模板</span>
+                                <span class="ml-auto text-xs text-gray-400">(8)</span>
+                            </label>
+                            <label class="flex items-center space-x-3 p-2 rounded-lg hover:bg-white cursor-pointer">
+                                <input type="radio" name="category" class="w-4 h-4 text-blue-600">
+                                <span class="text-sm text-gray-700">系统模板</span>
+                                <span class="ml-auto text-xs text-gray-400">(2)</span>
+                            </label>
+                            <label class="flex items-center space-x-3 p-2 rounded-lg hover:bg-white cursor-pointer">
+                                <input type="radio" name="category" class="w-4 h-4 text-blue-600">
+                                <span class="text-sm text-gray-700">我的模板</span>
+                                <span class="ml-auto text-xs text-gray-400">(3)</span>
+                            </label>
+                            <label class="flex items-center space-x-3 p-2 rounded-lg hover:bg-white cursor-pointer">
+                                <input type="radio" name="category" class="w-4 h-4 text-blue-600">
+                                <span class="text-sm text-gray-700">公开模板</span>
+                                <span class="ml-auto text-xs text-gray-400">(3)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900 mb-3">标签筛选</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full cursor-pointer">政府项目</span>
+                            <span class="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-full cursor-pointer hover:bg-gray-300">软件开发</span>
+                            <span class="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-full cursor-pointer hover:bg-gray-300">工程建设</span>
+                            <span class="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-full cursor-pointer hover:bg-gray-300">敏捷开发</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧模板列表 -->
+                <div class="flex-1 bg-white p-6 overflow-y-auto">
+                    <!-- 搜索框 -->
+                    <div class="mb-6">
+                        <div class="relative">
+                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                            <input type="text" placeholder="搜索模板..." class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                    </div>
+
+                    <!-- 模板列表 -->
+                    <div class="space-y-4">
+                        <!-- 系统模板 - 标准项目里程碑 -->
+                        <div class="border-2 border-blue-500 rounded-xl p-5 cursor-pointer bg-blue-50/50 relative">
+                            <div class="absolute top-4 right-4">
+                                <span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">系统模板</span>
+                            </div>
+                            <div class="flex items-start space-x-4">
+                                <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2 mb-1">
+                                        <h3 class="text-lg font-semibold text-gray-900">标准项目里程碑模板 v1.0</h3>
+                                        <span class="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">V1.0</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mb-3">适用于一般项目的标准里程碑流程，包含完整的7个阶段36个任务</p>
+                                    <div class="flex items-center space-x-4 text-sm text-gray-500">
+                                        <span class="flex items-center">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                            </svg>
+                                            7个阶段
+                                        </span>
+                                        <span class="flex items-center">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                                            </svg>
+                                            36个任务
+                                        </span>
+                                        <span class="flex items-center">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                            </svg>
+                                            系统管理员
+                                        </span>
+                                    </div>
+                                    <div class="mt-3 flex items-center space-x-2">
+                                        <span class="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded">政府项目</span>
+                                        <span class="px-2 py-1 bg-green-50 text-green-600 text-xs rounded">标准流程</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col space-y-2">
+                                    <button onclick="showTemplateDetail()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                                        查看详情
+                                    </button>
+                                    <button class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                                        选择此模板
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 用户公开模板 - 敏捷开发 -->
+                        <div class="border border-gray-200 rounded-xl p-5 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all">
+                            <div class="flex items-start space-x-4">
+                                <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2 mb-1">
+                                        <h3 class="text-lg font-semibold text-gray-900">敏捷开发里程碑模板</h3>
+                                        <span class="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">V2.1</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mb-3">适用于敏捷开发项目的轻量级里程碑流程，迭代快速交付</p>
+                                    <div class="flex items-center space-x-4 text-sm text-gray-500">
+                                        <span class="flex items-center">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                            </svg>
+                                            4个阶段
+                                        </span>
+                                        <span class="flex items-center">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                                            </svg>
+                                            18个任务
+                                        </span>
+                                        <span class="flex items-center">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                            </svg>
+                                            张三
+                                        </span>
+                                    </div>
+                                    <div class="mt-3 flex items-center space-x-2">
+                                        <span class="px-2 py-1 bg-purple-50 text-purple-600 text-xs rounded">敏捷开发</span>
+                                        <span class="px-2 py-1 bg-orange-50 text-orange-600 text-xs rounded">互联网</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col space-y-2">
+                                    <button class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                                        查看详情
+                                    </button>
+                                    <button class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                                        选择此模板
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 从空白开始 -->
+                        <div class="border-2 border-dashed border-gray-300 rounded-xl p-5 cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <h3 class="text-lg font-semibold text-gray-900">从空白开始</h3>
+                                    <p class="text-sm text-gray-500">不选择模板，自行定义里程碑阶段和任务</p>
+                                </div>
+                                <button class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors">
+                                    选择
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 弹窗底部 -->
+            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+                <button onclick="closeTemplateModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
+                    取消
+                </button>
+                <button class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    确认选择
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模板详情弹窗 -->
+    <div id="templateDetailModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeTemplateDetail()"></div>
+        <div class="absolute inset-4 md:inset-10 lg:inset-20 bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <!-- 头部 -->
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
+                <div class="flex items-center space-x-3">
+                    <span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">系统模板</span>
+                    <h2 class="text-xl font-bold text-gray-900">标准项目里程碑模板 v1.0</h2>
+                </div>
+                <button onclick="closeTemplateDetail()" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- 内容 -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <div class="max-w-4xl mx-auto">
+                    <!-- 基本信息 -->
+                    <div class="bg-gray-50 rounded-xl p-4 mb-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center space-x-4 text-sm text-gray-600">
+                                <span>版本: V1.0</span>
+                                <span>|</span>
+                                <span>创建者: 系统管理员</span>
+                                <span>|</span>
+                                <span>阶段: 7</span>
+                                <span>|</span>
+                                <span>任务: 36</span>
+                            </div>
+                        </div>
+                        <p class="text-gray-700">适用于一般项目的标准里程碑流程，涵盖从进场前到运维阶段的全生命周期管理。</p>
+                        <div class="mt-3 flex items-center space-x-2">
+                            <span class="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded">政府项目</span>
+                            <span class="px-2 py-1 bg-green-50 text-green-600 text-xs rounded">标准流程</span>
+                        </div>
+                    </div>
+
+                    <!-- 阶段列表 -->
+                    <div class="space-y-4">
+                        <!-- 阶段1 -->
+                        <div class="border border-gray-200 rounded-xl overflow-hidden">
+                            <div class="bg-blue-50 px-4 py-3 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span class="w-6 h-6 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-medium">1</span>
+                                    <h3 class="font-semibold text-gray-900">进场前阶段</h3>
+                                </div>
+                                <span class="text-sm text-gray-500">5个任务</span>
+                            </div>
+                            <div class="p-4">
+                                <ul class="space-y-2">
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>获取基础材料（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>明确干系人（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>组建项目团队（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>风险与预算分析（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>召开内部启动会（必需）</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- 阶段2 -->
+                        <div class="border border-gray-200 rounded-xl overflow-hidden">
+                            <div class="bg-blue-50 px-4 py-3 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span class="w-6 h-6 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-medium">2</span>
+                                    <h3 class="font-semibold text-gray-900">启动阶段</h3>
+                                </div>
+                                <span class="text-sm text-gray-500">6个任务</span>
+                            </div>
+                            <div class="p-4">
+                                <ul class="space-y-2">
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>编制基础文档（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>拆解建设内容（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>制定进度计划（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>召开项目启动会（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>筹备服务器资源（必需）</span>
+                                    </li>
+                                    <li class="flex items-center space-x-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>供应商/硬件下单（可选）</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- 更多阶段提示 -->
+                        <div class="text-center py-4 text-gray-500 text-sm">
+                            还有 5 个阶段：实施阶段、初验阶段、试运行阶段、终验阶段、运维阶段
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底部 -->
+            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+                <button onclick="closeTemplateDetail()" class="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
+                    关闭
+                </button>
+                <button class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    使用此模板
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTemplateModal() {
+            document.getElementById('templateModal').classList.remove('hidden');
+        }
+
+        function closeTemplateModal() {
+            document.getElementById('templateModal').classList.add('hidden');
+        }
+
+        function showTemplateDetail() {
+            document.getElementById('templateDetailModal').classList.remove('hidden');
+        }
+
+        function closeTemplateDetail() {
+            document.getElementById('templateDetailModal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

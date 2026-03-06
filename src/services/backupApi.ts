@@ -16,7 +16,7 @@ import {
  * 创建备份
  */
 export async function createBackup(data: CreateBackupFormData): Promise<{ id: string; status: string; message: string }> {
-  return apiClient.post('/api/system/backup', {
+  return apiClient.post('/system/backup', {
     name: data.name,
     description: data.description,
     options: {
@@ -122,7 +122,7 @@ export async function getBackupSchedule(): Promise<BackupScheduleConfig> {
  * 更新定时备份配置
  */
 export async function updateBackupSchedule(config: BackupScheduleConfig): Promise<void> {
-  await apiClient.put('/api/system/backup/schedule', config);
+  await apiClient.put('/system/backup/schedule', config);
 }
 
 // 导出备份 API 服务对象

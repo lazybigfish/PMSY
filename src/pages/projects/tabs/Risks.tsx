@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { Risk, Profile, RiskStatus } from '../../../types';
-import { Loader2, Plus, AlertTriangle, X, History, User } from 'lucide-react';
+import { Loader2, Plus, AlertTriangle, X, History, User, Edit2, Check, XCircle } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 import { Modal, ModalForm } from '../../../components/Modal';
 
@@ -44,6 +44,14 @@ const Risks: React.FC<RisksProps> = ({ projectId, canEdit = true }) => {
   const [newRecord, setNewRecord] = useState({
     content: '',
     newStatus: ''
+  });
+
+  // 编辑状态
+  const [editingField, setEditingField] = useState<'description' | 'impact' | 'mitigation_plan' | null>(null);
+  const [editValues, setEditValues] = useState({
+    description: '',
+    impact: '',
+    mitigation_plan: ''
   });
 
   useEffect(() => {
@@ -145,6 +153,7 @@ const Risks: React.FC<RisksProps> = ({ projectId, canEdit = true }) => {
       const { error } = await api.db.from('risks').insert([{
         project_id: projectId,
         ...newRisk,
+        owner_id: newRisk.owner_id || null,
         handling_records: []
       }]);
 
@@ -220,6 +229,50 @@ const Risks: React.FC<RisksProps> = ({ projectId, canEdit = true }) => {
       setRisks(risks.map(r => r.id === riskId ? { ...r, status: newStatus as any } : r));
     } catch (error) {
       console.error('Error updating risk status:', error);
+    }
+  };
+
+  // 开始编辑字段
+  const startEditing = (field: 'description' | 'impact' | 'mitigation_plan') => {
+    if (!selectedRisk) return;
+    setEditingField(field);
+    setEditValues({
+      ...editValues,
+      [field]: selectedRisk[field] || ''
+    });
+  };
+
+  // 取消编辑
+  const cancelEditing = () => {
+    setEditingField(null);
+    setEditValues({
+      description: '',
+      impact: '',
+      mitigation_plan: ''
+    });
+  };
+
+  // 保存编辑
+  const saveEdit = async () => {
+    if (!selectedRisk || !editingField) return;
+
+    try {
+      const { error } = await api.db
+        .from('risks')
+        .update({ [editingField]: editValues[editingField] })
+        .eq('id', selectedRisk.id);
+
+      if (error) throw error;
+
+      // 更新本地状态
+      const updatedRisk = { ...selectedRisk, [editingField]: editValues[editingField] };
+      setSelectedRisk(updatedRisk);
+      setRisks(risks.map(r => r.id === selectedRisk.id ? updatedRisk : r));
+      
+      setEditingField(null);
+    } catch (error) {
+      console.error('Error updating risk:', error);
+      alert('保存失败，请重试');
     }
   };
 
@@ -337,8 +390,9 @@ const Risks: React.FC<RisksProps> = ({ projectId, canEdit = true }) => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">责任人</label>
+              <label className="block text-sm font-medium text-gray-700">责任人 *</label>
               <select
+                required
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 sm:text-sm"
                 value={newRisk.owner_id}
                 onChange={e => setNewRisk({...newRisk, owner_id: e.target.value})}
@@ -485,19 +539,141 @@ const Risks: React.FC<RisksProps> = ({ projectId, canEdit = true }) => {
         maxWidth="3xl"
       >
         <div className="space-y-6">
-          {/* 风险详情 */}
+          {/* 风险详情 - 可编辑 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 风险描述 */}
             <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">风险描述</h4>
-              <p className="text-sm text-gray-600">{selectedRisk?.description || '暂无描述'}</p>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-gray-700">风险描述</h4>
+                {canEdit && editingField !== 'description' && (
+                  <button
+                    onClick={() => startEditing('description')}
+                    className="text-indigo-600 hover:text-indigo-800 text-xs flex items-center"
+                  >
+                    <Edit2 className="h-3 w-3 mr-1" />
+                    编辑
+                  </button>
+                )}
+              </div>
+              {editingField === 'description' ? (
+                <div className="space-y-2">
+                  <textarea
+                    rows={3}
+                    value={editValues.description}
+                    onChange={(e) => setEditValues({...editValues, description: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                    placeholder="请输入风险描述..."
+                  />
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      onClick={cancelEditing}
+                      className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 flex items-center"
+                    >
+                      <XCircle className="h-3 w-3 mr-1" />
+                      取消
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      className="px-2 py-1 text-xs text-indigo-600 hover:text-indigo-800 flex items-center"
+                    >
+                      <Check className="h-3 w-3 mr-1" />
+                      保存
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600">{selectedRisk?.description || '暂无描述'}</p>
+              )}
             </div>
+
+            {/* 影响分析 */}
             <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">影响分析</h4>
-              <p className="text-sm text-gray-600">{selectedRisk?.impact || '暂无影响分析'}</p>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-gray-700">影响分析</h4>
+                {canEdit && editingField !== 'impact' && (
+                  <button
+                    onClick={() => startEditing('impact')}
+                    className="text-indigo-600 hover:text-indigo-800 text-xs flex items-center"
+                  >
+                    <Edit2 className="h-3 w-3 mr-1" />
+                    编辑
+                  </button>
+                )}
+              </div>
+              {editingField === 'impact' ? (
+                <div className="space-y-2">
+                  <textarea
+                    rows={3}
+                    value={editValues.impact}
+                    onChange={(e) => setEditValues({...editValues, impact: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                    placeholder="请输入影响分析..."
+                  />
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      onClick={cancelEditing}
+                      className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 flex items-center"
+                    >
+                      <XCircle className="h-3 w-3 mr-1" />
+                      取消
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      className="px-2 py-1 text-xs text-indigo-600 hover:text-indigo-800 flex items-center"
+                    >
+                      <Check className="h-3 w-3 mr-1" />
+                      保存
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600">{selectedRisk?.impact || '暂无影响分析'}</p>
+              )}
             </div>
+
+            {/* 应对措施 */}
             <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">应对措施</h4>
-              <p className="text-sm text-gray-600">{selectedRisk?.mitigation_plan || '暂无应对措施'}</p>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-gray-700">应对措施</h4>
+                {canEdit && editingField !== 'mitigation_plan' && (
+                  <button
+                    onClick={() => startEditing('mitigation_plan')}
+                    className="text-indigo-600 hover:text-indigo-800 text-xs flex items-center"
+                  >
+                    <Edit2 className="h-3 w-3 mr-1" />
+                    编辑
+                  </button>
+                )}
+              </div>
+              {editingField === 'mitigation_plan' ? (
+                <div className="space-y-2">
+                  <textarea
+                    rows={3}
+                    value={editValues.mitigation_plan}
+                    onChange={(e) => setEditValues({...editValues, mitigation_plan: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                    placeholder="请输入应对措施..."
+                  />
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      onClick={cancelEditing}
+                      className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 flex items-center"
+                    >
+                      <XCircle className="h-3 w-3 mr-1" />
+                      取消
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      className="px-2 py-1 text-xs text-indigo-600 hover:text-indigo-800 flex items-center"
+                    >
+                      <Check className="h-3 w-3 mr-1" />
+                      保存
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600">{selectedRisk?.mitigation_plan || '暂无应对措施'}</p>
+              )}
             </div>
           </div>
 

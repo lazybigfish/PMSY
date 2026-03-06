@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { taskService, userService, projectService } from '../../../services';
 import { api } from '../../../lib/api';
 import { Project, Profile, Client } from '../../../types';
-import { Plus, Trash2, Mail, Phone, Loader2, CheckSquare, AlertOctagon, Flag, Layers, Activity, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Mail, Phone, Loader2, CheckSquare, AlertOctagon, Flag, Layers, Activity, ChevronDown, Calendar } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContextNew';
 import { numberToChinese } from '../../../lib/utils';
 import { Avatar } from '../../../components/Avatar';
@@ -487,6 +487,46 @@ const ProjectOverview: React.FC<ProjectOverviewProps> = ({ projectId, isEditing,
                       </label>
                     </div>
                   )}
+                </dd>
+            </div>
+            <div className="sm:col-span-1">
+                <dt className="text-sm font-medium text-gray-500 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5" />
+                    开工日期
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                    {!isEditing ? (
+                        project.start_date 
+                            ? new Date(project.start_date).toLocaleDateString('zh-CN')
+                            : '未设置'
+                    ) : (
+                        <input
+                            type="date"
+                            value={editForm?.start_date ? new Date(editForm.start_date).toISOString().split('T')[0] : ''}
+                            onChange={(e) => onEditChange?.({ ...editForm, start_date: e.target.value || null })}
+                            className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        />
+                    )}
+                </dd>
+            </div>
+            <div className="sm:col-span-1">
+                <dt className="text-sm font-medium text-gray-500 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5" />
+                    结束日期
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                    {!isEditing ? (
+                        project.end_date 
+                            ? new Date(project.end_date).toLocaleDateString('zh-CN')
+                            : '未设置'
+                    ) : (
+                        <input
+                            type="date"
+                            value={editForm?.end_date ? new Date(editForm.end_date).toISOString().split('T')[0] : ''}
+                            onChange={(e) => onEditChange?.({ ...editForm, end_date: e.target.value || null })}
+                            className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        />
+                    )}
                 </dd>
             </div>
             <div className="sm:col-span-1">

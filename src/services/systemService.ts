@@ -35,6 +35,17 @@ export interface MilestoneTemplate {
   name: string;
   description: string | null;
   is_active: boolean;
+  is_system: boolean;
+  is_public: boolean;
+  is_custom: boolean;
+  is_my_template?: boolean;
+  tags: string[];
+  created_by: string | null;
+  version?: string;
+  phaseCount?: number;
+  taskCount?: number;
+  use_count?: number;
+  created_by_name?: string;
   created_at: string;
   updated_at: string;
 }
@@ -45,8 +56,28 @@ export interface MilestoneTaskTemplate {
   template_id: string;
   name: string;
   description: string | null;
+  is_required: boolean;
+  output_documents: any[];
   sort_order: number;
   created_at: string;
+}
+
+// 模板阶段
+export interface TemplatePhase {
+  id: string;
+  name: string;
+  description: string | null;
+  order: number;
+  tasks: MilestoneTaskTemplate[];
+}
+
+// 模板标签
+export interface TemplateTag {
+  id: string;
+  name: string;
+  color: string;
+  description: string | null;
+  usage_count: number;
 }
 
 /**
@@ -272,6 +303,121 @@ export async function deleteMilestoneTaskTemplate(taskId: string): Promise<void>
   });
 }
 
+// ============================================
+// 里程碑功能升级 - 新增接口
+// ============================================
+
+/**
+ * 获取可用模板列表（初始化时选择）
+ */
+export async function getAvailableTemplates(options: {
+  type?: 'system' | 'public' | 'private' | 'all';
+  search?: string;
+  tags?: string[];
+} = {}): Promise<MilestoneTemplate[]> {
+  const response = await apiClient.get('/milestone-templates/available', {
+    params: options,
+  });
+  return response?.data || [];
+}
+
+/**
+ * 获取模板详情（包含阶段和任务）
+ */
+export async function getTemplateDetail(templateId: string): Promise<{
+  template: MilestoneTemplate;
+  phases: TemplatePhase[];
+} | null> {
+  const response = await apiClient.get(`/api/milestone-templates/${templateId}/details`);
+  console.log('[systemService] getTemplateDetail response:', response);
+  return response?.data || null;
+}
+
+/**
+ * 保存项目为模板
+ */
+export async function saveProjectAsTemplate(data: {
+  projectId: string;
+  name: string;
+  version: string;
+  description?: string;
+  tags?: string[];
+  isPublic: boolean;
+  includePhases?: boolean;
+  includeTasks?: boolean;
+  includeOutputDocs?: boolean;
+}): Promise<{ templateId: string }> {
+  const { data: response } = await apiClient.post('/milestone-templates/save-from-project', data);
+  return response?.data;
+}
+
+/**
+ * 获取所有标签列表
+ */
+export async function getTemplateTags(): Promise<TemplateTag[]> {
+  const { data } = await apiClient.get('/milestone-templates/tags');
+  return data?.data || [];
+}
+
+/**
+ * 管理员：获取所有模板
+ */
+export async function getAllTemplatesForAdmin(options: {
+  status?: 'active' | 'inactive' | 'all';
+  type?: 'system' | 'public' | 'private' | 'all';
+  search?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<{
+  list: MilestoneTemplate[];
+  pagination: {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+}> {
+  const { data } = await apiClient.get('/admin/milestone-templates', {
+    params: options,
+  });
+  return data?.data || { list: [], pagination: { total: 0, page: 1, pageSize: 20, totalPages: 0 } };
+}
+
+/**
+ * 管理员：启用模板
+ */
+export async function enableTemplate(templateId: string): Promise<void> {
+  await apiClient.post(`/api/admin/milestone-templates/${templateId}/enable`);
+}
+
+/**
+ * 管理员：禁用模板
+ */
+export async function disableTemplate(templateId: string): Promise<void> {
+  await apiClient.post(`/api/admin/milestone-templates/${templateId}/disable`);
+}
+
+/**
+ * 管理员：删除模板
+ */
+export async function deleteTemplate(templateId: string): Promise<void> {
+  await apiClient.delete(`/api/admin/milestone-templates/${templateId}`);
+}
+
+/**
+ * 管理员：批量操作模板
+ */
+export async function batchOperateTemplates(
+  action: 'enable' | 'disable' | 'delete',
+  ids: string[]
+): Promise<{ success: number; fail: number; errors?: string[] }> {
+  const { data } = await apiClient.post('/admin/milestone-templates/batch', {
+    action,
+    ids,
+  });
+  return data?.data;
+}
+
 // 导出服务对象
 export const systemService = {
   // AI 提供商
@@ -285,7 +431,7 @@ export const systemService = {
   createAIRole,
   updateAIRole,
   deleteAIRole,
-  // 里程碑模板
+  // 里程碑模板（原有）
   getMilestoneTemplates,
   getMilestoneTemplateWithTasks,
   createMilestoneTemplate,
@@ -294,4 +440,15 @@ export const systemService = {
   addMilestoneTaskTemplate,
   updateMilestoneTaskTemplate,
   deleteMilestoneTaskTemplate,
+  // 里程碑模板（新增）
+  getAvailableTemplates,
+  getTemplateDetail,
+  saveProjectAsTemplate,
+  getTemplateTags,
+  // 管理员接口
+  getAllTemplatesForAdmin,
+  enableTemplate,
+  disableTemplate,
+  deleteTemplate,
+  batchOperateTemplates,
 };
